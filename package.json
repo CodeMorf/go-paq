@@ -112,7 +112,7 @@
     "preflight": "node scripts/production-preflight.mjs",
     "format": "prettier --write .",
     "shopify:probe": "tsx scripts/shopify-probe.runner.ts",
-    "start": "NODE_ENV=production node dist/index.js",
+    "start": "NODE_ENV=production pnpm preflight && NODE_ENV=production node dist/index.js",
     "test": "vitest run"
   },
   "type": "module",
