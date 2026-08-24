@@ -365,6 +365,7 @@ export async function confirmShipmentDeliveryForUser(userId: number, input: { sh
     await tx.update(shipments).set({ physicalStatus: "delivered", transportStatus: "completed" }).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id)));
     await tx.insert(shipmentEvents).values({ organizationId: scope.organization.id, shipmentId: input.shipmentId, actorUserId: userId, eventType: "delivery_confirmed", previousStatus: current[0].physicalStatus, nextStatus: "delivered", note: eventNote, evidenceUrl: input.evidenceUrl, latitude: input.latitude, longitude: input.longitude, idempotencyKey: input.idempotencyKey, origin: "driver" });
   });
+  await dispatchWebhooksForEvent(scope.organization.id, "delivery_confirmed", { shipmentId: input.shipmentId, recipientName: input.recipientName, evidenceUrl: input.evidenceUrl }).catch(() => undefined);
   const rows = await db.select().from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
   return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
 }
@@ -580,6 +581,7 @@ export async function createIncidentForUser(userId: number, input: { shipmentId:
     await tx.update(shipments).set({ physicalStatus: nextPhysicalStatus, incidentStatus: nextIncidentStatus }).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id)));
     if (input.packageId && input.type === "return_requested") await tx.update(packages).set({ status: "returned" }).where(and(eq(packages.id, input.packageId), eq(packages.organizationId, scope.organization.id)));
   });
+  await dispatchWebhooksForEvent(scope.organization.id, "incident_created", { shipmentId: input.shipmentId, packageId: input.packageId, type: input.type, severity: input.severity }).catch(() => undefined);
   const rows = await db.select().from(shipmentIncidents).where(and(eq(shipmentIncidents.organizationId, scope.organization.id), eq(shipmentIncidents.shipmentId, input.shipmentId))).orderBy(desc(shipmentIncidents.createdAt)).limit(1);
   return rows[0] ?? null;
 }
@@ -620,6 +622,7 @@ export async function recordDeliveryAttemptForUser(userId: number, input: { ship
     if (input.status === "failed") await tx.update(shipments).set({ physicalStatus: "incident", incidentStatus: "open" }).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id)));
     if (input.routeStopId && input.status === "completed") await tx.update(routeStops).set({ status: "completed" }).where(and(eq(routeStops.id, input.routeStopId), eq(routeStops.organizationId, scope.organization.id)));
   });
+  await dispatchWebhooksForEvent(scope.organization.id, "delivery_attempted", { shipmentId: input.shipmentId, routeStopId: input.routeStopId, status: input.status, reason: input.reason }).catch(() => undefined);
   const rows = await db.select().from(deliveryAttempts).where(and(eq(deliveryAttempts.organizationId, scope.organization.id), eq(deliveryAttempts.shipmentId, input.shipmentId))).orderBy(desc(deliveryAttempts.attemptedAt)).limit(1);
   return rows[0] ?? null;
 }
@@ -1213,6 +1216,7 @@ export async function recordTrackingPoint(userId: number, input: Omit<typeof tra
   }
   if (!canDriverRecordGps(scope.membership?.role, { routeId: input.routeId, routeAssigned, routeActive, shipmentId: input.shipmentId, shipmentOnRoute })) return null;
   await db.insert(trackingPoints).values({ ...input, organizationId: scope.organization.id, driverUserId: userId });
+  await dispatchWebhooksForEvent(scope.organization.id, "tracking_point_recorded", { shipmentId: input.shipmentId, routeId: input.routeId, latitude: input.latitude, longitude: input.longitude, capturedAt: input.capturedAt }).catch(() => undefined);
   return { success: true } as const;
 }
 

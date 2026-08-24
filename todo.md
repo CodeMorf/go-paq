@@ -75,7 +75,7 @@
 - [ ] Definire autenticazione API con chiavi revocabili, scope, rate limit e isolamento organizzativo.
 - [ ] Definire endpoint documentati per quotazioni, spedizioni, pacchi, tracking, pickup, webhooks e documenti.
 - [x] Costruire `/docs-api` con contratti, esempi request/response, errori, autenticazione e versionamento.
-- [ ] Implementare webhook firmati per eventi di spedizione, tracking, consegna e incidenti.
+- [x] Implementar webhooks firmados para eventos de envío, tracking, entrega e incidentes; cada mutación persiste intentos y no bloquea el evento si el destino falla. La cola externa y el contrato REST siguen pendientes.
 - [ ] Implementare log API, tentativi, risposte, revoche e strumenti di verifica.
 
 ## Agente LLM operativo
@@ -367,7 +367,7 @@
 - [x] Verificar en `offlineQueue` persistencia cifrada del estado `rejected`, descarte explícito tras conflicto y exclusión de la bandeja pendiente; queda separado el trabajo de documentación tarifaria completa.
 - [x] Ampliar pruebas del motor tarifario para mínimo configurable y divisor volumétrico, manteniendo descuentos, combustible, impuestos y redondeo DOP; suite en 101 aprobadas y 2 Shopify omitidas.
 - [x] Ampliar la verificación HMAC de webhooks con tampering, replay temporal y firmas malformadas; suite en 102 pruebas aprobadas y 2 Shopify omitidas.
-- [ ] Implementar dispatch outbound de webhooks firmados con endpoints por organización, reintentos y entrega auditable; la firma/verificación criptográfica aislada ya está cubierta.
+- [x] Implementar dispatch outbound de webhooks firmados con endpoints por organización, reintentos y entrega auditable; migración 0022, secreto cifrado, timeout, eventos operativos y pruebas verificados. La cola externa y el contrato REST siguen pendientes.
 - [x] Ampliar `logistics.overview` con conteo real de paquetes tenant-scoped y mostrarlo como KPI `Paquetes controlados` en el shell de portales; no se añaden ingresos ni integraciones ficticias.
 
 ## Auditoría integral solicitada — 24-08-2026
@@ -392,4 +392,4 @@
 
 - [x] Implementar cancelación tenant-scoped de envíos en estados `draft`, `quoted` o `confirmed`, bloqueando paquetes recibidos/rutas asignadas, auditando `shipment.cancelled` y cubriendo la máquina de estados con Vitest (107 pruebas aprobadas, 2 Shopify omitidas).
 - [x] Completar módulo Super Admin global para listar organizaciones y actualizar su estado con autorización global, persistencia, auditoría y UI real; `pnpm check` y 107 pruebas Vitest aprobadas (2 Shopify omitidas).
-- [x] Añadir destinos de webhook por organización y mecanismo de entrega firmado con hasta tres intentos, timeout de 10 s, secreto AES-GCM y auditoría; migración 0022 aplicada, 107 pruebas aprobadas y build correcta. La emisión automática desde eventos de dominio permanece pendiente.
+- [x] Añadir destinos de webhook por organización y mecanismo de entrega firmado con hasta tres intentos, timeout de 10 s, secreto AES-GCM y auditoría; migración 0022 aplicada, 107 pruebas aprobadas y build correcta. Shipment, tracking, entrega e incidentes ya disparan eventos automáticamente.

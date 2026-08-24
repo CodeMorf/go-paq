@@ -52,7 +52,7 @@ El portal `/admin` concentra la configuración de la organización, gestión glo
 
 ## API pública
 
-La API utiliza Bearer API keys revocables, scopes explícitos, aislamiento por organización, rate limiting distribuido y respuestas JSON versionadas. Las rutas principales verificadas cubren cotizaciones, envíos, pickups y tracking; la firma HMAC de webhooks está probada, pero el dispatch outbound por organización aún es un pendiente documentado en la auditoría.
+La API utiliza Bearer API keys revocables, scopes explícitos, aislamiento por organización, rate limiting distribuido y respuestas JSON versionadas. Las rutas principales verificadas cubren cotizaciones, envíos, pickups y tracking. Los destinos webhook se administran por organización, usan HTTPS, secretos cifrados y firma HMAC; los eventos operativos de shipment, tracking, entrega e incidentes ya pueden disparar entregas automáticas. El contrato REST webhook y la cola externa de reintentos siguen pendientes.
 
 ```bash
 curl -X POST https://tu-dominio.example/api/v1/quotes \
@@ -99,7 +99,7 @@ La cola offline del conductor no autoriza localmente pagos ni confirmaciones sen
 
 ## Pruebas y calidad
 
-La suite Vitest cubre autenticación, API keys, rate limiting, permisos, aislamiento, GPS, estados de paquetes y envíos, cancelación comercial, manifiestos, agente LLM, autorización Super Admin, firma HMAC de webhooks, migraciones, logs REST y cola offline: 106 pruebas aprobadas y 2 Shopify omitidas en la validación actual. Antes de cada cambio relevante se recomienda ejecutar TypeScript, tests y build; antes de un release se debe realizar además una validación autenticada de los portales en desktop y móvil.
+La suite Vitest cubre autenticación, API keys, rate limiting, permisos, aislamiento, GPS, estados de paquetes y envíos, cancelación comercial, manifiestos, agente LLM, autorización Super Admin, firma HMAC de webhooks, migraciones, logs REST y cola offline: 107 pruebas aprobadas y 2 Shopify omitidas en la validación actual. Antes de cada cambio relevante se recomienda ejecutar TypeScript, tests y build; antes de un release se debe realizar además una validación autenticada de los portales en desktop y móvil.
 
 El proyecto documenta de forma explícita los elementos que todavía dependen de infraestructura o de una sesión autenticada. Esta transparencia es intencional: una prueba de staging o una interfaz sin sesión no debe presentarse como evidencia de producción con datos reales.
 
