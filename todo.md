@@ -381,21 +381,22 @@
 - [x] Publicar únicamente cambios verificados en `main`: SHA `275a0f9012351b6cfb59b53c705491fca1afa5cf`; GoPaq CI `32772083839` terminó exitosamente.
 - [ ] Emitir veredicto final GO/NO-GO sin marcar tareas sin evidencia.
 - [x] Auditar documentación productiva existente y crear `docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md` con precondiciones, instalación limpia, backups, rollback, evidencia y criterio GO/NO-GO.
-- [x] Auditar el árbol Drizzle: 39 tablas en schema, 24 migraciones oficiales en journal; retirar `0000_open_micromax.sql` duplicada y alinear script/test de instalación limpia.
+- [x] Auditar el árbol Drizzle: 39 tablas en schema, 25 migraciones oficiales en journal; retirar `0000_open_micromax.sql` duplicada y alinear script/test de instalación limpia.
 - [x] Ejecutar `pnpm check`, `pnpm test -- --run` y `pnpm build`: TypeScript/build correctos, 115 tests aprobados y 2 Shopify omitidas; warning de chunk grande no bloqueante.
 - [x] Actualizar `README.md`, `PRODUCTION_READINESS.md`, `PRODUCTION_CONFIGURATION.md` y auditoría técnica con el estado real y los límites de producción.
 - [x] Crear `docs/PRIVACY_AND_RETENTION.md` con minimización, GPS, POD, documentos, logs, backup, derechos, retención propuesta y checklist de aprobación legal.
 - [x] Enlazar privacidad/retención y migración/despliegue desde README y configuración productiva, manteniendo NO-GO hasta aprobación y evidencia.
-- [x] Corregir la verificación de instalación limpia para usar las 24 migraciones del journal oficial; retirar el SQL 0000 duplicado no referenciado y verificar las 39 tablas del schema.
+- [x] Corregir la verificación de instalación limpia para usar las 25 migraciones del journal oficial; retirar el SQL 0000 duplicado no referenciado y verificar las 39 tablas del schema.
 - [ ] Configurar y validar `REDIS_URL` real con `rediss://` en el entorno productivo; `NODE_ENV=production pnpm preflight` falló de forma segura indicando únicamente `REDIS_URL` ausente y no reveló valores.
 - [x] Implementar cancelación de envíos tenant-scoped con permiso `shipments:edit`, transición de estado permitida y auditoría; la idempotencia no aplica a esta mutation tRPC no repetible en la versión actual.
 
-- [x] Implementar cancelación tenant-scoped de envíos en estados `draft`, `quoted` o `confirmed`, bloqueando paquetes recibidos/rutas asignadas, auditando `shipment.cancelled` y cubriendo la máquina de estados con Vitest (107 pruebas aprobadas, 2 Shopify omitidas).
-- [x] Completar módulo Super Admin global para listar organizaciones y actualizar su estado con autorización global, persistencia, auditoría y UI real; `pnpm check` y 107 pruebas Vitest aprobadas (2 Shopify omitidas).
-- [x] Añadir destinos de webhook por organización y mecanismo de entrega firmado con hasta tres intentos, timeout de 10 s, secreto AES-GCM y auditoría; migración 0022 aplicada, 113 pruebas aprobadas y build correcta. Shipment, tracking, entrega e incidentes ya disparan eventos automáticamente.
+- [x] Implementar cancelación tenant-scoped de envíos en estados `draft`, `quoted` o `confirmed`, bloqueando paquetes recibidos/rutas asignadas, auditando `shipment.cancelled` y cubriendo la máquina de estados con Vitest (115 pruebas aprobadas, 2 Shopify omitidas).
+- [x] Completar módulo Super Admin global para listar organizaciones y actualizar su estado con autorización global, persistencia, auditoría y UI real; `pnpm check` y 115 pruebas Vitest aprobadas (2 Shopify omitidas).
+- [x] Añadir destinos de webhook por organización y mecanismo de entrega firmado con hasta tres intentos, timeout de 10 s, secreto AES-GCM y auditoría; migración 0022 aplicada, 115 pruebas aprobadas y build correcta. Shipment, tracking, entrega e incidentes ya disparan eventos automáticamente.
 - [x] Añadir helper/query tRPC protegida para listar `webhook_deliveries` por organización con filtros básicos de endpoint, evento y estado.
 - [x] Crear panel admin para verificar intentos, estado final, `responseStatus`, errores, hash y timestamps de entregas webhook sin exponer secretos.
 - [x] Agregar prueba Vitest de rechazo sin autenticación para la consulta de entregas webhook; el helper aplica filtro por organización activa.
-- [x] Implementar actualización de estado de pickup tenant-scoped con transición válida, actor, timestamp, evidencia opcional y auditoría; migración 0023 aplicada y máquina cubierta por pruebas Vitest (113 aprobadas, 2 Shopify omitidas).
-- [x] Integrar `pickups.updateStatus` en `SucursalPickupPanel` con botones de transición, URL de evidencia, motivo de fallo, feedback y refresh; `pnpm check`, 113 pruebas y build aprobados.
-- [x] Añadir `GET /api/v1/webhook-deliveries` con scope `webhooks:read`, filtros de endpoint/evento/estado, rate limit, request ID y aislamiento por organización; documentado en `/docs-api` y validado por check y 113 pruebas.
+- [x] Implementar actualización de estado de pickup tenant-scoped con transición válida, actor, timestamp, evidencia opcional y auditoría; migración 0023 aplicada y máquina cubierta por pruebas Vitest (115 aprobadas, 2 Shopify omitidas).
+- [x] Integrar `pickups.updateStatus` en `SucursalPickupPanel` con botones de transición, URL de evidencia, motivo de fallo, feedback y refresh; `pnpm check`, 115 pruebas y build aprobados.
+- [x] Añadir `GET /api/v1/webhook-deliveries` con scope `webhooks:read`, filtros de endpoint/evento/estado, rate limit, request ID y aislamiento por organización; documentado en `/docs-api` y validado por check y 115 pruebas.
+- [x] Añadir `evidenceUrl` opcional a intentos de entrega: migración 0024 aditiva, validación HTTPS en tRPC, persistencia tenant-scoped y formulario/historial en `IncidentOpsPanel`; `pnpm check`, 115 pruebas y build aprobados.

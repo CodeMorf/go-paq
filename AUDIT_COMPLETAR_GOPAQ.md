@@ -26,7 +26,7 @@ No se encontraron indicios de que deban crearse tablas duplicadas. El esquema ac
 
 ## Esquema y migraciones
 
-El esquema fuente se encuentra en `drizzle/schema.ts`. La cadena de migraciones versionada llega a las 24 migraciones oficiales del journal, con snapshots y journal en `drizzle/meta/`. El repositorio también conserva un script de verificación de schema limpio. No se aplica ninguna migración destructiva durante esta auditoría.
+El esquema fuente se encuentra en `drizzle/schema.ts`. La cadena de migraciones versionada llega a las 25 migraciones oficiales del journal, con snapshots y journal en `drizzle/meta/`. El repositorio también conserva un script de verificación de schema limpio. No se aplica ninguna migración destructiva durante esta auditoría.
 
 La configuración documenta que una instalación limpia fue comprobada con 39 tablas. El journal es la fuente de verdad y no se debe usar el conteo histórico de 18/29 tablas.
 
@@ -38,7 +38,7 @@ Las rutas React están registradas para `/`, `/admin`, `/sucursal`, `/driver`, `
 
 ## Pruebas ejecutadas durante la auditoría
 
-Se ejecutaron `pnpm check`, `pnpm test` y `pnpm build`. El resultado observado fue TypeScript sin errores, **113 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
+Se ejecutaron `pnpm check`, `pnpm test` y `pnpm build`. El resultado observado fue TypeScript sin errores, **115 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
 
 No se ejecutó una prueba E2E autenticada completa del flujo `Cliente → cotización → envío → pickup → sucursal → almacén → manifiesto → driver → entrega → POD → tracking → documento → cobro`, porque requiere una sesión OAuth y datos/credenciales de infraestructura apropiados. Por tanto, ese flujo permanece pendiente y no se declara aprobado.
 
@@ -68,7 +68,7 @@ El veredicto permanece **NO-GO para operación productiva** hasta configurar y v
 
 La API pública de envíos y recogidas ahora requiere `Idempotency-Key` de 8 a 120 caracteres. La tabla `api_idempotency_keys` de la migración 0020 guarda el hash del payload, método, ruta, organización, API key, respuesta y expiración de 24 horas, con clave única tenant-scoped. Las repeticiones reproducen la respuesta original; una clave con payload diferente devuelve `409 idempotency_conflict`, una operación en curso devuelve `409 idempotency_in_flight` y una reserva no disponible devuelve `503`.
 
-Todas las rutas REST documentadas exponen `requestId` en el cuerpo y `X-Request-Id` en headers. Las pruebas de contrato cubren clave ausente, creación, replay, conflicto, liberación en error y trazabilidad. La validación observada queda en **113 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance, con TypeScript correcto; el hash se calcula con serialización canónica recursiva para evitar conflictos falsos por orden de propiedades. La build completa anterior fue correcta y debe repetirse en el siguiente checkpoint si se modifican dependencias de producción.
+Todas las rutas REST documentadas exponen `requestId` en el cuerpo y `X-Request-Id` en headers. Las pruebas de contrato cubren clave ausente, creación, replay, conflicto, liberación en error y trazabilidad. La validación observada queda en **115 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance, con TypeScript correcto; el hash se calcula con serialización canónica recursiva para evitar conflictos falsos por orden de propiedades. La build completa anterior fue correcta y debe repetirse en el siguiente checkpoint si se modifican dependencias de producción.
 
 
 ## Nota de compatibilidad TiDB — audit_logs
@@ -77,7 +77,7 @@ Se evaluó reforzar `audit_logs` con triggers `BEFORE UPDATE` y `BEFORE DELETE` 
 
 ## Hito de trazabilidad REST — api_request_logs
 
-La migración 0021 añade `api_request_logs` con `requestId` único, método, ruta, status, resultado, código de error opcional, clave de idempotencia y referencias opcionales a organización/API key. Un middleware REST registra automáticamente el resultado al finalizar cada request y no persiste cuerpos de solicitudes ni respuestas, reduciendo exposición de datos sensibles. La cobertura de migraciones y contratos alcanza **113 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance; TypeScript y build de producción pasan, con el warning no bloqueante del bundle frontend grande.
+La migración 0021 añade `api_request_logs` con `requestId` único, método, ruta, status, resultado, código de error opcional, clave de idempotencia y referencias opcionales a organización/API key. Un middleware REST registra automáticamente el resultado al finalizar cada request y no persiste cuerpos de solicitudes ni respuestas, reduciendo exposición de datos sensibles. La cobertura de migraciones y contratos alcanza **115 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance; TypeScript y build de producción pasan, con el warning no bloqueante del bundle frontend grande.
 
 ## Consulta administrativa de logs REST
 
@@ -85,11 +85,11 @@ El portal `/admin` incorpora `ApiRequestLogPanel`, que consulta `apiLogs.list` c
 
 ## Panel administrativo de trazabilidad REST
 
-`/admin` ahora incluye un panel para consultar `api_request_logs` con filtros por código HTTP y ruta. La procedure `apiLogs.list` exige `audit:view`, deriva la organización desde la sesión autenticada, limita la consulta a 200 registros y no expone cuerpos, tokens ni secretos. La validación posterior a la integración mantiene TypeScript correcto, **113 pruebas aprobadas y 2 omitidas** por Shopify, además de build de producción correcta con el warning no bloqueante del bundle grande.
+`/admin` ahora incluye un panel para consultar `api_request_logs` con filtros por código HTTP y ruta. La procedure `apiLogs.list` exige `audit:view`, deriva la organización desde la sesión autenticada, limita la consulta a 200 registros y no expone cuerpos, tokens ni secretos. La validación posterior a la integración mantiene TypeScript correcto, **115 pruebas aprobadas y 2 omitidas** por Shopify, además de build de producción correcta con el warning no bloqueante del bundle grande.
 
 ## Cobertura adicional del motor tarifario
 
-Se amplió `tariffEngine.test.ts` para comprobar divisor volumétrico configurable, peso facturable, mínimo tarifario y el orden de recargo de combustible, descuento e impuesto, con redondeo monetario a dos decimales. La suite alcanza **113 pruebas aprobadas y 2 omitidas** por Shopify. Esta cobertura es determinista y no sustituye tarifas reales completas por organización ni una validación financiera E2E autenticada.
+Se amplió `tariffEngine.test.ts` para comprobar divisor volumétrico configurable, peso facturable, mínimo tarifario y el orden de recargo de combustible, descuento e impuesto, con redondeo monetario a dos decimales. La suite alcanza **115 pruebas aprobadas y 2 omitidas** por Shopify. Esta cobertura es determinista y no sustituye tarifas reales completas por organización ni una validación financiera E2E autenticada.
 
 ## Verificación adicional de webhooks
 
@@ -101,7 +101,7 @@ La firma HMAC de `webhook.ts` queda cubierta por payload alterado, replay fuera 
 
 ## Auditoría integral del árbol de migraciones
 
-La revisión del schema actual identifica **39 tablas**. El journal Drizzle referencia **24 migraciones oficiales**, desde `0000_greedy_black_tom.sql` hasta `0023_absurd_ultron.sql`. Existía un `0000_open_micromax.sql` adicional, no referenciado por `_journal.json`, que contenía una línea base antigua de 18 tablas; se retiró del árbol para que la instalación limpia tenga una única fuente de verdad. `schema.migration.test.ts` y `scripts/verify-clean-schema.mjs` fueron alineados al journal y a las 39 tablas actuales. La instalación administrada completa todavía requiere un usuario bootstrap con permisos de creación de base, por lo que no se declara restauración productiva verificada.
+La revisión del schema actual identifica **39 tablas**. El journal Drizzle referencia **25 migraciones oficiales**, desde `0000_greedy_black_tom.sql` hasta `0024_nebulous_slyde.sql`. Existía un `0000_open_micromax.sql` adicional, no referenciado por `_journal.json`, que contenía una línea base antigua de 18 tablas; se retiró del árbol para que la instalación limpia tenga una única fuente de verdad. `schema.migration.test.ts` y `scripts/verify-clean-schema.mjs` fueron alineados al journal y a las 39 tablas actuales. La instalación administrada completa todavía requiere un usuario bootstrap con permisos de creación de base, por lo que no se declara restauración productiva verificada.
 
 ## Preflight productivo actualizado
 

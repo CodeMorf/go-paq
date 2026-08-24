@@ -422,6 +422,7 @@ export const deliveryAttempts = mysqlTable("delivery_attempts", {
   status: mysqlEnum("status", ["failed", "rescheduled", "completed"]).notNull(),
   reason: varchar("reason", { length: 160 }).notNull(),
   note: text("note"),
+  evidenceUrl: varchar("evidenceUrl", { length: 1024 }),
   latitude: decimal("latitude", { precision: 10, scale: 7 }),
   longitude: decimal("longitude", { precision: 10, scale: 7 }),
   attemptedBy: int("attemptedBy"),

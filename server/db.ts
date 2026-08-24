@@ -609,7 +609,7 @@ export async function listDeliveryAttemptsForUser(userId: number, shipmentId?: n
   return db.select().from(deliveryAttempts).where(and(...filters)).orderBy(desc(deliveryAttempts.attemptedAt)).limit(200);
 }
 
-export async function recordDeliveryAttemptForUser(userId: number, input: { shipmentId: number; routeStopId?: number; status: "failed" | "rescheduled" | "completed"; reason: string; note?: string; latitude?: string; longitude?: string }) {
+export async function recordDeliveryAttemptForUser(userId: number, input: { shipmentId: number; routeStopId?: number; status: "failed" | "rescheduled" | "completed"; reason: string; note?: string; evidenceUrl?: string; latitude?: string; longitude?: string }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
   const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
@@ -618,7 +618,7 @@ export async function recordDeliveryAttemptForUser(userId: number, input: { ship
   const latest = await db.select({ attemptNumber: deliveryAttempts.attemptNumber }).from(deliveryAttempts).where(and(eq(deliveryAttempts.organizationId, scope.organization.id), eq(deliveryAttempts.shipmentId, input.shipmentId))).orderBy(desc(deliveryAttempts.attemptNumber)).limit(1);
   const attemptNumber = (latest[0]?.attemptNumber ?? 0) + 1;
   await db.transaction(async (tx) => {
-    await tx.insert(deliveryAttempts).values({ organizationId: scope.organization.id, shipmentId: input.shipmentId, routeStopId: input.routeStopId ?? null, attemptNumber, status: input.status, reason: input.reason, note: input.note ?? null, latitude: input.latitude ?? null, longitude: input.longitude ?? null, attemptedBy: userId });
+    await tx.insert(deliveryAttempts).values({ organizationId: scope.organization.id, shipmentId: input.shipmentId, routeStopId: input.routeStopId ?? null, attemptNumber, status: input.status, reason: input.reason, note: input.note ?? null, evidenceUrl: input.evidenceUrl ?? null, latitude: input.latitude ?? null, longitude: input.longitude ?? null, attemptedBy: userId });
     if (input.status === "failed") await tx.update(shipments).set({ physicalStatus: "incident", incidentStatus: "open" }).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id)));
     if (input.routeStopId && input.status === "completed") await tx.update(routeStops).set({ status: "completed" }).where(and(eq(routeStops.id, input.routeStopId), eq(routeStops.organizationId, scope.organization.id)));
   });
