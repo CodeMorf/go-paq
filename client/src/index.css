@@ -22,7 +22,23 @@
   --input: oklch(0.9 0.015 240);
   --ring: oklch(0.69 0.18 55);
   --radius: 1rem;
+  --gopaq-deep: oklch(0.14 0.04 250);
+  --gopaq-navy: oklch(0.2 0.05 250);
+  --gopaq-surface: oklch(0.25 0.06 250);
+  --gopaq-blue: oklch(0.3 0.08 250);
 }
+
+.dark {
+  --gopaq-deep: oklch(0.1 0.03 250);
+  --gopaq-navy: oklch(0.16 0.04 250);
+  --gopaq-surface: oklch(0.21 0.05 250);
+  --gopaq-blue: oklch(0.27 0.07 250);
+}
+
+.bg-gopaq-deep { background-color: var(--gopaq-deep); }
+.bg-gopaq-navy { background-color: var(--gopaq-navy); }
+.bg-gopaq-surface { background-color: var(--gopaq-surface); }
+.bg-gopaq-blue { background-color: var(--gopaq-blue); }
 
 * { border-color: var(--border); }
 html { scroll-behavior: smooth; }
