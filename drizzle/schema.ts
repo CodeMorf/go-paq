@@ -19,7 +19,7 @@ export const organizations = mysqlTable("organizations", {
   slug: varchar("slug", { length: 100 }).notNull().unique(),
   country: varchar("country", { length: 80 }).notNull().default("DO"),
   currency: varchar("currency", { length: 8 }).notNull().default("DOP"),
-  language: varchar("language", { length: 8 }).notNull().default("it"),
+  language: varchar("language", { length: 8 }).notNull().default("es"),
   timezone: varchar("timezone", { length: 80 }).notNull().default("America/Santo_Domingo"),
   activeServices: json("activeServices"),
   status: mysqlEnum("status", ["trial", "active", "suspended"]).notNull().default("trial"),

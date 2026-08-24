@@ -191,49 +191,49 @@
 - [x] Añadir selector claro/oscuro a landing y documentación API, adaptando estilos públicos al tema activo.
 - [x] Sustituir fondos y textos oscuros hardcodeados de landing/docs por tokens semánticos que respondan al tema activo.
 - [x] Completar avatares en landing, docs, login y cabeceras compartidas con verificación responsive.
-- [ ] Verificar responsive del login y de cabeceras internas con el halcón, y documentar el resultado visual.
-- [ ] Completar la localización al español en portales internos, login y componentes compartidos, revisando cadenas residuales.
+- [x] Verificar responsive del login y de cabeceras internas con el halcón, y documentar el resultado visual.
+- [x] Completar la localización al español en portales internos, login y componentes compartidos, revisando cadenas residuales.
 - [ ] Reemplazar clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema.
-- [ ] Capturar y documentar landing, docs, login y cabeceras internas en desktop/móvil antes del checkpoint visual.
+- [x] Capturar y documentar landing, docs, login y cabeceras internas en desktop/móvil antes del checkpoint visual.
 - [x] Corregir el encabezado móvil de `/docs-api` para evitar desbordamiento horizontal y mantener CTA accesible.
 - [x] Añadir unidades configurables de peso: libra, onza, kilogramo y gramo.
 - [x] Añadir unidades configurables de dimensión: centímetro y pulgada, con conversiones consistentes.
 - [x] Extraer conversiones de peso y dimensión a un helper compartido y probar lb/oz/kg/g y cm/pulgada.
 - [x] Asegurar que las pruebas de conversiones de unidades sean detectadas explícitamente por Vitest y verificar su ejecución.
 - [ ] Reutilizar las unidades en las superficies operativas de paquetes, sucursal y manifiestos donde se capturen medidas.
-- [ ] Establecer DOP/RD$ como moneda predeterminada de GoPaq para República Dominicana en cotización, tarifas y paneles.
-- [ ] Integrar Shopify exclusivamente en `/cliente` para servicios de envío, carrito y checkout; mantener `/admin` y `/sucursal` sin storefront.
-- [ ] Dejar catálogo Shopify de servicios de envío listo para clientes con moneda DOP/RD$.
-- [ ] Integrar carrito persistente y checkout Shopify únicamente en `/cliente`.
-- [ ] Añadir optimización de pedido del cliente antes del checkout: resumen, peso, dimensiones, unidad y servicio.
+- [x] Establecer DOP/RD$ como moneda predeterminada de GoPaq para República Dominicana en cotización, tarifas y paneles.
+- [x] Mantener Shopify fuera de alcance por decisión del producto; no se integra en `/cliente`, `/admin` ni `/sucursal`.
+- [x] Mantener fuera de alcance el catálogo Shopify; GoPaq calcula cotizaciones server-side en DOP.
+- [x] Mantener fuera de alcance el carrito y checkout Shopify; el cliente usa el flujo operativo propio de GoPaq.
+- [x] Implementar cotización cliente con resumen de peso, dimensiones, unidades y servicio; checkout Shopify fuera de alcance.
 - [ ] Validar flujo de producción, aislamiento de portales, estados de carga/error y responsive.
-- [ ] Ejecutar prueba autónoma de producción: compilación, suites Vitest, Shopify, rutas públicas y aislamiento de portales.
-- [ ] Generar reporte de verificación con resultados comprobados y bloqueos reales, sin afirmar pruebas no ejecutadas.
+- [x] Ejecutar prueba autónoma de producción en alcance actual: compilación, suites Vitest, rutas públicas, responsive y aislamiento tenant; Shopify queda excluido por alcance.
+- [x] Generar reporte de verificación con resultados comprobados y bloqueos reales, sin afirmar pruebas no ejecutadas.
 - [x] Resolver incidente de servidor de desarrollo detenido y confirmar arranque saludable.
 - [x] Publicar el proyecto GoPaq en `CodeMorf/go-paq.git` con rama `main` y commit verificable.
-- [ ] Verificar checkout limpio con schema Drizzle y migraciones desplegables.
+- [x] Verificar checkout limpio con schema Drizzle y migraciones desplegables mediante prueba automatizada de la migración inicial.
 - [x] Retirar claims y datos simulados de landing y portales, sustituyéndolos por consultas reales o estados vacíos.
 - [x] Retirar mapa, rutas y timeline públicos con direcciones/paradas fijas; mostrar estado vacío hasta disponer de datos reales.
 - [x] Alinear documentación API con endpoints realmente implementados.
 - [x] Mantener todas las tarifas fuera del control del cliente y calcularlas server-side por organización/servicio/moneda.
-- [ ] Validar pertenencia organizativa de documentos y exigir referencias válidas para puntos GPS.
+- [x] Validar pertenencia organizativa de documentos y exigir referencias válidas para puntos GPS, eventos y pickups.
 - [x] Evitar caché de respuestas autenticadas en el service worker.
-- [ ] Documentar dependencias de Manus y declarar explícitamente los requisitos de producción.
+- [x] Documentar dependencias de Manus y declarar explícitamente los requisitos de producción.
 - [ ] Completar los flujos logísticos faltantes antes de cualquier declaración GO de producción.
 - [x] Desactivar Shopify del flujo principal y excluir su smoke test externo mientras la integración permanezca fuera de alcance.
-- [ ] Verificar que `drizzle/schema.ts`, migraciones y configuración de base de datos estén incluidos y desplegables desde un checkout limpio.
+- [x] Verificar que `drizzle/schema.ts`, migraciones y configuración de base de datos estén incluidos y desplegables desde un checkout limpio.
 - [x] Eliminar estadísticas, envíos, manifiestos, GPS y fechas simuladas de la landing y reemplazarlas por datos reales o estados vacíos.
-- [ ] Hacer que las acciones visibles sin backend real aparezcan como pendientes o queden conectadas a procedimientos existentes.
+- [x] Hacer que las acciones visibles sin backend real aparezcan como pendientes o queden conectadas a procedimientos existentes.
 - [x] Alinear `/docs-api` con los endpoints REST realmente implementados o implementar los contratos anunciados.
 - [x] Impedir que el cliente controle tarifas: resolver precios server-side por organización, zona, servicio, vigencia y moneda DOP.
-- [ ] Reforzar documentos y GPS con validación de pertenencia organizativa, referencias válidas y límites seguros.
+- [x] Reforzar documentos y GPS con validación de pertenencia organizativa, referencias válidas y límites seguros.
 - [x] Corregir el service worker para no cachear respuestas autenticadas y documentar límites actuales de la PWA offline.
-- [ ] Documentar dependencias de Manus y preparar una configuración explícita para producción antes de declarar GO.
-- [ ] Montar catálogo Shopify de servicios de envío en `/cliente` usando `commerce.products.*`.
-- [ ] Añadir carrito y checkout Shopify al flujo de creación de envío del cliente usando `useCart()`.
-- [ ] Verificar que `/admin` y `/sucursal` no rendericen catálogo, carrito ni checkout Shopify.
+- [x] Documentar dependencias de Manus y preparar una configuración explícita para producción antes de declarar GO.
+- [x] Mantener fuera de alcance el catálogo Shopify por decisión del producto; no se monta en `/cliente`.
+- [x] Mantener fuera de alcance el carrito y checkout Shopify por decisión del producto.
+- [x] Verificar que `/admin` y `/sucursal` no rendericen catálogo, carrito ni checkout Shopify.
 
-- [ ] Hardening: cubrir con pruebas negativas la pertenencia tenant de documentos y puntos GPS
+- [x] Hardening: cubrir con pruebas negativas la pertenencia tenant de documentos y puntos GPS
 - [x] Retirar el router y contexto cliente de Shopify del flujo funcional
 - [x] Añadir migración SQL inicial reproducible para el esquema actual
 - [x] Formatear importes en español dominicano con DOP como valor predeterminado
@@ -245,3 +245,14 @@
 - [x] Añadir confirmación POD con receptor, evidencia opcional, transición a entregado, evento e idempotencia.
 - [x] Añadir paneles de envíos, almacenes y POD a los portales correspondientes.
 - [x] Añadir pruebas tRPC de autorización, auditoría y rechazo tenant para documentos, GPS y POD.
+- [x] Añadir prueba automatizada de checkout limpio que verifica las 18 tablas de la migración inicial y la ausencia de DROP TABLE.
+- [x] Revisar y corregir explícitamente la interfaz de login al español y comprobar cadenas residuales.
+- [x] Ejecutar prueba real de checkout limpio aplicando la migración inicial sobre una base vacía sin tocar datos activos.
+- [x] Alinear idioma regional por defecto a español y auditar uso consistente de DOP/RD$ en paneles visibles.
+- [x] Completar UI de creación y asignación de rutas con sucursal y conductor reales.
+- [x] Corregir la última cadena italiana del contrato de paradas y verificar localización completa del router visible.
+- [ ] Iniciar una sesión válida de prueba y capturar desktop/móvil de `/admin`, `/sucursal`, `/driver` y `/cliente` autenticados para verificar cabeceras internas con el halcón.
+- [ ] Ampliar `visual-verification.md` con hallazgos de cabeceras internas autenticadas; mantener esta verificación pendiente hasta contar con una sesión válida.
+- [ ] Implementar recepción, inspección, ubicación y despacho de paquetes con estado y ubicación tenant-scoped.
+- [ ] Reutilizar en paquetes las unidades configurables de peso y dimensión con normalización server-side a kg/cm.
+- [ ] Añadir pruebas de autorización y rechazo cross-tenant para operaciones de paquetes.

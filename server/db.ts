@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, apiKeys, auditLogs, branches, manifests, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users, warehouses } from "../drizzle/schema";
+import { InsertUser, apiKeys, auditLogs, branches, manifests, memberships, organizations, packages, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
 import { nextManifestStatus } from "./manifestState";
 import { transitionShipment } from "./shipmentState";
+import { transitionPackage, type PackageState } from "./packageState";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -67,7 +68,7 @@ export async function getPublicTrackingByCode(code: string) {
   const result = await Promise.race([query, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("tracking_timeout")), 750))]).catch(() => []);
   const shipment = result[0];
   if (!shipment) return null;
-  return { ...shipment, message: shipment.physicalStatus === "delivered" ? "Spedizione consegnata" : "Spedizione monitorata da GoPaq" };
+  return { ...shipment, message: shipment.physicalStatus === "delivered" ? "Envío entregado" : "Envío monitorizado por GoPaq" };
 }
 
 export async function shipmentBelongsToUser(userId: number, shipmentId: number) {
@@ -156,6 +157,68 @@ export async function listShipmentsForUser(userId: number) {
   return db.select().from(shipments).where(eq(shipments.organizationId, scope.organization.id)).orderBy(desc(shipments.createdAt)).limit(100);
 }
 
+type PackageInput = {
+  shipmentId: number;
+  packageCode?: string;
+  description?: string;
+  restrictions?: string;
+  weight?: number;
+  weightUnit?: "kg" | "g" | "lb" | "oz";
+  length?: number;
+  width?: number;
+  height?: number;
+  dimensionUnit?: "cm" | "in";
+  declaredValue?: string;
+  locationCode?: string;
+  barcodeValue?: string;
+};
+
+type PackageUpdate = Omit<PackageInput, "shipmentId" | "packageCode"> & { status?: PackageState };
+
+function normalizeWeight(value?: number, unit: PackageInput["weightUnit"] = "kg") {
+  if (value === undefined) return undefined;
+  const factors = { kg: 1, g: 0.001, lb: 0.45359237, oz: 0.028349523125 } as const;
+  return (value * factors[unit]).toFixed(3);
+}
+
+function normalizeDimension(value?: number, unit: PackageInput["dimensionUnit"] = "cm") {
+  if (value === undefined) return undefined;
+  return (value * (unit === "in" ? 2.54 : 1)).toFixed(2);
+}
+
+export async function listPackagesForUser(userId: number, shipmentId?: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  const filters = [eq(packages.organizationId, scope.organization.id)];
+  if (shipmentId !== undefined) filters.push(eq(packages.shipmentId, shipmentId));
+  return db.select().from(packages).where(and(...filters)).orderBy(desc(packages.createdAt)).limit(200);
+}
+
+export async function createPackageForUser(userId: number, input: PackageInput) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  if (!shipment[0]) return null;
+  const packageCode = input.packageCode ?? `PKG-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+  await db.insert(packages).values({ shipmentId: input.shipmentId, organizationId: scope.organization.id, packageCode, description: input.description ?? null, restrictions: input.restrictions ?? null, status: "expected", weightKg: normalizeWeight(input.weight, input.weightUnit), lengthCm: normalizeDimension(input.length, input.dimensionUnit), widthCm: normalizeDimension(input.width, input.dimensionUnit), heightCm: normalizeDimension(input.height, input.dimensionUnit), declaredValue: input.declaredValue ?? null, locationCode: input.locationCode ?? null, barcodeValue: input.barcodeValue ?? null });
+  const rows = await db.select().from(packages).where(and(eq(packages.organizationId, scope.organization.id), eq(packages.packageCode, packageCode))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updatePackageForUser(userId: number, packageId: number, input: PackageUpdate) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const current = await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id))).limit(1);
+  if (!current[0]) return null;
+  const nextStatus = input.status ?? current[0].status;
+  if (nextStatus !== current[0].status) transitionPackage(current[0].status, nextStatus);
+  if (nextStatus === "stored" && !(input.locationCode || current[0].locationCode)) throw new Error("Un paquete almacenado requiere una ubicación");
+  const changes = { description: input.description, restrictions: input.restrictions, status: input.status, weightKg: normalizeWeight(input.weight, input.weightUnit), lengthCm: normalizeDimension(input.length, input.dimensionUnit), widthCm: normalizeDimension(input.width, input.dimensionUnit), heightCm: normalizeDimension(input.height, input.dimensionUnit), declaredValue: input.declaredValue, locationCode: input.locationCode, barcodeValue: input.barcodeValue };
+  await db.update(packages).set(Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id)));
+  const rows = await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
+}
+
 export async function listAuditLogsForUser(userId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];
@@ -177,14 +240,23 @@ export async function listEventsForUser(userId: number, shipmentId: number) {
 
 export async function appendShipmentEvent(input: typeof shipmentEvents.$inferInsert) {
   const db = await getDb();
-  if (!db) return;
+  if (!db) return false;
+  const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, input.organizationId))).limit(1);
+  if (!shipment[0]) return false;
   await db.insert(shipmentEvents).values(input);
+  return true;
 }
 
 export async function listBranchesForUser(userId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];
   return db.select().from(branches).where(and(eq(branches.organizationId, scope.organization.id), eq(branches.isActive, true))).orderBy(branches.name).limit(100);
+}
+
+export async function listDriversForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select({ userId: memberships.userId, name: users.name, email: users.email }).from(memberships).innerJoin(users, eq(memberships.userId, users.id)).where(and(eq(memberships.organizationId, scope.organization.id), eq(memberships.role, "driver"))).orderBy(users.name).limit(100);
 }
 
 export async function listWarehousesForUser(userId: number) {
@@ -220,6 +292,10 @@ export async function listPickupsForUser(userId: number) {
 export async function createPickupForUser(userId: number, input: Omit<typeof pickups.$inferInsert, "organizationId">) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
+  if (input.shipmentId !== undefined && input.shipmentId !== null) {
+    const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+    if (!shipment[0]) return null;
+  }
   await db.insert(pickups).values({ ...input, organizationId: scope.organization.id });
   return { success: true } as const;
 }
@@ -247,6 +323,27 @@ export async function advanceManifestForUser(userId: number, manifestId: number,
   nextManifestStatus(current.status, nextStatus);
   await db.update(manifests).set({ status: nextStatus }).where(and(eq(manifests.id, manifestId), eq(manifests.organizationId, scope.organization.id)));
   return { success: true, status: nextStatus } as const;
+}
+
+export async function createRouteForUser(userId: number, input: { branchId?: number; vehicleLabel?: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !(await branchBelongsToOrganization(db, scope.organization.id, input.branchId))) return null;
+  const code = `RUT-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+  await db.insert(routes).values({ organizationId: scope.organization.id, branchId: input.branchId, code, vehicleLabel: input.vehicleLabel ?? null, status: "draft" });
+  const rows = await db.select().from(routes).where(and(eq(routes.organizationId, scope.organization.id), eq(routes.code, code))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function assignRouteForUser(userId: number, routeId: number, driverUserId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const driver = await db.select({ id: memberships.userId }).from(memberships).where(and(eq(memberships.organizationId, scope.organization.id), eq(memberships.userId, driverUserId), eq(memberships.role, "driver"))).limit(1);
+  if (!driver[0]) return null;
+  const route = await db.select({ id: routes.id }).from(routes).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
+  if (!route[0]) return null;
+  await db.update(routes).set({ driverUserId, status: "assigned" }).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id)));
+  const rows = await db.select().from(routes).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function listRoutesForUser(userId: number) {

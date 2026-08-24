@@ -8,19 +8,22 @@ La revisión crítica fue incorporada al plan de trabajo y se corrigieron varios
 
 | Área | Estado | Evidencia |
 |---|---|---|
-| Schema Drizzle | Parcialmente disponible | `drizzle/schema.ts` está versionado; el directorio de migraciones contiene snapshots/meta, pero requiere validación en un checkout y base limpia. |
-| Datos simulados públicos | Corregido en esta ronda | Estadísticas, envíos, GPS, manifiesto, QR y timeline fijos fueron retirados de la landing/portales; se muestran estados vacíos o datos consultados. |
+| Schema Drizzle | Verificado | `drizzle/schema.ts`, journal y SQL están versionados; `scripts/verify-clean-schema.mjs` aplicó el journal completo sobre MariaDB vacío y verificó 18 tablas y default `language=es`. |
+| Datos simulados públicos | Corregido | Se retiraron métricas numéricas, envíos, GPS, manifiestos, QR, fechas y códigos de rastreo de ejemplo; los portales muestran consultas reales, placeholders neutrales o estados vacíos. |
 | Documentación API | Corregida | `/docs-api` declara el único REST público implementado: `POST /api/v1/quotes`. Los endpoints de envíos, seguimiento REST y recogidas se identifican como pendientes. |
-| Tarifas | Endurecidas | El cliente solo envía peso, dimensiones y distancia; mínimos, precio por kg/km y recargo se aplican server-side en DOP. |
+| Tarifas | Endurecidas y localizadas | El cliente solo envía peso, dimensiones y distancia; mínimos, precio por kg/km y recargo se aplican server-side en DOP. El formateador visible usa `es-DO` y `RD$`. |
 | Service worker | Endurecido | No cachea `/api/*`, solicitudes con credenciales ni portales autenticados; solo conserva un shell público explícito. |
-| Shopify | Fuera de alcance | El storefront Shopify no participa en el flujo principal; su smoke test live quedó excluido de la suite principal. |
-| Verificación técnica | Verde con una omisión explícita | `pnpm check`, `pnpm build` y Vitest pasan: 14 suites, 29 tests; 2 tests Shopify quedan omitidos por decisión de alcance. |
+| Shopify | Fuera de alcance | El router y contexto cliente fueron retirados del flujo funcional; el smoke test externo permanece omitido intencionalmente. |
+| Verificación técnica | Verde con alcance declarado | `pnpm check`, `pnpm build` y Vitest pasan: 14 suites, 33 tests; 2 tests Shopify quedan omitidos por decisión de alcance. Se realizaron capturas desktop/móvil de landing, docs y login sin sesión autenticada. | 
+| Operación de última milla | Parcial implementada | La UI permite crear rutas, seleccionar sucursal real, listar conductores del tenant, asignar una ruta y consultar paradas. El GPS exige una referencia válida de envío o ruta. | 
+| Entrega y documentos | Parcial implementada | POD idempotente y auditada disponible para driver; documentos usan storage administrado y validación tenant. Facturación, cobros y recepción/pesaje siguen pendientes. | 
+| Configuración de producción | Documentada | `PRODUCTION_CONFIGURATION.md` declara secretos, OAuth, base TLS, storage, mapas, LLM, PWA y límites operativos sin incluir valores sensibles. |
 
 ## Pendientes que bloquean un GO de producción
 
-Todavía faltan el ciclo completo de envíos, recepción y pesaje, inventario, transferencias, asignación de conductores, POD, incidencias, cobros, facturación, devoluciones, controles de idempotencia críticos, rate limit distribuido, políticas de retención/privacidad y sustitución de servicios Manus si se instala fuera de Manus.
+Todavía faltan recepción y pesaje de paquetes, inventario detallado, transferencias con carga, asignación completa de conductores y paradas, incidencias, cobros, facturación, devoluciones, rate limit distribuido, políticas de retención/privacidad y sustitución de servicios Manus si se instala fuera de Manus. Ya existe creación/edición básica de envíos, almacenes, rutas, manifest, GPS con referencia, pickups aislados y POD idempotente.
 
-También debe ejecutarse una prueba desde checkout limpio contra una base de datos vacía. Esa prueba debe confirmar que el esquema y las migraciones crean todas las tablas sin depender de una base previamente preparada. La autenticación, storage, mapas, notificaciones y secretos deben definirse para el entorno real de producción.
+La prueba real de checkout limpio ya se ejecutó contra MariaDB local vacío usando la secuencia del journal, sin tocar la base administrada activa. Los requisitos de autenticación, storage, mapas, LLM y secretos quedaron documentados en `PRODUCTION_CONFIGURATION.md`; aún deben configurarse y probarse en el entorno real de producción.
 
 ## Conclusión
 

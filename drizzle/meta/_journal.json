@@ -50,6 +50,13 @@
       "when": 1787534591569,
       "tag": "0006_skinny_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1787577720143,
+      "tag": "0007_classy_lily_hollister",
+      "breakpoints": true
     }
   ]
 }

@@ -30,8 +30,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+  { icon: LayoutDashboard, label: "Inicio", path: "/" },
+  { icon: Users, label: "Operación", path: "/some-path" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -67,9 +67,9 @@ export default function DashboardLayout({
           <div className="hidden flex-col justify-between border-r border-white/10 bg-[linear-gradient(145deg,#0c2742,#071321)] p-10 lg:flex">
             <div className="flex items-center gap-3"><div className="h-11 w-11 overflow-hidden rounded-2xl"><img src="/manus-storage/gopaq-logo_a8552d65.jpeg" alt="GoPaq" className="h-full w-full object-cover" /></div><div><p className="text-lg font-black tracking-tight">Go<span className="text-orange-400">Paq</span></p><p className="text-[9px] uppercase tracking-[.22em] text-slate-400">Logística puerta a puerta</p></div></div>
             <div><div className="mb-6 flex h-32 w-32 items-end justify-center overflow-hidden rounded-[2rem] border border-white/10 bg-white/5"><img src="/manus-storage/avatar-halcon_7ece2335.png" alt="Halcón GoPaq" className="h-full w-full object-cover object-top" /></div><p className="text-xs font-bold uppercase tracking-[.24em] text-orange-400">Acceso operativo</p><h1 className="mt-4 max-w-sm text-4xl font-black leading-tight tracking-tight">Cada ruta bajo control.</h1><p className="mt-5 max-w-sm text-sm leading-6 text-slate-400">Accede al centro GoPaq para gestionar envíos, sucursales, entregas y clientes con trazabilidad verificable.</p></div>
-            <div className="flex items-center gap-2 text-xs text-slate-500"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Sistema operativo · acceso protetto</div>
+            <div className="flex items-center gap-2 text-xs text-slate-500"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Sistema operativo · acceso protegido</div>
           </div>
-          <div className="flex flex-col items-center justify-center p-8 sm:p-12"><div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400 lg:hidden"><img src="/manus-storage/gopaq-logo_a8552d65.jpeg" alt="GoPaq" className="h-full w-full rounded-2xl object-cover" /></div><div className="w-full max-w-sm"><p className="text-xs font-bold uppercase tracking-[.22em] text-orange-400">Portal riservato</p><h2 className="mt-3 text-3xl font-black tracking-tight">Accedi a GoPaq</h2><p className="mt-3 text-sm leading-6 text-slate-400">Usa il tuo acceso autorizzato per continuare. Ruoli e permessi vengono applicati automaticamente.</p><Button onClick={() => startLogin()} size="lg" className="mt-8 h-12 w-full bg-orange-500 font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-400">Continua con acceso sicuro <span className="ml-2">→</span></Button><p className="mt-5 text-center text-xs text-slate-500">Acceso con autenticazione GoPaq · sessione auditable</p></div></div>
+          <div className="flex flex-col items-center justify-center p-8 sm:p-12"><div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400 lg:hidden"><img src="/manus-storage/gopaq-logo_a8552d65.jpeg" alt="GoPaq" className="h-full w-full rounded-2xl object-cover" /></div><div className="w-full max-w-sm"><p className="text-xs font-bold uppercase tracking-[.22em] text-orange-400">Portal reservado</p><h2 className="mt-3 text-3xl font-black tracking-tight">Accede a GoPaq</h2><p className="mt-3 text-sm leading-6 text-slate-400">Usa tu acceso autorizado para continuar. Los roles y permisos se aplican automáticamente.</p><Button onClick={() => startLogin()} size="lg" className="mt-8 h-12 w-full bg-orange-500 font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-400">Continúa con acceso seguro <span className="ml-2">→</span></Button><p className="mt-5 text-center text-xs text-slate-500">Acceso con autenticación GoPaq · sesión auditable</p></div></div>
         </div>
       </div>
     );

@@ -12,8 +12,11 @@ const listEventsForUser = vi.fn();
 const appendShipmentEvent = vi.fn();
 const uploadShipmentDocumentForUser = vi.fn();
 const confirmShipmentDeliveryForUser = vi.fn();
+const createPickupForUser = vi.fn();
+const createRouteForUser = vi.fn();
+const assignRouteForUser = vi.fn();
 
-vi.mock("./db", async (importOriginal) => ({ ...(await importOriginal<typeof import("./db")>()), getOrganizationForUser, canUser, listTrackingPointsForUser, recordTrackingPoint, appendAuditLog, listAuditLogsForUser, listShipmentsForUser, listEventsForUser, appendShipmentEvent, uploadShipmentDocumentForUser, confirmShipmentDeliveryForUser }));
+vi.mock("./db", async (importOriginal) => ({ ...(await importOriginal<typeof import("./db")>()), getOrganizationForUser, canUser, listTrackingPointsForUser, recordTrackingPoint, appendAuditLog, listAuditLogsForUser, listShipmentsForUser, listEventsForUser, appendShipmentEvent, uploadShipmentDocumentForUser, confirmShipmentDeliveryForUser, createPickupForUser, createRouteForUser, assignRouteForUser }));
 const { appRouter } = await import("./routers");
 
 function context(): TrpcContext { return { user: { id: 9, openId: "gps-user", email: "gps@example.com", name: "GPS User", loginMethod: "manus", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: {} as TrpcContext["req"], res: {} as TrpcContext["res"] }; }
@@ -67,6 +70,30 @@ describe("router authorization and audit", () => {
   it("rejects GPS when the persistence layer reports an out-of-tenant reference", async () => {
     getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); recordTrackingPoint.mockResolvedValue(null); appendAuditLog.mockClear();
     await expect(appRouter.createCaller(context()).gps.record({ shipmentId: 999, latitude: 18.4, longitude: -69.9, capturedAt: new Date(), source: "driver" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects route assignment without routes:assign", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(false); assignRouteForUser.mockClear(); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).routes.assign({ routeId: 4, driverUserId: 12 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(assignRouteForUser).not.toHaveBeenCalled(); expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("audits an authorized route creation", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createRouteForUser.mockResolvedValue({ id: 4, code: "RUT-REAL", branchId: 2 }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).routes.create({ branchId: 2, vehicleLabel: "Van 01" });
+    expect(result.code).toBe("RUT-REAL"); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "route.created", resourceId: "4" }));
+  });
+
+  it("rejects pickup when the persistence layer reports an out-of-tenant shipment", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createPickupForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).pickups.create({ shipmentId: 999, address: "Av. Independencia 100", contactName: "María Pérez" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects timeline event when the persistence layer reports an out-of-tenant shipment", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); appendShipmentEvent.mockResolvedValue(false); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).logistics.appendEvent({ shipmentId: 999, eventType: "scan", idempotencyKey: "tenant-event-1", origin: "operator" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(appendAuditLog).not.toHaveBeenCalled();
   });
 

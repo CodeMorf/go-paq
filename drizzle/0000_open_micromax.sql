@@ -70,7 +70,7 @@ CREATE TABLE `organizations` (
 	`slug` varchar(100) NOT NULL,
 	`country` varchar(80) NOT NULL DEFAULT 'DO',
 	`currency` varchar(8) NOT NULL DEFAULT 'DOP',
-	`language` varchar(8) NOT NULL DEFAULT 'it',
+	`language` varchar(8) NOT NULL DEFAULT 'es',
 	`timezone` varchar(80) NOT NULL DEFAULT 'America/Santo_Domingo',
 	`activeServices` json,
 	`status` enum('trial','active','suspended') NOT NULL DEFAULT 'trial',
