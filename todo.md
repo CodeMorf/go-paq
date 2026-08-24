@@ -361,3 +361,5 @@
 - [x] Añadir `api_request_logs` con request ID único, organización/API key opcionales, ruta, método, status, éxito e idempotency key; migración 0021 aplicada en TiDB.
 - [x] Capturar automáticamente respuestas REST al finalizar cada request, sin guardar cuerpos sensibles, y documentar el log de intentos/respuestas.
 - [x] Validar el logger REST con TypeScript, 100 pruebas aprobadas, 2 Shopify omitidas y build de producción correcta; persiste el warning no bloqueante del bundle grande.
+- [x] Añadir consulta y panel admin de `api_request_logs` con filtros básicos por status/ruta y permiso `audit:view`, sin exponer cuerpos ni secretos.
+- [x] Revalidar el panel admin de logs REST con TypeScript, suite completa de 100 pruebas aprobadas, 2 Shopify omitidas y build de producción correcta.

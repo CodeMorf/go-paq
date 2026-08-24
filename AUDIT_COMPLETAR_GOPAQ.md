@@ -78,3 +78,11 @@ Se evaluó reforzar `audit_logs` con triggers `BEFORE UPDATE` y `BEFORE DELETE` 
 ## Hito de trazabilidad REST — api_request_logs
 
 La migración 0021 añade `api_request_logs` con `requestId` único, método, ruta, status, resultado, código de error opcional, clave de idempotencia y referencias opcionales a organización/API key. Un middleware REST registra automáticamente el resultado al finalizar cada request y no persiste cuerpos de solicitudes ni respuestas, reduciendo exposición de datos sensibles. La cobertura de migraciones y contratos alcanza **100 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance; TypeScript y build de producción pasan, con el warning no bloqueante del bundle frontend grande.
+
+## Consulta administrativa de logs REST
+
+El portal `/admin` incorpora `ApiRequestLogPanel`, que consulta `apiLogs.list` con permiso `audit:view`, filtro opcional por status y ruta, scope obligatorio por organización y límite server-side de 200 registros. La interfaz muestra fecha, request ID, método, ruta y resultado, pero no cuerpos, tokens ni secretos. TypeScript, contratos seleccionados y build de producción pasan.
+
+## Panel administrativo de trazabilidad REST
+
+`/admin` ahora incluye un panel para consultar `api_request_logs` con filtros por código HTTP y ruta. La procedure `apiLogs.list` exige `audit:view`, deriva la organización desde la sesión autenticada, limita la consulta a 200 registros y no expone cuerpos, tokens ni secretos. La validación posterior a la integración mantiene TypeScript correcto, **100 pruebas aprobadas y 2 omitidas** por Shopify, además de build de producción correcta con el warning no bloqueante del bundle grande.

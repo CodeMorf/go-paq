@@ -1145,6 +1145,15 @@ export async function recordApiRequestLog(input: { organizationId?: number; apiK
   await db.insert(apiRequestLogs).values(input);
   return true;
 }
+export async function listApiRequestLogsForUser(userId: number, filters?: { statusCode?: number; route?: string }) {
+  const db = await getDb();
+  const scope = await getOrganizationForUser(userId);
+  if (!db || !scope) return [];
+  const conditions = [eq(apiRequestLogs.organizationId, scope.organization.id)];
+  if (filters?.statusCode) conditions.push(eq(apiRequestLogs.statusCode, filters.statusCode));
+  if (filters?.route) conditions.push(eq(apiRequestLogs.route, filters.route));
+  return db.select().from(apiRequestLogs).where(and(...conditions)).orderBy(desc(apiRequestLogs.createdAt)).limit(200);
+}
 
 export async function authenticateApiKey(secret: string) {
   const db = await getDb();
