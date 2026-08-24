@@ -288,7 +288,7 @@
 - [ ] Repetir verificación de checkout limpio con un usuario de base de datos con permisos CREATE/DROP aislados; la ejecución actual fue bloqueada por ER_DBACCESS_DENIED_ERROR sin tocar datos activos.
 - [x] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
 - [x] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
-- [ ] Añadir preflight server-side de producción que valide presencia de secretos críticos y exija REDIS_URL con TLS sin imprimir valores sensibles.
+- [x] Añadir preflight server-side de producción que valide presencia de secretos críticos y exija REDIS_URL con TLS sin imprimir valores sensibles.
 - [x] Añadir preflight server-side de producción que valide presencia de secretos críticos y exija REDIS_URL con TLS sin imprimir valores sensibles.
 - [ ] Hacer obligatorio el preflight antes del arranque production para fallar rápido ante configuración incompleta o REDIS_URL insegura.
 - [x] Hacer obligatorio el preflight antes del arranque production para fallar rápido ante configuración incompleta o REDIS_URL insegura.
