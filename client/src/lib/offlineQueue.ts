@@ -1,6 +1,6 @@
 export type OfflineOperation = {
   idempotencyKey: string;
-  kind: "scan" | "status" | "pod" | "expense";
+  kind: "scan" | "status" | "pod" | "expense" | "gps";
   payload: Record<string, unknown>;
   createdAt: number;
   attempts: number;

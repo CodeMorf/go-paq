@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { listPendingDriverOperations, resolveDriverConflict, type OfflineOperation } from "@/lib/offlineQueue";
 
-const kindLabels: Record<OfflineOperation["kind"], string> = { scan: "Escaneo", status: "Cambio de estado", pod: "Prueba de entrega", expense: "Gasto" };
+const kindLabels: Record<OfflineOperation["kind"], string> = { scan: "Escaneo", status: "Cambio de estado", pod: "Prueba de entrega", expense: "Gasto", gps: "Posición GPS" };
 
 export default function OfflineConflictPanel({ visible }: { visible: boolean }) {
   const [operations, setOperations] = useState<OfflineOperation[]>([]);
