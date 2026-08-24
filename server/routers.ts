@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, canUser, getOrganizationForUser, listShipmentsForUser } from "./db";
+import { appendAuditLog, appendShipmentEvent, canUser, getOrganizationForUser, listEventsForUser, listShipmentsForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
 
@@ -25,6 +25,14 @@ export const appRouter = router({
       return { organization: scope.organization, role: scope.membership.role, branchId: scope.membership.branchId };
     }),
     shipments: protectedProcedure.query(async ({ ctx }) => listShipmentsForUser(ctx.user.id)),
+    timeline: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive() })).query(async ({ ctx, input }) => listEventsForUser(ctx.user.id, input.shipmentId)),
+    appendEvent: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive(), eventType: z.string().min(2), nextStatus: z.string().optional(), note: z.string().optional(), evidenceUrl: z.string().url().optional(), latitude: z.number().optional(), longitude: z.number().optional(), idempotencyKey: z.string().min(8), origin: z.string().min(2).default("operator") })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      await appendShipmentEvent({ ...input, latitude: input.latitude === undefined ? undefined : String(input.latitude), longitude: input.longitude === undefined ? undefined : String(input.longitude), organizationId: scope.organization.id, actorUserId: ctx.user.id });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.event.appended", resourceType: "shipment", resourceId: String(input.shipmentId), metadata: input });
+      return { success: true } as const;
+    }),
     overview: protectedProcedure.query(async ({ ctx }) => {
       const shipments = await listShipmentsForUser(ctx.user.id);
       return {

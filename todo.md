@@ -111,7 +111,7 @@
 - [ ] Aggiungere lingua e servizi attivi dell’organizzazione con query e UI di profilo.
 - [ ] Estendere i pacchi con restrizioni e stato del pacco.
 - [ ] Introdurre stati separati per acquisto assistito e incidenti con transizioni validate lato backend.
-- [ ] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
+- [x] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
 - [ ] Collegare utenti organizzativi a magazzini o sedi operative in modo esplicito.
 
 - [x] Implementare logica Google Maps reale con `onMapReady`: geocoding, DirectionsService/DirectionsRenderer, fermate e rotta visualizzata.

@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, auditLogs, memberships, organizations, rolePermissions, shipments, users } from "../drizzle/schema";
+import { InsertUser, auditLogs, memberships, organizations, rolePermissions, shipmentEvents, shipments, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -66,4 +66,17 @@ export async function appendAuditLog(input: { organizationId?: number; actorUser
   const db = await getDb();
   if (!db) return;
   await db.insert(auditLogs).values(input);
+}
+
+export async function listEventsForUser(userId: number, shipmentId: number) {
+  const scope = await getOrganizationForUser(userId);
+  const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(shipmentEvents).where(and(eq(shipmentEvents.organizationId, scope.organization.id), eq(shipmentEvents.shipmentId, shipmentId))).orderBy(desc(shipmentEvents.createdAt));
+}
+
+export async function appendShipmentEvent(input: typeof shipmentEvents.$inferInsert) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(shipmentEvents).values(input);
 }
