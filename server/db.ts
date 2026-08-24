@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
@@ -155,6 +155,7 @@ type ShipmentInput = {
   originCountry: string;
   destinationCountry: string;
   estimatedAmount?: string;
+  deliveryPin?: string;
 };
 
 async function branchBelongsToOrganization(db: Awaited<ReturnType<typeof getDb>>, organizationId: number, branchId?: number) {
@@ -167,29 +168,46 @@ function newTrackingCode() {
   return `GPQ-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
+export function hashDeliveryPin(pin: string) {
+  return createHash("sha256").update(pin, "utf8").digest("hex");
+}
+
+export function matchesDeliveryPin(pin: string, storedHash: string) {
+  const expected = Buffer.from(hashDeliveryPin(pin), "hex");
+  const actual = Buffer.from(storedHash, "hex");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function withoutDeliveryPinHash<T extends { deliveryPinHash?: string | null }>(shipment: T) {
+  const { deliveryPinHash: _deliveryPinHash, ...safeShipment } = shipment;
+  return safeShipment;
+}
+
 export async function createShipmentForUser(userId: number, input: ShipmentInput) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope || !(await branchBelongsToOrganization(db, scope.organization.id, input.branchId))) return null;
   const trackingCode = newTrackingCode();
-  await db.insert(shipments).values({ ...input, trackingCode, organizationId: scope.organization.id, createdBy: userId, currency: "DOP", estimatedAmount: input.estimatedAmount });
+  const { deliveryPin, ...shipmentInput } = input;
+  await db.insert(shipments).values({ ...shipmentInput, trackingCode, organizationId: scope.organization.id, createdBy: userId, currency: "DOP", estimatedAmount: input.estimatedAmount, deliveryPinHash: deliveryPin ? hashDeliveryPin(deliveryPin) : null });
   const rows = await db.select().from(shipments).where(and(eq(shipments.organizationId, scope.organization.id), eq(shipments.trackingCode, trackingCode))).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
 }
 
 export async function createShipmentForOrganization(organizationId: number, input: ShipmentInput) {
   const db = await getDb();
   if (!db || !(await branchBelongsToOrganization(db, organizationId, input.branchId))) return null;
   const trackingCode = newTrackingCode();
-  await db.insert(shipments).values({ ...input, trackingCode, organizationId, createdBy: null, currency: "DOP", estimatedAmount: input.estimatedAmount });
+  const { deliveryPin: _deliveryPin, ...shipmentInput } = input;
+  await db.insert(shipments).values({ ...shipmentInput, trackingCode, organizationId, createdBy: null, currency: "DOP", estimatedAmount: input.estimatedAmount, deliveryPinHash: null });
   const rows = await db.select().from(shipments).where(and(eq(shipments.organizationId, organizationId), eq(shipments.trackingCode, trackingCode))).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
 }
 
 export async function getShipmentByTrackingForOrganization(organizationId: number, trackingCode: string) {
   const db = await getDb();
   if (!db) return null;
   const rows = await db.select().from(shipments).where(and(eq(shipments.organizationId, organizationId), eq(shipments.trackingCode, trackingCode))).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
 }
 
 export async function createPickupForOrganization(organizationId: number, input: Omit<typeof pickups.$inferInsert, "organizationId">) {
@@ -211,35 +229,37 @@ export async function updateShipmentForUser(userId: number, shipmentId: number, 
   if (!current[0] || !["draft", "quoted"].includes(current[0].commercialStatus)) return null;
   await db.update(shipments).set(input).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id)));
   const rows = await db.select().from(shipments).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
 }
 
-export async function confirmShipmentDeliveryForUser(userId: number, input: { shipmentId: number; recipientName: string; note?: string; evidenceUrl?: string; latitude?: string; longitude?: string; idempotencyKey: string }) {
+export async function confirmShipmentDeliveryForUser(userId: number, input: { shipmentId: number; recipientName: string; deliveryPin?: string; note?: string; evidenceUrl?: string; latitude?: string; longitude?: string; idempotencyKey: string }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
   const current = await db.select().from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
   if (!current[0]) return null;
+  if (current[0].deliveryPinHash && (!input.deliveryPin || !matchesDeliveryPin(input.deliveryPin, current[0].deliveryPinHash))) return null;
   if (scope.membership?.role === "driver") {
     const assignedStop = await db.select({ stopId: routeStops.id }).from(routeStops).innerJoin(routes, eq(routeStops.routeId, routes.id)).where(and(eq(routeStops.shipmentId, input.shipmentId), eq(routeStops.organizationId, scope.organization.id), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId), inArray(routes.status, ["assigned", "active"]))).limit(1);
     if (!assignedStop[0]) return null;
   }
   const existingEvent = await db.select({ id: shipmentEvents.id }).from(shipmentEvents).where(and(eq(shipmentEvents.organizationId, scope.organization.id), eq(shipmentEvents.idempotencyKey, input.idempotencyKey))).limit(1);
-  if (existingEvent[0]) return current[0];
+  if (existingEvent[0]) return withoutDeliveryPinHash(current[0]);
   transitionShipment("transport", current[0].physicalStatus, "delivered");
-  const eventNote = [input.recipientName ? `Recibido por: ${input.recipientName}` : "", input.note ?? ""].filter(Boolean).join(" · ");
+  const eventNote = [input.recipientName ? `Recibido por: ${input.recipientName}` : "", input.deliveryPin ? "PIN de entrega verificado" : "", input.note ?? ""].filter(Boolean).join(" · ");
   await db.transaction(async (tx) => {
     await tx.update(shipments).set({ physicalStatus: "delivered", transportStatus: "completed" }).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id)));
     await tx.insert(shipmentEvents).values({ organizationId: scope.organization.id, shipmentId: input.shipmentId, actorUserId: userId, eventType: "delivery_confirmed", previousStatus: current[0].physicalStatus, nextStatus: "delivered", note: eventNote, evidenceUrl: input.evidenceUrl, latitude: input.latitude, longitude: input.longitude, idempotencyKey: input.idempotencyKey, origin: "driver" });
   });
   const rows = await db.select().from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
-  return rows[0] ?? null;
+  return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
 }
 
 export async function listShipmentsForUser(userId: number) {
   const scope = await getOrganizationForUser(userId);
   const db = await getDb();
   if (!db || !scope) return [];
-  return db.select().from(shipments).where(eq(shipments.organizationId, scope.organization.id)).orderBy(desc(shipments.createdAt)).limit(100);
+  const rows = await db.select().from(shipments).where(eq(shipments.organizationId, scope.organization.id)).orderBy(desc(shipments.createdAt)).limit(100);
+  return rows.map(withoutDeliveryPinHash);
 }
 
 type PackageInput = {

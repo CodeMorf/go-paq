@@ -335,4 +335,7 @@
 - [x] Endurecer `gps.record` en backend para que un driver solo registre puntos de su propia ruta asignada y en estado `active`, rechazando rutas ajenas/no activas y referencias de envío no autorizadas.
 - [x] Añadir Vitest de ownership/estado GPS: denegado para ruta ajena o no activa y permitido solo para ruta propia activa.
 - [x] Restringir `deliveryAttempts.create` para drivers a una parada real de su ruta `active`, manteniendo el registro tenant-scoped para sucursal/admin.
-- [ ] Completar POD enriquecido con PIN/firma/foto, validación de entrega y carga de evidencia a storage seguro; no se debe confirmar entrega con evidencia inventada.
+- [x] Completar POD enriquecido con PIN/firma/foto, validación de entrega y carga de evidencia a storage seguro; no se confirma entrega con evidencia inventada. La validación visual real queda separada.
+- [x] Añadir PIN de entrega opcional: hash SHA-256 persistido, comparación timing-safe, sanitización de respuestas y migración 0017 nullable.
+- [x] Añadir foto POD desde el Driver con carga a storage seguro, URL de evidencia y coordenadas opcionales del dispositivo.
+- [x] Añadir captura de firma del receptor mediante canvas, cargarla como documento POD en storage seguro y mantener validación visual autenticada como pendiente separada.

@@ -71,6 +71,7 @@ export const shipments = mysqlTable("shipments", {
   destinationCountry: varchar("destinationCountry", { length: 80 }).notNull().default("DO"),
   estimatedAmount: decimal("estimatedAmount", { precision: 12, scale: 2 }),
   currency: varchar("currency", { length: 8 }).notNull().default("DOP"),
+  deliveryPinHash: varchar("deliveryPinHash", { length: 128 }),
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
