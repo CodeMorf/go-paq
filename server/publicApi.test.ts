@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerPublicApi } from "./publicApi";
-import { authenticateApiKey, beginApiIdempotencyForRequest, completeApiIdempotencyForRequest, createPickupForOrganization, createShipmentForOrganization, getActiveTariffForOrganization, getShipmentByTrackingForOrganization, releaseApiIdempotencyForRequest } from "./db";
+import { authenticateApiKey, beginApiIdempotencyForRequest, completeApiIdempotencyForRequest, createPickupForOrganization, createShipmentForOrganization, getActiveTariffForOrganization, getShipmentByTrackingForOrganization, listWebhookDeliveriesForOrganization, releaseApiIdempotencyForRequest } from "./db";
 
 vi.mock("./db", () => ({
   authenticateApiKey: vi.fn(),
@@ -8,6 +8,7 @@ vi.mock("./db", () => ({
   createShipmentForOrganization: vi.fn(),
   getActiveTariffForOrganization: vi.fn(),
   getShipmentByTrackingForOrganization: vi.fn(),
+  listWebhookDeliveriesForOrganization: vi.fn(),
   beginApiIdempotencyForRequest: vi.fn(),
   completeApiIdempotencyForRequest: vi.fn(),
   releaseApiIdempotencyForRequest: vi.fn(),
@@ -18,11 +19,12 @@ const tariffMock = vi.mocked(getActiveTariffForOrganization);
 const shipmentMock = vi.mocked(createShipmentForOrganization);
 const pickupMock = vi.mocked(createPickupForOrganization);
 const trackingMock = vi.mocked(getShipmentByTrackingForOrganization);
+const webhookDeliveriesMock = vi.mocked(listWebhookDeliveriesForOrganization);
 const beginIdempotencyMock = vi.mocked(beginApiIdempotencyForRequest);
 const completeIdempotencyMock = vi.mocked(completeApiIdempotencyForRequest);
 const releaseIdempotencyMock = vi.mocked(releaseApiIdempotencyForRequest);
 
-type Handler = (request: { header: (name: string) => string | undefined; body: unknown; params: Record<string, string> }, response: TestResponse) => Promise<unknown>;
+type Handler = (request: { header: (name: string) => string | undefined; body: unknown; params: Record<string, string>; query: Record<string, string | undefined> }, response: TestResponse) => Promise<unknown>;
 type TestResponse = { statusCode: number; headers: Record<string, string>; body?: unknown; status: (code: number) => TestResponse; setHeader: (name: string, value: string) => TestResponse; json: (body: unknown) => TestResponse };
 
 function makeResponse(): TestResponse {
@@ -48,20 +50,22 @@ function makeHandler(method: "post" | "get", path: string) {
   return handler;
 }
 
-const request = (body: unknown, authorization = "Bearer gpq_live_test_12345", params: Record<string, string> = {}) => ({
+const request = (body: unknown, authorization = "Bearer gpq_live_test_12345", params: Record<string, string> = {}, query: Record<string, string | undefined> = {}) => ({
   header: (name: string) => name === "Authorization" ? authorization : name === "X-GoPaq-Version" ? "2026-01" : name === "Idempotency-Key" ? "test-idempotency-1" : undefined,
   body,
   params,
+  query,
 });
 
 describe("REST API pública", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authMock.mockResolvedValue({ id: 7, organizationId: 42, scopes: '["quotes:read","shipments:write","pickups:write","tracking:read"]' } as never);
+    authMock.mockResolvedValue({ id: 7, organizationId: 42, scopes: '["quotes:read","shipments:write","pickups:write","tracking:read","webhooks:read"]' } as never);
     tariffMock.mockResolvedValue({ minAmount: "100", perKg: "10", perKm: "2", fixedSurcharge: "0", fuelSurchargePct: "0", discountPct: "0", taxPct: "0", volumetricDivisor: "5000", currency: "DOP" } as never);
     shipmentMock.mockResolvedValue({ id: 11, organizationId: 42, trackingCode: "GPQ-TEST" } as never);
     pickupMock.mockResolvedValue({ id: 12, organizationId: 42, status: "requested" } as never);
     trackingMock.mockResolvedValue({ id: 11, organizationId: 42, trackingCode: "GPQ-TEST", commercialStatus: "created" } as never);
+    webhookDeliveriesMock.mockResolvedValue([{ id: 1, endpointId: 2, eventType: "shipment.created", payloadHash: "hash", status: "delivered", attempts: 1, responseStatus: 200, lastError: null, deliveredAt: new Date(), createdAt: new Date(), updatedAt: new Date() }] as never);
     beginIdempotencyMock.mockResolvedValue({ status: "new", id: 99 });
     completeIdempotencyMock.mockResolvedValue(true);
     releaseIdempotencyMock.mockResolvedValue(true);
@@ -141,6 +145,22 @@ describe("REST API pública", () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers["X-Request-Id"]).toMatch(/^req_/);
     expect(trackingMock).toHaveBeenCalledWith(42, "GPQ-TEST");
+  });
+
+  it("consulta entregas webhook con scope y organización de la API key", async () => {
+    const response = makeResponse();
+    await makeHandler("get", "/api/v1/webhook-deliveries")(request({}, undefined, {}), response);
+    expect(response.statusCode).toBe(200);
+    expect(webhookDeliveriesMock).toHaveBeenCalledWith(42, { endpointId: undefined, eventType: undefined, status: undefined });
+    expect(response.body).toMatchObject({ data: [{ eventType: "shipment.created", status: "delivered" }] });
+  });
+
+  it("rechaza webhooks si la API key no tiene el scope requerido", async () => {
+    authMock.mockResolvedValueOnce({ id: 7, organizationId: 42, scopes: '["tracking:read"]' } as never);
+    const response = makeResponse();
+    await makeHandler("get", "/api/v1/webhook-deliveries")(request({}), response);
+    expect(response.statusCode).toBe(403);
+    expect(webhookDeliveriesMock).not.toHaveBeenCalled();
   });
 
   it("rechaza una solicitud sin API key con un mensaje localizado", async () => {
