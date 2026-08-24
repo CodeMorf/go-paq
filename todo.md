@@ -108,7 +108,7 @@
 - [ ] Aggiungere query/mutation del dominio con filtro obbligatorio per `organizationId` dal contesto autenticato.
 - [ ] Implementare audit log centralizzato append-only per eventi operativi, finanziari, sicurezza e LLM con procedure e test.
 
-- [x] Verificar idioma y servicios activos de la organización con query/UI y mutation tenant-scoped; `organization.updateProfile` exige `organization:configure`, persiste los campos y registra `organization.profile.updated`.
+- [x] Verificar idioma y servicios activos de la organización con query/UI y mutation tenant-scoped; `organization.updateProfile` exige `organization:configure`, persiste los campos y registra `organization.profile.updated`, cubierto por Vitest.
 - [x] Extender paquetes con restricciones, estado, peso, volumen y dimensiones persistidos; cobertura de estados en Vitest.
 - [x] Introdurre stati separati per acquisto assistito e incidenti con transiciones validadas lato backend; estados de compra asistida ampliados en migración 0014 y cubiertos con Vitest.
 - [x] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
@@ -366,7 +366,7 @@
 - [x] Capturar `/admin`, `/sucursal`, `/driver` y `/cliente` en desktop y móvil sin sesión para verificar redirección al acceso seguro y responsive del login; la validación autenticada por rol sigue pendiente.
 - [x] Verificar en `offlineQueue` persistencia cifrada del estado `rejected`, descarte explícito tras conflicto y exclusión de la bandeja pendiente; queda separado el trabajo de documentación tarifaria completa.
 - [x] Ampliar pruebas del motor tarifario para mínimo configurable y divisor volumétrico, manteniendo descuentos, combustible, impuestos y redondeo DOP; suite en 101 aprobadas y 2 Shopify omitidas.
-- [x] Ampliar la verificación HMAC de webhooks con tampering, replay temporal y firmas malformadas; suite en 102 pruebas aprobadas y 2 Shopify omitidas.
+- [x] Ampliar la verificación HMAC de webhooks con tampering, replay temporal y firmas malformadas; suite en 115 pruebas aprobadas y 2 Shopify omitidas.
 - [x] Implementar dispatch outbound de webhooks firmados con endpoints por organización, reintentos y entrega auditable; migración 0022, secreto cifrado, timeout, eventos operativos y pruebas verificados. La cola externa y el contrato REST siguen pendientes.
 - [x] Ampliar `logistics.overview` con conteo real de paquetes tenant-scoped y mostrarlo como KPI `Paquetes controlados` en el shell de portales; no se añaden ingresos ni integraciones ficticias.
 
@@ -382,7 +382,7 @@
 - [ ] Emitir veredicto final GO/NO-GO sin marcar tareas sin evidencia.
 - [x] Auditar documentación productiva existente y crear `docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md` con precondiciones, instalación limpia, backups, rollback, evidencia y criterio GO/NO-GO.
 - [x] Auditar el árbol Drizzle: 39 tablas en schema, 24 migraciones oficiales en journal; retirar `0000_open_micromax.sql` duplicada y alinear script/test de instalación limpia.
-- [x] Ejecutar `pnpm check`, `pnpm test -- --run` y `pnpm build`: TypeScript/build correctos, 113 tests aprobados y 2 Shopify omitidas; warning de chunk grande no bloqueante.
+- [x] Ejecutar `pnpm check`, `pnpm test -- --run` y `pnpm build`: TypeScript/build correctos, 115 tests aprobados y 2 Shopify omitidas; warning de chunk grande no bloqueante.
 - [x] Actualizar `README.md`, `PRODUCTION_READINESS.md`, `PRODUCTION_CONFIGURATION.md` y auditoría técnica con el estado real y los límites de producción.
 - [x] Crear `docs/PRIVACY_AND_RETENTION.md` con minimización, GPS, POD, documentos, logs, backup, derechos, retención propuesta y checklist de aprobación legal.
 - [x] Enlazar privacidad/retención y migración/despliegue desde README y configuración productiva, manteniendo NO-GO hasta aprobación y evidencia.
