@@ -294,3 +294,5 @@
 - [x] Hacer obligatorio el preflight antes del arranque production para fallar rápido ante configuración incompleta o REDIS_URL insegura.
 - [ ] Sustituir clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema, conservando el contraste claro/oscuro.
 - [x] Sustituir clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema, conservando el contraste claro/oscuro.
+- [ ] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
+- [x] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
