@@ -63,3 +63,10 @@ Se añadió además captura opcional de fotografía de recepción desde Sucursal
 La validación del hito de etiquetas observó `pnpm check`, 94 pruebas aprobadas y 2 omitidas por Shopify fuera de alcance, y build de producción correcto. La advertencia restante es el tamaño del bundle frontend, no un error de compilación.
 
 El veredicto permanece **NO-GO para operación productiva** hasta configurar y verificar Redis TLS, OAuth, storage, mapas y secretos, completar el checkout limpio con usuario de base de datos autorizado y ejecutar la caminata E2E autenticada en los cuatro portales y dispositivos con cámara. Los nuevos módulos reducen los faltantes funcionales, pero no sustituyen esas verificaciones de infraestructura y seguridad.
+
+## Hito API REST — idempotencia y trazabilidad
+
+La API pública de envíos y recogidas ahora requiere `Idempotency-Key` de 8 a 120 caracteres. La tabla `api_idempotency_keys` de la migración 0020 guarda el hash del payload, método, ruta, organización, API key, respuesta y expiración de 24 horas, con clave única tenant-scoped. Las repeticiones reproducen la respuesta original; una clave con payload diferente devuelve `409 idempotency_conflict`, una operación en curso devuelve `409 idempotency_in_flight` y una reserva no disponible devuelve `503`.
+
+Todas las rutas REST documentadas exponen `requestId` en el cuerpo y `X-Request-Id` en headers. Las pruebas de contrato cubren clave ausente, creación, replay, conflicto, liberación en error y trazabilidad. La validación observada queda en **99 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance, con TypeScript correcto; la build completa anterior fue correcta y debe repetirse en el siguiente checkpoint si se modifican dependencias de producción.
+

@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
-import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, customerAddresses, customerContacts, customerProfiles, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, supportTickets, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
+import { InsertUser, apiIdempotencyKeys, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, customerAddresses, customerContacts, customerProfiles, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, supportTickets, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
@@ -1098,6 +1098,45 @@ export async function revokeApiKeyForUser(userId: number, apiKeyId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return false;
   const result = await db.update(apiKeys).set({ revokedAt: new Date() }).where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.organizationId, scope.organization.id)));
+  return result[0].affectedRows > 0;
+}
+
+export type ApiIdempotencyBeginInput = { organizationId: number; apiKeyId: number; idempotencyKey: string; method: string; route: string; requestHash: string };
+export type ApiIdempotencyBeginResult = { status: "new"; id: number } | { status: "replay"; statusCode: number; body: unknown } | { status: "conflict" } | { status: "in_flight" };
+
+export async function beginApiIdempotencyForRequest(input: ApiIdempotencyBeginInput): Promise<ApiIdempotencyBeginResult | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const now = new Date();
+  const existing = await db.select().from(apiIdempotencyKeys).where(and(eq(apiIdempotencyKeys.organizationId, input.organizationId), eq(apiIdempotencyKeys.apiKeyId, input.apiKeyId), eq(apiIdempotencyKeys.idempotencyKey, input.idempotencyKey))).limit(1);
+  if (existing[0] && existing[0].expiresAt > now) {
+    if (existing[0].requestHash !== input.requestHash || existing[0].method !== input.method || existing[0].route !== input.route) return { status: "conflict" };
+    if (existing[0].responseStatus !== null && existing[0].responseBody !== null) return { status: "replay", statusCode: existing[0].responseStatus, body: existing[0].responseBody };
+    return { status: "in_flight" };
+  }
+  if (existing[0]) await db.delete(apiIdempotencyKeys).where(eq(apiIdempotencyKeys.id, existing[0].id));
+  try {
+    await db.insert(apiIdempotencyKeys).values({ ...input, expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000) });
+    const created = await db.select({ id: apiIdempotencyKeys.id }).from(apiIdempotencyKeys).where(and(eq(apiIdempotencyKeys.organizationId, input.organizationId), eq(apiIdempotencyKeys.apiKeyId, input.apiKeyId), eq(apiIdempotencyKeys.idempotencyKey, input.idempotencyKey))).limit(1);
+    return created[0] ? { status: "new", id: created[0].id } : null;
+  } catch {
+    const raced = await db.select().from(apiIdempotencyKeys).where(and(eq(apiIdempotencyKeys.organizationId, input.organizationId), eq(apiIdempotencyKeys.apiKeyId, input.apiKeyId), eq(apiIdempotencyKeys.idempotencyKey, input.idempotencyKey))).limit(1);
+    if (!raced[0]) return null;
+    if (raced[0].requestHash !== input.requestHash || raced[0].method !== input.method || raced[0].route !== input.route) return { status: "conflict" };
+    if (raced[0].responseStatus !== null && raced[0].responseBody !== null) return { status: "replay", statusCode: raced[0].responseStatus, body: raced[0].responseBody };
+    return { status: "in_flight" };
+  }
+}
+export async function completeApiIdempotencyForRequest(id: number, responseStatus: number, responseBody: unknown, resourceType?: string, resourceId?: number) {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.update(apiIdempotencyKeys).set({ responseStatus, responseBody: responseBody as never, resourceType, resourceId }).where(eq(apiIdempotencyKeys.id, id));
+  return result[0].affectedRows > 0;
+}
+export async function releaseApiIdempotencyForRequest(id: number) {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.delete(apiIdempotencyKeys).where(eq(apiIdempotencyKeys.id, id));
   return result[0].affectedRows > 0;
 }
 

@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean, json } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean, json, uniqueIndex } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -486,6 +486,24 @@ export const receipts = mysqlTable("receipts", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const apiIdempotencyKeys = mysqlTable("api_idempotency_keys", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  apiKeyId: int("apiKeyId").notNull(),
+  idempotencyKey: varchar("idempotencyKey", { length: 120 }).notNull(),
+  method: varchar("method", { length: 12 }).notNull(),
+  route: varchar("route", { length: 160 }).notNull(),
+  requestHash: varchar("requestHash", { length: 64 }).notNull(),
+  responseStatus: int("responseStatus"),
+  responseBody: json("responseBody"),
+  resourceType: varchar("resourceType", { length: 64 }),
+  resourceId: int("resourceId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+}, (table) => ({
+  scopeKey: uniqueIndex("api_idempotency_scope_key").on(table.organizationId, table.apiKeyId, table.idempotencyKey),
+}));
+
 export const auditLogs = mysqlTable("audit_logs", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId"),
@@ -522,6 +540,7 @@ export type CashMovement = typeof cashMovements.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type Receipt = typeof receipts.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type ApiIdempotencyKey = typeof apiIdempotencyKeys.$inferSelect;
 export type Pickup = typeof pickups.$inferSelect;
 export type Route = typeof routes.$inferSelect;
 export type RouteStop = typeof routeStops.$inferSelect;

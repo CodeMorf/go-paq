@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerPublicApi } from "./publicApi";
-import { authenticateApiKey, createPickupForOrganization, createShipmentForOrganization, getActiveTariffForOrganization, getShipmentByTrackingForOrganization } from "./db";
+import { authenticateApiKey, beginApiIdempotencyForRequest, completeApiIdempotencyForRequest, createPickupForOrganization, createShipmentForOrganization, getActiveTariffForOrganization, getShipmentByTrackingForOrganization, releaseApiIdempotencyForRequest } from "./db";
 
 vi.mock("./db", () => ({
   authenticateApiKey: vi.fn(),
@@ -8,6 +8,9 @@ vi.mock("./db", () => ({
   createShipmentForOrganization: vi.fn(),
   getActiveTariffForOrganization: vi.fn(),
   getShipmentByTrackingForOrganization: vi.fn(),
+  beginApiIdempotencyForRequest: vi.fn(),
+  completeApiIdempotencyForRequest: vi.fn(),
+  releaseApiIdempotencyForRequest: vi.fn(),
 }));
 
 const authMock = vi.mocked(authenticateApiKey);
@@ -15,6 +18,9 @@ const tariffMock = vi.mocked(getActiveTariffForOrganization);
 const shipmentMock = vi.mocked(createShipmentForOrganization);
 const pickupMock = vi.mocked(createPickupForOrganization);
 const trackingMock = vi.mocked(getShipmentByTrackingForOrganization);
+const beginIdempotencyMock = vi.mocked(beginApiIdempotencyForRequest);
+const completeIdempotencyMock = vi.mocked(completeApiIdempotencyForRequest);
+const releaseIdempotencyMock = vi.mocked(releaseApiIdempotencyForRequest);
 
 type Handler = (request: { header: (name: string) => string | undefined; body: unknown; params: Record<string, string> }, response: TestResponse) => Promise<unknown>;
 type TestResponse = { statusCode: number; headers: Record<string, string>; body?: unknown; status: (code: number) => TestResponse; setHeader: (name: string, value: string) => TestResponse; json: (body: unknown) => TestResponse };
@@ -43,7 +49,7 @@ function makeHandler(method: "post" | "get", path: string) {
 }
 
 const request = (body: unknown, authorization = "Bearer gpq_live_test_12345", params: Record<string, string> = {}) => ({
-  header: (name: string) => name === "Authorization" ? authorization : name === "X-GoPaq-Version" ? "2026-01" : undefined,
+  header: (name: string) => name === "Authorization" ? authorization : name === "X-GoPaq-Version" ? "2026-01" : name === "Idempotency-Key" ? "test-idempotency-1" : undefined,
   body,
   params,
 });
@@ -56,6 +62,9 @@ describe("REST API pública", () => {
     shipmentMock.mockResolvedValue({ id: 11, organizationId: 42, trackingCode: "GPQ-TEST" } as never);
     pickupMock.mockResolvedValue({ id: 12, organizationId: 42, status: "requested" } as never);
     trackingMock.mockResolvedValue({ id: 11, organizationId: 42, trackingCode: "GPQ-TEST", commercialStatus: "created" } as never);
+    beginIdempotencyMock.mockResolvedValue({ status: "new", id: 99 });
+    completeIdempotencyMock.mockResolvedValue(true);
+    releaseIdempotencyMock.mockResolvedValue(true);
   });
 
   it("ignora parámetros tarifarios del cliente y resuelve la tarifa de la organización", async () => {
@@ -74,11 +83,49 @@ describe("REST API pública", () => {
     expect(response.body).toMatchObject({ error: { code: "tariff_unavailable" } });
   });
 
-  it("crea un envío con la organización de la API key", async () => {
+  it("rechaza la creación si falta Idempotency-Key", async () => {
+    const response = makeResponse();
+    const noKeyRequest = { ...request({ serviceType: "moving", senderName: "Ana Pérez", recipientName: "Luis Díaz", originAddress: "Santo Domingo", destinationAddress: "Santiago", originCountry: "DO", destinationCountry: "DO" }), header: (name: string) => name === "Authorization" ? "Bearer gpq_live_test_12345" : name === "X-GoPaq-Version" ? "2026-01" : undefined };
+    await makeHandler("post", "/api/v1/shipments")(noKeyRequest, response);
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toMatchObject({ error: { code: "missing_idempotency_key" } });
+    expect(shipmentMock).not.toHaveBeenCalled();
+  });
+
+  it("crea un envío con la organización de la API key y completa el registro idempotente", async () => {
     const response = makeResponse();
     await makeHandler("post", "/api/v1/shipments")(request({ organizationId: 999, serviceType: "moving", senderName: "Ana Pérez", recipientName: "Luis Díaz", originAddress: "Santo Domingo", destinationAddress: "Santiago", originCountry: "DO", destinationCountry: "DO" }), response);
     expect(response.statusCode).toBe(201);
+    expect(response.headers["X-Request-Id"]).toMatch(/^req_/);
     expect(shipmentMock).toHaveBeenCalledWith(42, expect.objectContaining({ serviceType: "moving" }));
+    expect(beginIdempotencyMock).toHaveBeenCalledWith(expect.objectContaining({ organizationId: 42, apiKeyId: 7, idempotencyKey: "test-idempotency-1", route: "/api/v1/shipments" }));
+    expect(completeIdempotencyMock).toHaveBeenCalledWith(99, 201, expect.objectContaining({ data: expect.objectContaining({ id: 11 }) }), "shipment", 11);
+  });
+
+  it("libera la reserva si el envío no puede crearse", async () => {
+    shipmentMock.mockResolvedValueOnce(null);
+    const response = makeResponse();
+    await makeHandler("post", "/api/v1/shipments")(request({ serviceType: "moving", senderName: "Ana Pérez", recipientName: "Luis Díaz", originAddress: "Santo Domingo", destinationAddress: "Santiago", originCountry: "DO", destinationCountry: "DO" }), response);
+    expect(response.statusCode).toBe(422);
+    expect(releaseIdempotencyMock).toHaveBeenCalledWith(99);
+  });
+
+  it("reproduce un envío sin ejecutar una segunda creación", async () => {
+    beginIdempotencyMock.mockResolvedValueOnce({ status: "replay", statusCode: 201, body: { data: { id: 11, trackingCode: "GPQ-TEST" }, requestId: "req_original" } });
+    const response = makeResponse();
+    await makeHandler("post", "/api/v1/shipments")(request({ serviceType: "moving", senderName: "Ana Pérez", recipientName: "Luis Díaz", originAddress: "Santo Domingo", destinationAddress: "Santiago", originCountry: "DO", destinationCountry: "DO" }), response);
+    expect(response.statusCode).toBe(201);
+    expect(response.body).toMatchObject({ data: { id: 11 }, requestId: "req_original" });
+    expect(shipmentMock).not.toHaveBeenCalled();
+  });
+
+  it("rechaza una clave idempotente usada con otro payload", async () => {
+    beginIdempotencyMock.mockResolvedValueOnce({ status: "conflict" });
+    const response = makeResponse();
+    await makeHandler("post", "/api/v1/pickups")(request({ shipmentId: 11, address: "Av. Abraham Lincoln 2", contactName: "Ana Pérez" }), response);
+    expect(response.statusCode).toBe(409);
+    expect(response.body).toMatchObject({ error: { code: "idempotency_conflict" } });
+    expect(pickupMock).not.toHaveBeenCalled();
   });
 
   it("registra un pickup asociado a un shipment", async () => {
@@ -92,6 +139,7 @@ describe("REST API pública", () => {
     const response = makeResponse();
     await makeHandler("get", "/api/v1/tracking/:trackingCode")(request({}, undefined, { trackingCode: "GPQ-TEST" }), response);
     expect(response.statusCode).toBe(200);
+    expect(response.headers["X-Request-Id"]).toMatch(/^req_/);
     expect(trackingMock).toHaveBeenCalledWith(42, "GPQ-TEST");
   });
 

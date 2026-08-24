@@ -351,3 +351,6 @@
 - [x] Añadir captura opcional de fotografía de recepción desde Sucursal con `capture="environment"`, límite server-side de 10 MB y carga a documentos `receipt` en storage seguro.
 - [x] Generar etiqueta imprimible con datos reales de envío, paquete, código QR/barra y organización.
 - [x] Verificar workflow CI automático en `.github/workflows/ci.yml`: `pnpm install --frozen-lockfile`, check, Vitest, build y preflight productivo sintético sin secretos reales.
+- [x] Añadir `api_idempotency_keys` con clave única tenant-scoped por organización, API key y operación; migración 0020 aplicada sin cambios destructivos.
+- [x] Endurecer REST de envíos y pickups con `Idempotency-Key` obligatorio, hash de payload, replay seguro, conflicto 409, liberación en errores y `X-Request-Id` correlacionable.
+- [x] Actualizar `/docs-api` con headers, scopes, request IDs, idempotencia y errores uniformes; ampliar pruebas REST hasta 98 aprobadas y 2 Shopify omitidas.

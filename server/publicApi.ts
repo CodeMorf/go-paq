@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Application, Request, Response } from "express";
 import {
@@ -6,6 +7,9 @@ import {
   createShipmentForOrganization,
   getActiveTariffForOrganization,
   getShipmentByTrackingForOrganization,
+  beginApiIdempotencyForRequest,
+  completeApiIdempotencyForRequest,
+  releaseApiIdempotencyForRequest,
 } from "./db";
 import { hasApiScope, isSupportedApiVersion, parseApiAuthorization } from "./apiAuth";
 import { calculateQuote } from "./tariffEngine";
@@ -33,7 +37,14 @@ const pickupInput = z.object({
 });
 
 function requestId() {
-  return `req_${Date.now().toString(36)}`;
+  return `req_${randomUUID()}`;
+}
+function requestHash(payload: unknown) {
+  return createHash("sha256").update(JSON.stringify(payload ?? null)).digest("hex");
+}
+function readIdempotencyKey(req: Request) {
+  const key = req.header("Idempotency-Key")?.trim();
+  return key && key.length >= 8 && key.length <= 120 ? key : null;
 }
 
 async function authorize(req: Request, requiredScope: string) {
@@ -48,6 +59,7 @@ async function authorize(req: Request, requiredScope: string) {
 export function registerPublicApi(app: Application) {
   app.post("/api/v1/quotes", async (req: Request, res: Response) => {
     const id = requestId();
+    res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "quotes:read");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
     const rate = await consumeApiRateLimit(String(auth.key.id));
@@ -63,32 +75,53 @@ export function registerPublicApi(app: Application) {
 
   app.post("/api/v1/shipments", async (req: Request, res: Response) => {
     const id = requestId();
+    res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "shipments:write");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
     const rate = await consumeApiRateLimit(String(auth.key.id));
     if (!rate.allowed) return res.status(429).setHeader("Retry-After", String(rate.retryAfterSeconds ?? 60)).json({ error: { code: "rate_limited", message: "Demasiados intentos; inténtalo más tarde" }, requestId: id });
     const parsed = shipmentInput.safeParse(req.body);
     if (!parsed.success) return res.status(422).json({ error: { code: "validation_error", message: "Datos de envío no válidos" }, requestId: id });
+    const idempotencyKey = readIdempotencyKey(req);
+    if (!idempotencyKey) return res.status(400).json({ error: { code: "missing_idempotency_key", message: "Se requiere un Idempotency-Key de 8 a 120 caracteres" }, requestId: id });
+    const idempotency = await beginApiIdempotencyForRequest({ organizationId: auth.key.organizationId, apiKeyId: auth.key.id, idempotencyKey, method: "POST", route: "/api/v1/shipments", requestHash: requestHash(parsed.data) });
+    if (!idempotency) return res.status(503).json({ error: { code: "idempotency_unavailable", message: "No se pudo reservar la operación de forma segura" }, requestId: id });
+    if (idempotency.status === "replay") return res.status(idempotency.statusCode).json(idempotency.body);
+    if (idempotency.status === "conflict") return res.status(409).json({ error: { code: "idempotency_conflict", message: "La clave ya fue usada con una solicitud diferente" }, requestId: id });
+    if (idempotency.status === "in_flight") return res.status(409).json({ error: { code: "idempotency_in_flight", message: "La operación con esta clave continúa en proceso" }, requestId: id });
     const shipment = await createShipmentForOrganization(auth.key.organizationId, parsed.data);
-    if (!shipment) return res.status(422).json({ error: { code: "invalid_branch", message: "La sucursal no pertenece a la organización activa" }, requestId: id });
-    return res.status(201).json({ data: shipment, requestId: id });
+    if (!shipment) { await releaseApiIdempotencyForRequest(idempotency.id); return res.status(422).json({ error: { code: "invalid_branch", message: "La sucursal no pertenece a la organización activa" }, requestId: id }); }
+    const responseBody = { data: shipment, requestId: id };
+    await completeApiIdempotencyForRequest(idempotency.id, 201, responseBody, "shipment", shipment.id);
+    return res.status(201).json(responseBody);
   });
 
   app.post("/api/v1/pickups", async (req: Request, res: Response) => {
     const id = requestId();
+    res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "pickups:write");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
     const rate = await consumeApiRateLimit(String(auth.key.id));
     if (!rate.allowed) return res.status(429).setHeader("Retry-After", String(rate.retryAfterSeconds ?? 60)).json({ error: { code: "rate_limited", message: "Demasiados intentos; inténtalo más tarde" }, requestId: id });
     const parsed = pickupInput.safeParse(req.body);
     if (!parsed.success) return res.status(422).json({ error: { code: "validation_error", message: "Datos de recogida no válidos" }, requestId: id });
+    const idempotencyKey = readIdempotencyKey(req);
+    if (!idempotencyKey) return res.status(400).json({ error: { code: "missing_idempotency_key", message: "Se requiere un Idempotency-Key de 8 a 120 caracteres" }, requestId: id });
+    const idempotency = await beginApiIdempotencyForRequest({ organizationId: auth.key.organizationId, apiKeyId: auth.key.id, idempotencyKey, method: "POST", route: "/api/v1/pickups", requestHash: requestHash(parsed.data) });
+    if (!idempotency) return res.status(503).json({ error: { code: "idempotency_unavailable", message: "No se pudo reservar la operación de forma segura" }, requestId: id });
+    if (idempotency.status === "replay") return res.status(idempotency.statusCode).json(idempotency.body);
+    if (idempotency.status === "conflict") return res.status(409).json({ error: { code: "idempotency_conflict", message: "La clave ya fue usada con una solicitud diferente" }, requestId: id });
+    if (idempotency.status === "in_flight") return res.status(409).json({ error: { code: "idempotency_in_flight", message: "La operación con esta clave continúa en proceso" }, requestId: id });
     const pickup = await createPickupForOrganization(auth.key.organizationId, parsed.data);
-    if (!pickup) return res.status(422).json({ error: { code: "invalid_shipment", message: "El envío no pertenece a la organización activa" }, requestId: id });
-    return res.status(201).json({ data: pickup, requestId: id });
+    if (!pickup) { await releaseApiIdempotencyForRequest(idempotency.id); return res.status(422).json({ error: { code: "invalid_shipment", message: "El envío no pertenece a la organización activa" }, requestId: id }); }
+    const responseBody = { data: pickup, requestId: id };
+    await completeApiIdempotencyForRequest(idempotency.id, 201, responseBody, "pickup", pickup.id);
+    return res.status(201).json(responseBody);
   });
 
   app.get("/api/v1/tracking/:trackingCode", async (req: Request, res: Response) => {
     const id = requestId();
+    res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "tracking:read");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
     const trackingCode = String(req.params.trackingCode ?? "").trim();

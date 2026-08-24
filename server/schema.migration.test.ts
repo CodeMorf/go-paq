@@ -17,6 +17,13 @@ describe("migraciones de checkout limpio", () => {
     expect(sql.match(/CREATE TABLE/g)?.length).toBe(baselineTables.length);
   });
 
+  it("crea la tabla de idempotencia REST con scope único", () => {
+    const sql = readFileSync(resolve(migrationDirectory, "0020_omniscient_william_stryker.sql"), "utf8");
+    expect(sql).toContain("CREATE TABLE `api_idempotency_keys`");
+    expect(sql).toContain("UNIQUE(`organizationId`,`apiKeyId`,`idempotencyKey`)");
+    expect(sql.toUpperCase()).not.toMatch(/DROP\s+(TABLE|DATABASE)/);
+  });
+
   it("mantiene toda la cadena SQL incremental libre de DROP y TRUNCATE", () => {
     expect(migrationSqlFiles().length).toBeGreaterThanOrEqual(13);
     for (const file of migrationSqlFiles()) {
