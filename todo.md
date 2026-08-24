@@ -286,3 +286,5 @@
 - [ ] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
 - [x] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
 - [ ] Repetir verificación de checkout limpio con un usuario de base de datos con permisos CREATE/DROP aislados; la ejecución actual fue bloqueada por ER_DBACCESS_DENIED_ERROR sin tocar datos activos.
+- [ ] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
+- [x] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
