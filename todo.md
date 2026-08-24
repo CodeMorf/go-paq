@@ -181,3 +181,36 @@
 - [x] Proteggere la mutation `logistics.audit` con `audit:create` e testare il rifiuto senza permesso.
 - [x] Aggiungere test tRPC per `logistics.audit` senza `audit:create` e verificare assenza di scrittura audit.
 - [x] Richiedere organizzazione attiva nella procedura `agent.suggest` e mantenere audit LLM sempre tenant-scoped.
+- [x] Migrar la interfaz visible de GoPaq al español como idioma principal.
+- [x] Establecer el tema claro como predeterminado y conservar el tema oscuro como opción manual.
+- [x] Integrar los avatares proporcionados de la operadora y del halcón en los lugares visuales correspondientes.
+- [x] Retirar la foto de la operadora del diseño principal y sustituirla por la nueva composición de marca GoPaq proporcionada.
+- [ ] Retirar también el collage de marca del hero y reemplazarlo por una composición limpia basada en logo, color y avatar discreto.
+- [x] Reubicar el halcón solo en puntos de identidad donde no sature la composición.
+- [x] Hacer una pasada visual final para confirmar que el halcón queda limitado a puntos de identidad y no compite con el contenido.
+- [x] Añadir selector claro/oscuro a landing y documentación API, adaptando estilos públicos al tema activo.
+- [x] Sustituir fondos y textos oscuros hardcodeados de landing/docs por tokens semánticos que respondan al tema activo.
+- [x] Completar avatares en landing, docs, login y cabeceras compartidas con verificación responsive.
+- [ ] Verificar responsive del login y de cabeceras internas con el halcón, y documentar el resultado visual.
+- [ ] Completar la localización al español en portales internos, login y componentes compartidos, revisando cadenas residuales.
+- [ ] Reemplazar clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema.
+- [ ] Capturar y documentar landing, docs, login y cabeceras internas en desktop/móvil antes del checkpoint visual.
+- [x] Corregir el encabezado móvil de `/docs-api` para evitar desbordamiento horizontal y mantener CTA accesible.
+- [x] Añadir unidades configurables de peso: libra, onza, kilogramo y gramo.
+- [x] Añadir unidades configurables de dimensión: centímetro y pulgada, con conversiones consistentes.
+- [x] Extraer conversiones de peso y dimensión a un helper compartido y probar lb/oz/kg/g y cm/pulgada.
+- [x] Asegurar que las pruebas de conversiones de unidades sean detectadas explícitamente por Vitest y verificar su ejecución.
+- [ ] Reutilizar las unidades en las superficies operativas de paquetes, sucursal y manifiestos donde se capturen medidas.
+- [ ] Establecer DOP/RD$ como moneda predeterminada de GoPaq para República Dominicana en cotización, tarifas y paneles.
+- [ ] Integrar Shopify exclusivamente en `/cliente` para servicios de envío, carrito y checkout; mantener `/admin` y `/sucursal` sin storefront.
+- [ ] Dejar catálogo Shopify de servicios de envío listo para clientes con moneda DOP/RD$.
+- [ ] Integrar carrito persistente y checkout Shopify únicamente en `/cliente`.
+- [ ] Añadir optimización de pedido del cliente antes del checkout: resumen, peso, dimensiones, unidad y servicio.
+- [ ] Validar flujo de producción, aislamiento de portales, estados de carga/error y responsive.
+- [ ] Ejecutar prueba autónoma de producción: compilación, suites Vitest, Shopify, rutas públicas y aislamiento de portales.
+- [ ] Generar reporte de verificación con resultados comprobados y bloqueos reales, sin afirmar pruebas no ejecutadas.
+- [x] Resolver incidente de servidor de desarrollo detenido y confirmar arranque saludable.
+- [ ] Publicar el proyecto GoPaq en `CodeMorf/go-paq.git` con rama `main` y commit verificable.
+- [ ] Montar catálogo Shopify de servicios de envío en `/cliente` usando `commerce.products.*`.
+- [ ] Añadir carrito y checkout Shopify al flujo de creación de envío del cliente usando `useCart()`.
+- [ ] Verificar que `/admin` y `/sucursal` no rendericen catálogo, carrito ni checkout Shopify.

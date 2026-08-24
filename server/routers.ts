@@ -9,6 +9,7 @@ import { invokeLLM } from "./_core/llm";
 import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
 import { buildTrackingAuditMetadata, trackingResourceId } from "./trackingAudit";
+import { commerceRouter } from "./routers/commerce";
 
 export const appRouter = router({
   organization: router({
@@ -22,6 +23,7 @@ export const appRouter = router({
     }),
   }),
   system: systemRouter,
+  commerce: commerceRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

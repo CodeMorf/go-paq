@@ -36,3 +36,10 @@ button:active { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* Public surfaces inherit the selected theme while preserving GoPaq orange/navy accents. */
+html:not(.dark) .public-shell [class*="bg-[#091827]"] { background: var(--muted) !important; color: var(--muted-foreground); }
+html:not(.dark) .public-shell [class*="bg-[#0b1c31]"] { background: var(--card) !important; color: var(--card-foreground); border-color: var(--border) !important; }
+html:not(.dark) .public-shell [class*="bg-[#06111f]"] { background: var(--background) !important; color: var(--foreground); }
+html:not(.dark) .public-shell [class*="text-slate-300"], html:not(.dark) .public-shell [class*="text-slate-400"] { color: var(--muted-foreground) !important; }
+html:not(.dark) .public-shell button.bg-orange-500 { color: white !important; }
