@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, apiKeys, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey } from "./apiKeys";
+import { storagePut } from "./storage";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -105,6 +106,16 @@ export async function listRouteStopsForUser(userId: number, routeId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];
   return db.select().from(routeStops).where(and(eq(routeStops.organizationId, scope.organization.id), eq(routeStops.routeId, routeId))).orderBy(routeStops.sequence);
+}
+
+export async function uploadShipmentDocumentForUser(userId: number, input: { shipmentId: number; documentType: "label" | "invoice" | "customs" | "pod" | "incident" | "receipt"; fileName: string; mimeType: string; dataBase64: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const bytes = Buffer.from(input.dataBase64, "base64");
+  if (bytes.length > 10 * 1024 * 1024) throw new Error("Documento oltre il limite di 10 MB");
+  const stored = await storagePut(`organizations/${scope.organization.id}/shipments/${input.shipmentId}/${input.fileName}`, bytes, input.mimeType);
+  await db.insert(shipmentDocuments).values({ organizationId: scope.organization.id, shipmentId: input.shipmentId, documentType: input.documentType, fileKey: stored.key, fileUrl: stored.url, mimeType: input.mimeType, uploadedBy: userId });
+  return stored;
 }
 
 export async function createApiKeyForUser(userId: number, name: string, scopes: string[]) {

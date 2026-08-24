@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, listApiKeysForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint } from "./db";
+import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, listApiKeysForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -73,6 +73,13 @@ export const appRouter = router({
       }
       await appendAuditLog({ organizationId: scope?.organization.id, actorUserId: ctx.user.id, category: "llm", action: "agent.suggestion.created", resourceType: "agent", metadata: { ...suggestion, sensitive: suggestion.sensitive, approved: false } });
       return suggestion;
+    }),
+  }),
+  documents: router({
+    upload: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive(), documentType: z.enum(["label", "invoice", "customs", "pod", "incident", "receipt"]), fileName: z.string().min(1).max(180).regex(/^[a-zA-Z0-9._-]+$/), mimeType: z.string().min(3).max(120), dataBase64: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      const result = await uploadShipmentDocumentForUser(ctx.user.id, input);
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      return result;
     }),
   }),
   apiKeys: router({
