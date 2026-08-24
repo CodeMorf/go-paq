@@ -504,6 +504,22 @@ export const apiIdempotencyKeys = mysqlTable("api_idempotency_keys", {
   scopeKey: uniqueIndex("api_idempotency_scope_key").on(table.organizationId, table.apiKeyId, table.idempotencyKey),
 }));
 
+export const apiRequestLogs = mysqlTable("api_request_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId"),
+  apiKeyId: int("apiKeyId"),
+  requestId: varchar("requestId", { length: 80 }).notNull(),
+  method: varchar("method", { length: 12 }).notNull(),
+  route: varchar("route", { length: 160 }).notNull(),
+  statusCode: int("statusCode"),
+  success: boolean("success").notNull().default(false),
+  errorCode: varchar("errorCode", { length: 80 }),
+  idempotencyKey: varchar("idempotencyKey", { length: 120 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  requestIdKey: uniqueIndex("api_request_logs_request_id_key").on(table.requestId),
+}));
+
 export const auditLogs = mysqlTable("audit_logs", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId"),
@@ -541,6 +557,7 @@ export type Invoice = typeof invoices.$inferSelect;
 export type Receipt = typeof receipts.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type ApiIdempotencyKey = typeof apiIdempotencyKeys.$inferSelect;
+export type ApiRequestLog = typeof apiRequestLogs.$inferSelect;
 export type Pickup = typeof pickups.$inferSelect;
 export type Route = typeof routes.$inferSelect;
 export type RouteStop = typeof routeStops.$inferSelect;

@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
-import { InsertUser, apiIdempotencyKeys, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, customerAddresses, customerContacts, customerProfiles, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, supportTickets, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
+import { InsertUser, apiIdempotencyKeys, apiKeys, apiRequestLogs, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, customerAddresses, customerContacts, customerProfiles, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, supportTickets, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
@@ -1138,6 +1138,12 @@ export async function releaseApiIdempotencyForRequest(id: number) {
   if (!db) return false;
   const result = await db.delete(apiIdempotencyKeys).where(eq(apiIdempotencyKeys.id, id));
   return result[0].affectedRows > 0;
+}
+export async function recordApiRequestLog(input: { organizationId?: number; apiKeyId?: number; requestId: string; method: string; route: string; statusCode: number; success: boolean; errorCode?: string; idempotencyKey?: string }) {
+  const db = await getDb();
+  if (!db) return false;
+  await db.insert(apiRequestLogs).values(input);
+  return true;
 }
 
 export async function authenticateApiKey(secret: string) {

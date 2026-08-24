@@ -74,3 +74,7 @@ Todas las rutas REST documentadas exponen `requestId` en el cuerpo y `X-Request-
 ## Nota de compatibilidad TiDB — audit_logs
 
 Se evaluó reforzar `audit_logs` con triggers `BEFORE UPDATE` y `BEFORE DELETE` en una migración 0021. La base TiDB conectada rechazó `CREATE TRIGGER` con `ERROR 1064`; la migración experimental fue retirada y no se dejó un artefacto desplegable incompatible. Por tanto, el estado actual es **append-only a nivel de aplicación**: no hay rutas de aplicación para actualizar o borrar auditoría, pero la garantía de inmutabilidad a nivel de motor sigue pendiente de una estrategia compatible con TiDB, como control de privilegios del usuario de base de datos, tabla de archivo administrada externamente o hash-chain transaccional.
+
+## Hito de trazabilidad REST — api_request_logs
+
+La migración 0021 añade `api_request_logs` con `requestId` único, método, ruta, status, resultado, código de error opcional, clave de idempotencia y referencias opcionales a organización/API key. Un middleware REST registra automáticamente el resultado al finalizar cada request y no persiste cuerpos de solicitudes ni respuestas, reduciendo exposición de datos sensibles. La cobertura de migraciones y contratos alcanza **100 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance; TypeScript y build de producción pasan, con el warning no bloqueante del bundle frontend grande.

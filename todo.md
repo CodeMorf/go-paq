@@ -356,3 +356,8 @@
 - [x] Actualizar `/docs-api` con headers, scopes, request IDs, idempotencia y errores uniformes; ampliar pruebas REST/migración hasta 99 aprobadas y 2 Shopify omitidas.
 - [ ] Endurecer `audit_logs` a nivel de base de datos con una estrategia compatible con TiDB; la migración experimental de triggers 0021 fue retirada porque TiDB devolvió `ERROR 1064` al no soportar `CREATE TRIGGER`.
 - [x] Confirmar que no existen rutas de aplicación `UPDATE`/`DELETE` sobre `audit_logs`; el append-only actual queda documentado como enforcement de aplicación, no como garantía de motor.
+- [x] Verificar API REST con claves revocables, scopes explícitos, rate limit, `X-Request-Id`, idempotencia tenant-scoped y aislamiento por organización en quotes/shipments/pickups/tracking; el aislamiento global de todo el dominio permanece pendiente.
+- [x] Verificar por pruebas unitarias las piezas de ventanas pickup, split/repack, estados de compra asistida y campos de evento `reason`/branch/position/evidence; la integración E2E completa permanece pendiente.
+- [x] Añadir `api_request_logs` con request ID único, organización/API key opcionales, ruta, método, status, éxito e idempotency key; migración 0021 aplicada en TiDB.
+- [x] Capturar automáticamente respuestas REST al finalizar cada request, sin guardar cuerpos sensibles, y documentar el log de intentos/respuestas.
+- [x] Validar el logger REST con TypeScript, 100 pruebas aprobadas, 2 Shopify omitidas y build de producción correcta; persiste el warning no bloqueante del bundle grande.

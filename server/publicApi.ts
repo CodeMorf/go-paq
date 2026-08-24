@@ -7,6 +7,7 @@ import {
   createShipmentForOrganization,
   getActiveTariffForOrganization,
   getShipmentByTrackingForOrganization,
+  recordApiRequestLog,
   beginApiIdempotencyForRequest,
   completeApiIdempotencyForRequest,
   releaseApiIdempotencyForRequest,
@@ -51,6 +52,10 @@ function readIdempotencyKey(req: Request) {
   const key = req.header("Idempotency-Key")?.trim();
   return key && key.length >= 8 && key.length <= 120 ? key : null;
 }
+type ApiRequest = Request & { gopaqRequestId?: string; gopaqOrganizationId?: number; gopaqApiKeyId?: number };
+function requestIdFor(req: Request) {
+  return (req as ApiRequest).gopaqRequestId ?? requestId();
+}
 
 async function authorize(req: Request, requiredScope: string) {
   if (!isSupportedApiVersion(req.header("X-GoPaq-Version"))) return { ok: false, error: { status: 400, code: "unsupported_version", message: "Versión de API no soportada" } } as const;
@@ -58,12 +63,25 @@ async function authorize(req: Request, requiredScope: string) {
   if (!secret) return { ok: false, error: { status: 401, code: "unauthorized", message: "Se requiere una API key Bearer" } } as const;
   const key = await authenticateApiKey(secret);
   if (!key || !hasApiScope(key.scopes, requiredScope)) return { ok: false, error: { status: 403, code: "forbidden", message: `Se requiere el scope ${requiredScope}` } } as const;
+  const apiReq = req as ApiRequest;
+  apiReq.gopaqOrganizationId = key.organizationId;
+  apiReq.gopaqApiKeyId = key.id;
   return { ok: true, key } as const;
 }
 
 export function registerPublicApi(app: Application) {
-  app.post("/api/v1/quotes", async (req: Request, res: Response) => {
+  app.use?.("/api/v1", (req: Request, res: Response, next: () => void) => {
+    const apiReq = req as ApiRequest;
     const id = requestId();
+    apiReq.gopaqRequestId = id;
+    res.setHeader("X-Request-Id", id);
+    res.on("finish", () => {
+      void recordApiRequestLog({ organizationId: apiReq.gopaqOrganizationId, apiKeyId: apiReq.gopaqApiKeyId, requestId: id, method: req.method, route: req.path, statusCode: res.statusCode, success: res.statusCode < 400, idempotencyKey: req.header("Idempotency-Key") ?? undefined });
+    });
+    next();
+  });
+  app.post("/api/v1/quotes", async (req: Request, res: Response) => {
+    const id = requestIdFor(req);
     res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "quotes:read");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
@@ -79,7 +97,7 @@ export function registerPublicApi(app: Application) {
   });
 
   app.post("/api/v1/shipments", async (req: Request, res: Response) => {
-    const id = requestId();
+    const id = requestIdFor(req);
     res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "shipments:write");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
@@ -102,7 +120,7 @@ export function registerPublicApi(app: Application) {
   });
 
   app.post("/api/v1/pickups", async (req: Request, res: Response) => {
-    const id = requestId();
+    const id = requestIdFor(req);
     res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "pickups:write");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
@@ -125,7 +143,7 @@ export function registerPublicApi(app: Application) {
   });
 
   app.get("/api/v1/tracking/:trackingCode", async (req: Request, res: Response) => {
-    const id = requestId();
+    const id = requestIdFor(req);
     res.setHeader("X-Request-Id", id);
     const auth = await authorize(req, "tracking:read");
     if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });

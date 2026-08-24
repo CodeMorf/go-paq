@@ -24,6 +24,13 @@ describe("migraciones de checkout limpio", () => {
     expect(sql.toUpperCase()).not.toMatch(/DROP\s+(TABLE|DATABASE)/);
   });
 
+  it("crea el log persistente de solicitudes REST", () => {
+    const sql = readFileSync(resolve(migrationDirectory, "0021_minor_risque.sql"), "utf8");
+    expect(sql).toContain("CREATE TABLE `api_request_logs`");
+    expect(sql).toContain("UNIQUE(`requestId`)");
+    expect(sql.toUpperCase()).not.toMatch(/DROP\s+(TABLE|DATABASE)/);
+  });
+
   it("mantiene toda la cadena SQL incremental libre de DROP y TRUNCATE", () => {
     expect(migrationSqlFiles().length).toBeGreaterThanOrEqual(13);
     for (const file of migrationSqlFiles()) {
