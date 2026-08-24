@@ -90,8 +90,11 @@ export const packages = mysqlTable("packages", {
   widthCm: decimal("widthCm", { precision: 8, scale: 2 }),
   heightCm: decimal("heightCm", { precision: 8, scale: 2 }),
   declaredValue: decimal("declaredValue", { precision: 12, scale: 2 }),
+  warehouseId: int("warehouseId"),
   locationCode: varchar("locationCode", { length: 80 }),
   barcodeValue: varchar("barcodeValue", { length: 120 }),
+  parentPackageId: int("parentPackageId"),
+  packagingStatus: mysqlEnum("packagingStatus", ["standard", "split_parent", "split_child", "repacked"]).notNull().default("standard"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

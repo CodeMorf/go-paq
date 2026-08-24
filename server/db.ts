@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
 import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
@@ -219,6 +219,10 @@ export async function confirmShipmentDeliveryForUser(userId: number, input: { sh
   if (!db || !scope) return null;
   const current = await db.select().from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
   if (!current[0]) return null;
+  if (scope.membership?.role === "driver") {
+    const assignedStop = await db.select({ stopId: routeStops.id }).from(routeStops).innerJoin(routes, eq(routeStops.routeId, routes.id)).where(and(eq(routeStops.shipmentId, input.shipmentId), eq(routeStops.organizationId, scope.organization.id), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId), inArray(routes.status, ["assigned", "active"]))).limit(1);
+    if (!assignedStop[0]) return null;
+  }
   const existingEvent = await db.select({ id: shipmentEvents.id }).from(shipmentEvents).where(and(eq(shipmentEvents.organizationId, scope.organization.id), eq(shipmentEvents.idempotencyKey, input.idempotencyKey))).limit(1);
   if (existingEvent[0]) return current[0];
   transitionShipment("transport", current[0].physicalStatus, "delivered");
@@ -255,6 +259,7 @@ type PackageInput = {
 };
 
 type PackageUpdate = Omit<PackageInput, "shipmentId" | "packageCode"> & { status?: PackageState };
+type PackageSplitItem = { description?: string; weight: number; weightUnit?: PackageInput["weightUnit"]; length?: number; width?: number; height?: number; dimensionUnit?: PackageInput["dimensionUnit"]; declaredValue?: string; barcodeValue?: string; locationCode?: string };
 
 function normalizeWeight(value?: number, unit: PackageInput["weightUnit"] = "kg") {
   if (value === undefined) return undefined;
@@ -296,6 +301,43 @@ export async function updatePackageForUser(userId: number, packageId: number, in
   if (nextStatus === "stored" && !(input.locationCode || current[0].locationCode)) throw new Error("Un paquete almacenado requiere una ubicación");
   const changes = { description: input.description, restrictions: input.restrictions, status: input.status, weightKg: normalizeWeight(input.weight, input.weightUnit), lengthCm: normalizeDimension(input.length, input.dimensionUnit), widthCm: normalizeDimension(input.width, input.dimensionUnit), heightCm: normalizeDimension(input.height, input.dimensionUnit), declaredValue: input.declaredValue, locationCode: input.locationCode, barcodeValue: input.barcodeValue };
   await db.update(packages).set(Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id)));
+  const rows = await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function splitPackageForUser(userId: number, packageId: number, children: PackageSplitItem[]) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || children.length < 2 || children.length > 20) return null;
+  const parentRows = await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id))).limit(1);
+  const parent = parentRows[0];
+  if (!parent || ["delivered", "returned"].includes(parent.status) || parent.packagingStatus === "split_parent") return null;
+  const normalizedWeights = children.map((child) => Number(normalizeWeight(child.weight, child.weightUnit)));
+  if (normalizedWeights.some((weight) => !Number.isFinite(weight) || weight <= 0)) throw new Error("Cada paquete separado requiere un peso válido");
+  const totalWeight = normalizedWeights.reduce((sum, weight) => sum + weight, 0);
+  if (parent.weightKg && totalWeight > Number(parent.weightKg) + 0.01) throw new Error("El peso separado no puede superar el peso registrado del paquete padre");
+  const childCodes = children.map((_, index) => `${parent.packageCode}-S${String(index + 1).padStart(2, "0")}-${randomUUID().slice(0, 4).toUpperCase()}`);
+  await db.transaction(async (tx) => {
+    await tx.update(packages).set({ packagingStatus: "split_parent" }).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id)));
+    await tx.insert(packages).values(children.map((child, index) => ({ shipmentId: parent.shipmentId, organizationId: scope.organization.id, packageCode: childCodes[index], description: child.description ?? parent.description, restrictions: parent.restrictions, status: "received" as const, weightKg: String(normalizedWeights[index].toFixed(3)), lengthCm: normalizeDimension(child.length, child.dimensionUnit), widthCm: normalizeDimension(child.width, child.dimensionUnit), heightCm: normalizeDimension(child.height, child.dimensionUnit), declaredValue: child.declaredValue ?? null, warehouseId: parent.warehouseId, locationCode: child.locationCode ?? null, barcodeValue: child.barcodeValue ?? null, parentPackageId: packageId, packagingStatus: "split_child" as const })));
+    const createdChildren = await tx.select({ id: packages.id, packageCode: packages.packageCode }).from(packages).where(and(eq(packages.organizationId, scope.organization.id), inArray(packages.packageCode, childCodes)));
+    await tx.insert(inventoryMovements).values([{ organizationId: scope.organization.id, packageId, warehouseId: parent.warehouseId, movementType: "adjustment", fromLocation: parent.locationCode, toLocation: parent.locationCode, note: `Separación en ${children.length} paquetes`, actorUserId: userId }, ...createdChildren.map((child) => { const index = childCodes.indexOf(child.packageCode); return { organizationId: scope.organization.id, packageId: child.id, warehouseId: parent.warehouseId, movementType: "received" as const, fromLocation: parent.locationCode, toLocation: children[index].locationCode ?? parent.locationCode, note: `Paquete hijo de ${parent.packageCode}`, actorUserId: userId }; })]);
+  });
+  const childRows = await db.select().from(packages).where(and(eq(packages.organizationId, scope.organization.id), inArray(packages.packageCode, childCodes))).orderBy(packages.id);
+  return { parent: { ...parent, packagingStatus: "split_parent" as const }, children: childRows };
+}
+
+export async function repackPackageForUser(userId: number, packageId: number, input: { weight?: number; weightUnit?: PackageInput["weightUnit"]; length?: number; width?: number; height?: number; dimensionUnit?: PackageInput["dimensionUnit"]; locationCode?: string; warehouseId?: number; note?: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !(await warehouseBelongsToOrganization(db, scope.organization.id, input.warehouseId))) return null;
+  const currentRows = await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id))).limit(1);
+  const current = currentRows[0];
+  if (!current || ["delivered", "returned"].includes(current.status)) return null;
+  const normalizedWeight = normalizeWeight(input.weight, input.weightUnit);
+  if (normalizedWeight !== undefined && Number(normalizedWeight) <= 0) throw new Error("El peso del reempaque debe ser mayor que cero");
+  await db.transaction(async (tx) => {
+    await tx.update(packages).set({ packagingStatus: "repacked", warehouseId: input.warehouseId ?? current.warehouseId, weightKg: normalizedWeight, lengthCm: normalizeDimension(input.length, input.dimensionUnit), widthCm: normalizeDimension(input.width, input.dimensionUnit), heightCm: normalizeDimension(input.height, input.dimensionUnit), locationCode: input.locationCode ?? current.locationCode }).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id)));
+    await tx.insert(inventoryMovements).values({ organizationId: scope.organization.id, packageId, warehouseId: input.warehouseId ?? current.warehouseId, movementType: "adjustment", fromLocation: current.locationCode, toLocation: input.locationCode ?? current.locationCode, note: input.note ?? "Reempaque registrado", actorUserId: userId });
+  });
   const rows = await db.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.organizationId, scope.organization.id))).limit(1);
   return rows[0] ?? null;
 }
@@ -767,6 +809,59 @@ export async function listRoutesForUser(userId: number) {
   return db.select().from(routes).where(eq(routes.organizationId, scope.organization.id)).orderBy(desc(routes.createdAt)).limit(100);
 }
 
+export async function listAssignedRoutesForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(routes).where(and(eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId))).orderBy(desc(routes.createdAt)).limit(50);
+}
+
+export async function listAssignedRouteStopsForUser(userId: number, routeId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select({ id: routeStops.id, organizationId: routeStops.organizationId, routeId: routeStops.routeId, shipmentId: routeStops.shipmentId, pickupId: routeStops.pickupId, sequence: routeStops.sequence, address: routeStops.address, latitude: routeStops.latitude, longitude: routeStops.longitude, status: routeStops.status, createdAt: routeStops.createdAt }).from(routeStops).innerJoin(routes, eq(routeStops.routeId, routes.id)).where(and(eq(routeStops.organizationId, scope.organization.id), eq(routeStops.routeId, routeId), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId))).orderBy(routeStops.sequence);
+}
+
+export async function isRouteAssignedToUser(userId: number, routeId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return false;
+  const rows = await db.select({ id: routes.id }).from(routes).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId))).limit(1);
+  return Boolean(rows[0]);
+}
+
+export async function isRouteStopAssignedToUser(userId: number, stopId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return false;
+  const rows = await db.select({ id: routeStops.id }).from(routeStops).innerJoin(routes, eq(routeStops.routeId, routes.id)).where(and(eq(routeStops.id, stopId), eq(routeStops.organizationId, scope.organization.id), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId))).limit(1);
+  return Boolean(rows[0]);
+}
+
+export async function isActiveRouteStopAssignedToUser(userId: number, stopId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return false;
+  const rows = await db.select({ id: routeStops.id }).from(routeStops).innerJoin(routes, eq(routeStops.routeId, routes.id)).where(and(eq(routeStops.id, stopId), eq(routeStops.organizationId, scope.organization.id), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId), eq(routes.status, "active"))).limit(1);
+  return Boolean(rows[0]);
+}
+
+export async function isShipmentOnAssignedRouteForUser(userId: number, shipmentId: number, routeId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return false;
+  const rows = await db.select({ stopId: routeStops.id }).from(routeStops).innerJoin(routes, eq(routeStops.routeId, routes.id)).where(and(eq(routeStops.shipmentId, shipmentId), eq(routeStops.routeId, routeId), eq(routeStops.organizationId, scope.organization.id), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId))).limit(1);
+  return Boolean(rows[0]);
+}
+
+export async function updateAssignedRouteForUser(userId: number, routeId: number, nextStatus: "active" | "closed") {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const rows = await db.select().from(routes).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId))).limit(1);
+  const route = rows[0];
+  if (!route) return null;
+  if (nextStatus === "active" && route.status !== "assigned") throw new Error("Solo una ruta asignada puede iniciar turno");
+  if (nextStatus === "closed" && route.status !== "active") throw new Error("Solo una ruta activa puede cerrarse");
+  await db.update(routes).set(nextStatus === "active" ? { status: "active", startedAt: new Date() } : { status: "closed", closedAt: new Date() }).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id), eq(routes.driverUserId, userId)));
+  const updated = await db.select().from(routes).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
+  return updated[0] ?? null;
+}
+
 export async function createRouteStopForUser(userId: number, input: { routeId: number; shipmentId?: number; pickupId?: number; address: string; sequence?: number; latitude?: string; longitude?: string }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
@@ -868,6 +963,11 @@ export async function listApiKeysForUser(userId: number) {
   return db.select({ id: apiKeys.id, name: apiKeys.name, keyPrefix: apiKeys.keyPrefix, scopes: apiKeys.scopes, revokedAt: apiKeys.revokedAt, lastUsedAt: apiKeys.lastUsedAt, createdAt: apiKeys.createdAt }).from(apiKeys).where(eq(apiKeys.organizationId, scope.organization.id)).orderBy(desc(apiKeys.createdAt));
 }
 
+export function canDriverRecordGps(role: string | undefined, input: { routeId?: number | null; routeAssigned: boolean; routeActive: boolean; shipmentId?: number | null; shipmentOnRoute: boolean }) {
+  if (role !== "driver") return true;
+  return Boolean(input.routeId && input.routeAssigned && input.routeActive && (!input.shipmentId || input.shipmentOnRoute));
+}
+
 export async function recordTrackingPoint(userId: number, input: Omit<typeof trackingPoints.$inferInsert, "organizationId" | "driverUserId">) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
@@ -876,10 +976,20 @@ export async function recordTrackingPoint(userId: number, input: Omit<typeof tra
     const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
     if (!shipment[0]) return null;
   }
+  let routeAssigned = false;
+  let routeActive = false;
+  let shipmentOnRoute = !input.shipmentId;
   if (input.routeId) {
-    const route = await db.select({ id: routes.id }).from(routes).where(and(eq(routes.id, input.routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
+    const route = await db.select({ id: routes.id, driverUserId: routes.driverUserId, status: routes.status }).from(routes).where(and(eq(routes.id, input.routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
     if (!route[0]) return null;
+    routeAssigned = route[0].driverUserId === userId;
+    routeActive = route[0].status === "active";
+    if (input.shipmentId) {
+      const stop = await db.select({ id: routeStops.id }).from(routeStops).where(and(eq(routeStops.organizationId, scope.organization.id), eq(routeStops.routeId, input.routeId), eq(routeStops.shipmentId, input.shipmentId))).limit(1);
+      shipmentOnRoute = Boolean(stop[0]);
+    }
   }
+  if (!canDriverRecordGps(scope.membership?.role, { routeId: input.routeId, routeAssigned, routeActive, shipmentId: input.shipmentId, shipmentOnRoute })) return null;
   await db.insert(trackingPoints).values({ ...input, organizationId: scope.organization.id, driverUserId: userId });
   return { success: true } as const;
 }

@@ -50,7 +50,7 @@
 - [ ] Costruire aggiornamenti di stato pickup/consegna con PIN, firma, nome, foto, coordinate e timestamp.
 - [ ] Costruire gestione tentativo fallito, motivo, evidenze, incassi, spese e chiusura rotta.
 - [x] Implementare coda offline locale cifrata con idempotenza, stati sincronizado/en espera/conflicto/rechazado.
-- [ ] Limitare la raccolta GPS alla sessione di turno/rotta attiva e rendere visibile il consenso/policy.
+- [x] Limitare la raccolta GPS alla sessione di turno/rotta attiva e rendere visibile il consenso/policy; `DriverGpsCard` solo activa `watchPosition` para rutas asignadas en estado `active`.
 
 ## Portale `/cliente` e sito pubblico
 
@@ -328,3 +328,11 @@
 - [ ] Completar validación visual y funcional del escáner QR/código de barras con cámara en un dispositivo o navegador autenticado.
 - [x] Actualizar `quote.preview` y el cotizador autenticado/público para resolver tarifas vigentes del servidor por organización, zona y servicio en vez de `buildDopTariffInput` estático; el slug público llega por `?org=` y no se acepta `organizationId` arbitrario.
 - [x] Añadir pruebas Vitest para administración tarifaria autenticada y rechazo de `quote.preview` sin organización pública resoluble; REST conserva cobertura de tarifa ausente y selección server-side.
+- [x] Añadir UI de Sucursal para separar paquetes en hijos relacionados, con pesos/ubicaciones y auditoría.
+- [x] Añadir UI de Sucursal para reempaque, actualización de dimensiones/peso/ubicación y movimiento de inventario de ajuste.
+- [x] Completar panel PWA Driver de rutas asignadas: iniciar/cerrar turno, paradas ordenadas, escaneo de carga y enlaces de navegación; backend restringe rutas, paradas y POD al conductor asignado.
+- [ ] Añadir evidencias visuales autenticadas de `/driver` y probar el flujo en un navegador/dispositivo con cámara y sesión real.
+- [x] Endurecer `gps.record` en backend para que un driver solo registre puntos de su propia ruta asignada y en estado `active`, rechazando rutas ajenas/no activas y referencias de envío no autorizadas.
+- [x] Añadir Vitest de ownership/estado GPS: denegado para ruta ajena o no activa y permitido solo para ruta propia activa.
+- [x] Restringir `deliveryAttempts.create` para drivers a una parada real de su ruta `active`, manteniendo el registro tenant-scoped para sucursal/admin.
+- [ ] Completar POD enriquecido con PIN/firma/foto, validación de entrega y carga de evidencia a storage seguro; no se debe confirmar entrega con evidencia inventada.
