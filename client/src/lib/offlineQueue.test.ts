@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { enqueueDriverOperation, listPendingDriverOperations, recoverInterruptedOperation, resolveDriverConflict, syncDriverOperations } from "./offlineQueue";
+import { canQueueOperation, enqueueDriverOperation, listPendingDriverOperations, MAX_OFFLINE_OPERATIONS, recoverInterruptedOperation, resolveDriverConflict, syncDriverOperations } from "./offlineQueue";
 
 const store = new Map<string, string>();
 const localStorageStub = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value), removeItem: (key: string) => store.delete(key) };
@@ -24,6 +24,11 @@ describe("driver offline queue", () => {
     expect((await listPendingDriverOperations())[0]?.state).toBe("pending");
     await syncDriverOperations(async () => "synced");
     expect(await listPendingDriverOperations()).toHaveLength(0);
+  });
+
+  it("limita GPS cuando la cola está llena sin bloquear operaciones críticas", () => {
+    expect(canQueueOperation(MAX_OFFLINE_OPERATIONS, "gps")).toBe(false);
+    expect(canQueueOperation(MAX_OFFLINE_OPERATIONS, "pod")).toBe(true);
   });
 
   it("recupera operaciones que quedaron en sincronización al cerrar la PWA", () => {

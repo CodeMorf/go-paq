@@ -283,3 +283,5 @@
 - [x] Recuperar automáticamente operaciones offline que quedaron en `syncing` tras una interrupción de la PWA y cubrirlo con prueba unitaria.
 - [ ] Integrar puntos GPS del driver con la cola offline cifrada, limitando la captura a referencia de envío/ruta y sincronizando al recuperar red.
 - [x] Integrar puntos GPS del driver con la cola offline cifrada, limitando la captura a referencia de envío/ruta y sincronizando al recuperar red.
+- [ ] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
+- [x] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.

@@ -14,6 +14,7 @@ export type OfflineSendResult = "synced" | "conflict" | "rejected" | { state: "s
 
 const STORAGE_KEY = "gopaq-driver-offline-queue";
 const KEY_STORAGE_KEY = "gopaq-driver-device-key";
+export const MAX_OFFLINE_OPERATIONS = 500;
 
 type EncryptedQueue = { version: 1 | 2; iv: string; ciphertext: string };
 let activeSync: Promise<OfflineOperation[]> | null = null;
@@ -63,8 +64,13 @@ async function saveQueue(queue: OfflineOperation[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(ciphertext)) } satisfies EncryptedQueue));
 }
 
+export function canQueueOperation(queueLength: number, kind: OfflineOperation["kind"]) {
+  return queueLength < MAX_OFFLINE_OPERATIONS || kind !== "gps";
+}
+
 export async function enqueueDriverOperation(operation: Omit<OfflineOperation, "createdAt" | "state" | "attempts">) {
   const queue = await readQueue();
+  if (!canQueueOperation(queue.length, operation.kind)) throw new Error("La cola offline está llena; sincroniza antes de capturar más posiciones GPS");
   if (!queue.some((item) => item.idempotencyKey === operation.idempotencyKey)) {
     queue.push({ ...operation, createdAt: Date.now(), attempts: 0, state: "pending" });
     await saveQueue(queue);

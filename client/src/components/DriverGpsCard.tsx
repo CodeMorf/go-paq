@@ -39,7 +39,7 @@ export default function DriverGpsCard({ visible }: { visible: boolean }) {
         const payload: GpsPayload = { ...filter, latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, capturedAt: capturedAt.toISOString(), source: "driver" };
         const idempotencyKey = `gps-${filter.shipmentId ?? `route-${filter.routeId}`}-${capturedAt.getTime()}`;
         if (!navigator.onLine) {
-          void enqueueDriverOperation({ idempotencyKey, kind: "gps", payload }).then(() => setMessage(`Sin conexión: posición guardada · ±${Math.round(position.coords.accuracy)} m`));
+          void enqueueDriverOperation({ idempotencyKey, kind: "gps", payload }).then(() => setMessage(`Sin conexión: posición guardada · ±${Math.round(position.coords.accuracy)} m`)).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "No se pudo guardar la posición offline"));
         } else {
           setMessage(`Posición actualizada · ±${Math.round(position.coords.accuracy)} m`);
           record.mutate({ ...payload, capturedAt: capturedAt });
