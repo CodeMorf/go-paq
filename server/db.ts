@@ -74,6 +74,12 @@ export async function listShipmentsForUser(userId: number) {
   return db.select().from(shipments).where(eq(shipments.organizationId, scope.organization.id)).orderBy(desc(shipments.createdAt)).limit(100);
 }
 
+export async function listAuditLogsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(auditLogs).where(eq(auditLogs.organizationId, scope.organization.id)).orderBy(desc(auditLogs.createdAt)).limit(100);
+}
+
 export async function appendAuditLog(input: { organizationId?: number; actorUserId?: number; category: "operational" | "financial" | "security" | "llm"; action: string; resourceType?: string; resourceId?: string; metadata?: unknown; }) {
   const db = await getDb();
   if (!db) return;

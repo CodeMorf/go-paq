@@ -139,3 +139,5 @@
 - [x] Aggiungere query tRPC `documents.list` e pannello admin/cliente per consultare metadati e aprire documenti autorizzati.
 
 - [x] Aggiungere un pannello admin/sucursal per elencare rotte organizzative e visualizzare le fermate ordinate tramite tRPC.
+
+- [x] Aggiungere procedura `audit.list` e pannello admin per consultare eventi organizzativi recenti con categoria, azione, risorsa e timestamp.
