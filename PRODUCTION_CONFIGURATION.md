@@ -22,6 +22,7 @@ Los valores deben configurarse desde el gestor de secretos del proyecto. No se d
 | `VITE_FRONTEND_FORGE_API_KEY` | Sí para mapas | Credencial pública/proxy entregada por Manus para cargar Maps; no sustituirla por una clave Google directa. |
 | `VITE_APP_TITLE` y `VITE_APP_LOGO` | Recomendadas | Marca visible y logo del sitio. |
 | `VITE_ANALYTICS_ENDPOINT` y `VITE_ANALYTICS_WEBSITE_ID` | Opcionales | Analítica del sitio si se habilita. |
+| `REDIS_URL` | Sí en producción | Rate limiting distribuido por API key. Debe ser una URL TLS `rediss://`; si falta o no conecta, el backend rechaza solicitudes API con `429` en producción en vez de degradar a una ventana local insegura. |
 
 ## Dependencias administradas
 
@@ -31,7 +32,7 @@ Los mapas usan el proxy de Forge y el componente `MapView`; no se debe solicitar
 
 ## Base de datos y migraciones
 
-Una instalación limpia se verificó aplicando la secuencia completa del journal sobre MariaDB vacío: se crearon **18 tablas** y el default regional de `organizations.language` quedó en `es`. El esquema mantiene `DOP` como moneda por defecto y `America/Santo_Domingo` como zona horaria.
+Una instalación limpia se verificó aplicando la secuencia completa del journal sobre MariaDB vacío: se crearon **29 tablas** y el default regional de `organizations.language` quedó en `es`. El esquema mantiene `DOP` como moneda por defecto y `America/Santo_Domingo` como zona horaria.
 
 Para cambios posteriores se debe modificar primero `drizzle/schema.ts`, ejecutar `pnpm drizzle-kit generate`, revisar el SQL generado y aplicar la migración en el entorno correspondiente. Las migraciones no deben contener `DROP TABLE` ni alteraciones destructivas sin una estrategia explícita de respaldo y reversión.
 
@@ -39,8 +40,8 @@ Para cambios posteriores se debe modificar primero `drizzle/schema.ts`, ejecutar
 
 Todas las consultas operativas deben derivar `organizationId` del contexto autenticado. Documentos, puntos GPS, eventos, pickups, rutas y confirmaciones POD validan la pertenencia de sus referencias; el cliente no puede fijar tarifas ni cambiar estados fuera de las transiciones permitidas. Las cargas de documentos deben pasar por el backend y utilizar storage administrado, nunca bytes persistidos en columnas ni rutas locales.
 
-El service worker no almacena llamadas API, respuestas con credenciales ni portales autenticados. La cola offline puede conservar operaciones limitadas para sincronización, pero no debe confirmar localmente cobros, entregas ni cambios críticos de estado.
+El service worker no almacena llamadas API, respuestas con credenciales ni portales autenticados. La cola offline puede conservar operaciones limitadas para sincronización, pero no debe confirmar localmente cobros, entregas ni cambios críticos de estado. Los conflictos de sincronización se conservan con razón y requieren reintento o descarte explícito; las sincronizaciones concurrentes del mismo dispositivo se serializan.
 
 ## Checklist antes de operar paquetes reales
 
-Antes de pasar a producción operativa se requiere configurar y probar OAuth, base de datos TLS, storage, mapas, Forge/LLM, dominios, backups, observabilidad, retención de datos y políticas de privacidad. También faltan módulos de inventario detallado, recepción y pesaje de paquetes, asignación completa de carga, incidencias, facturación/cobros, devoluciones y gestión completa de usuarios/branches. Por ese motivo el estado correcto de este checkpoint sigue siendo **NO-GO para operar paquetes reales**, aunque la base técnica y los flujos implementados están verificados para continuar la construcción.
+Antes de pasar a producción operativa se requiere configurar y probar OAuth, base de datos TLS, storage, mapas, Forge/LLM, `REDIS_URL` con `rediss://`, dominios, backups, observabilidad, retención de datos y políticas de privacidad. Los módulos de inventario detallado, recepción y pesaje, asignación de carga, incidencias, facturación/cobros, devoluciones y servicios especiales ya cuentan con implementación tenant-scoped en staging. Por ese motivo el estado correcto de este checkpoint sigue siendo **NO-GO para operar paquetes reales** hasta completar configuración, pruebas autenticadas y aceptación con datos reales, aunque la base técnica y los flujos implementados están verificados para continuar la preparación.

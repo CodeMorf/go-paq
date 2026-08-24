@@ -253,6 +253,28 @@
 - [x] Corregir la última cadena italiana del contrato de paradas y verificar localización completa del router visible.
 - [ ] Iniciar una sesión válida de prueba y capturar desktop/móvil de `/admin`, `/sucursal`, `/driver` y `/cliente` autenticados para verificar cabeceras internas con el halcón.
 - [ ] Ampliar `visual-verification.md` con hallazgos de cabeceras internas autenticadas; mantener esta verificación pendiente hasta contar con una sesión válida.
-- [ ] Implementar recepción, inspección, ubicación y despacho de paquetes con estado y ubicación tenant-scoped.
-- [ ] Reutilizar en paquetes las unidades configurables de peso y dimensión con normalización server-side a kg/cm.
-- [ ] Añadir pruebas de autorización y rechazo cross-tenant para operaciones de paquetes.
+- [x] Implementar recepción, inspección, ubicación y despacho de paquetes con estado y ubicación tenant-scoped.
+- [x] Reutilizar en paquetes las unidades configurables de peso y dimensión con normalización server-side a kg/cm.
+- [x] Añadir pruebas de autorización y rechazo cross-tenant para operaciones de paquetes e inventario.
+
+## Bloque de producción priorizado — continuación
+- [x] Corregir el contrato REST de cotización y cubrir respuestas de validación, autenticación y rate limit; la tarifa ya no es controlable por el cliente y se resuelve por organización/servicio.
+- [x] Completar recepción, inspección, pesaje y ubicación real de paquetes con estados explícitos, ubicación y auditoría.
+- [x] Implementar inventario detallado por movimientos y consolidación/transferencias con carga, con tablas tenant-scoped y transición auditable.
+- [x] Completar asignación de paradas y conductores y escaneo de código de barras tenant-scoped; el lector físico depende del dispositivo que envía el valor leído.
+- [x] Implementar incidencias, intentos fallidos y devoluciones con auditoría, estados explícitos y rechazo cross-tenant.
+- [x] Implementar cobro contra entrega, caja de sucursal, facturación y recibos en DOP, con validación tenant y auditoría financiera.
+- [ ] Separar compra asistida, mudanzas y carga pesada con reglas y datos propios.
+- [ ] Endurecer offline cifrado con conflictos y rate limit distribuido con Redis en producción.
+- [ ] Completar REST de envíos, pickups y tracking, además de configuración real de OAuth, storage, mapas y secretos.
+- [ ] Añadir CI automático y conseguir pruebas visuales autenticadas de los cuatro portales.
+- [ ] Actualizar readiness, subir cambios a GitHub y emitir veredicto basado únicamente en pruebas ejecutadas.
+- [ ] Configurar `REDIS_URL` en el servidor de producción y validar conectividad TLS antes de activar rate limit distribuido.
+
+- [x] Implementar REST tenant-scoped para creación de envíos, solicitudes de pickup y tracking privado con API key, scopes, versionado, validación y rate limiting.
+- [x] Añadir pruebas Vitest de los contratos REST de envíos, pickups, tracking, autorización y aislamiento organizativo.
+- [ ] Mantener pendiente la configuración real de Redis, OAuth, storage, mapas y secretos antes del GO de producción.
+- [x] Completar UI y reglas específicas de mudanzas y carga pesada con requisitos de cuadrilla, vehículo, programación y validación de servicio.
+- [x] Endurecer cola offline cifrada con metadatos de conflicto, reintento explícito, descarte seguro y protección contra doble sincronización.
+- [x] Actualizar panel admin de API keys con scopes REST explícitos y textos operativos en español.
+- [x] Exponer en `/driver` la bandeja de operaciones offline en conflicto con razón, reintento y descarte seguro.

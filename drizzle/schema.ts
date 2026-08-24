@@ -56,7 +56,7 @@ export const shipments = mysqlTable("shipments", {
   organizationId: int("organizationId").notNull(),
   branchId: int("branchId"),
   trackingCode: varchar("trackingCode", { length: 48 }).notNull().unique(),
-  serviceType: mysqlEnum("serviceType", ["local", "national", "international", "assisted_purchase", "heavy_cargo"]).notNull().default("national"),
+  serviceType: mysqlEnum("serviceType", ["local", "national", "international", "assisted_purchase", "heavy_cargo", "moving"]).notNull().default("national"),
   commercialStatus: mysqlEnum("commercialStatus", ["draft", "quoted", "confirmed", "cancelled", "closed"]).notNull().default("draft"),
   physicalStatus: mysqlEnum("physicalStatus", ["expected", "received", "inspection", "ready", "in_transit", "at_destination", "out_for_delivery", "delivered", "incident", "returned"]).notNull().default("expected"),
   transportStatus: mysqlEnum("transportStatus", ["unassigned", "assigned", "route_active", "completed"]).notNull().default("unassigned"),
@@ -93,6 +93,24 @@ export const packages = mysqlTable("packages", {
   locationCode: varchar("locationCode", { length: 80 }),
   barcodeValue: varchar("barcodeValue", { length: 120 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const shipmentServices = mysqlTable("shipment_services", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId").notNull(),
+  serviceType: mysqlEnum("serviceType", ["assisted_purchase", "heavy_cargo", "moving"]).notNull(),
+  quoteReference: varchar("quoteReference", { length: 160 }),
+  handlingNotes: text("handlingNotes"),
+  scheduledAt: timestamp("scheduledAt"),
+  requiresTwoPersonCrew: boolean("requiresTwoPersonCrew").notNull().default(false),
+  requiresSpecialVehicle: boolean("requiresSpecialVehicle").notNull().default(false),
+  crewSize: int("crewSize").notNull().default(1),
+  vehicleType: varchar("vehicleType", { length: 100 }),
+  status: mysqlEnum("status", ["requested", "quoted", "approved", "scheduled", "in_progress", "completed", "cancelled"]).notNull().default("requested"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export const shipmentEvents = mysqlTable("shipment_events", {
@@ -238,6 +256,131 @@ export const rolePermissions = mysqlTable("role_permissions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const inventoryMovements = mysqlTable("inventory_movements", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  packageId: int("packageId").notNull(),
+  warehouseId: int("warehouseId"),
+  movementType: mysqlEnum("movementType", ["received", "inspected", "putaway", "transfer_out", "transfer_in", "dispatch", "adjustment"]).notNull(),
+  fromLocation: varchar("fromLocation", { length: 80 }),
+  toLocation: varchar("toLocation", { length: 80 }),
+  note: text("note"),
+  actorUserId: int("actorUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const consolidations = mysqlTable("consolidations", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  code: varchar("code", { length: 48 }).notNull().unique(),
+  fromBranchId: int("fromBranchId"),
+  toBranchId: int("toBranchId"),
+  status: mysqlEnum("status", ["open", "sealed", "in_transit", "received", "reconciled"]).notNull().default("open"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const consolidationItems = mysqlTable("consolidation_items", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  consolidationId: int("consolidationId").notNull(),
+  packageId: int("packageId").notNull(),
+  sequence: int("sequence").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const shipmentIncidents = mysqlTable("shipment_incidents", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId").notNull(),
+  packageId: int("packageId"),
+  type: mysqlEnum("type", ["damage", "address", "recipient_unavailable", "customs", "other", "return_requested"]).notNull(),
+  severity: mysqlEnum("severity", ["low", "medium", "high", "critical"]).notNull().default("medium"),
+  status: mysqlEnum("status", ["open", "investigating", "resolved", "returned"]).notNull().default("open"),
+  description: text("description").notNull(),
+  resolution: text("resolution"),
+  reportedBy: int("reportedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const deliveryAttempts = mysqlTable("delivery_attempts", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId").notNull(),
+  routeStopId: int("routeStopId"),
+  attemptNumber: int("attemptNumber").notNull(),
+  status: mysqlEnum("status", ["failed", "rescheduled", "completed"]).notNull(),
+  reason: varchar("reason", { length: 160 }).notNull(),
+  note: text("note"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  attemptedBy: int("attemptedBy"),
+  attemptedAt: timestamp("attemptedAt").defaultNow().notNull(),
+});
+
+export const payments = mysqlTable("payments", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 8 }).notNull().default("DOP"),
+  method: mysqlEnum("method", ["cash", "card", "transfer", "other"]).notNull(),
+  status: mysqlEnum("status", ["pending", "collected", "voided", "refunded"]).notNull().default("pending"),
+  reference: varchar("reference", { length: 160 }),
+  collectedBy: int("collectedBy"),
+  collectedAt: timestamp("collectedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const cashSessions = mysqlTable("cash_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  branchId: int("branchId").notNull(),
+  openedBy: int("openedBy").notNull(),
+  status: mysqlEnum("status", ["open", "closed"]).notNull().default("open"),
+  openingAmount: decimal("openingAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+  closingAmount: decimal("closingAmount", { precision: 12, scale: 2 }),
+  openedAt: timestamp("openedAt").defaultNow().notNull(),
+  closedAt: timestamp("closedAt"),
+});
+
+export const cashMovements = mysqlTable("cash_movements", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  cashSessionId: int("cashSessionId").notNull(),
+  paymentId: int("paymentId"),
+  movementType: mysqlEnum("movementType", ["collection", "refund", "adjustment", "deposit"]).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  note: text("note"),
+  actorUserId: int("actorUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const invoices = mysqlTable("invoices", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId").notNull(),
+  invoiceNumber: varchar("invoiceNumber", { length: 48 }).notNull().unique(),
+  status: mysqlEnum("status", ["draft", "issued", "paid", "voided"]).notNull().default("draft"),
+  subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
+  tax: decimal("tax", { precision: 12, scale: 2 }).notNull().default("0"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 8 }).notNull().default("DOP"),
+  issuedBy: int("issuedBy"),
+  issuedAt: timestamp("issuedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const receipts = mysqlTable("receipts", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  paymentId: int("paymentId").notNull(),
+  receiptNumber: varchar("receiptNumber", { length: 48 }).notNull().unique(),
+  receiptUrl: text("receiptUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const auditLogs = mysqlTable("audit_logs", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId"),
@@ -257,7 +400,18 @@ export type Branch = typeof branches.$inferSelect;
 export type Shipment = typeof shipments.$inferSelect;
 export type Package = typeof packages.$inferSelect;
 export type ShipmentEvent = typeof shipmentEvents.$inferSelect;
+export type ShipmentService = typeof shipmentServices.$inferSelect;
 export type Warehouse = typeof warehouses.$inferSelect;
+export type InventoryMovement = typeof inventoryMovements.$inferSelect;
+export type Consolidation = typeof consolidations.$inferSelect;
+export type ConsolidationItem = typeof consolidationItems.$inferSelect;
+export type ShipmentIncident = typeof shipmentIncidents.$inferSelect;
+export type DeliveryAttempt = typeof deliveryAttempts.$inferSelect;
+export type Payment = typeof payments.$inferSelect;
+export type CashSession = typeof cashSessions.$inferSelect;
+export type CashMovement = typeof cashMovements.$inferSelect;
+export type Invoice = typeof invoices.$inferSelect;
+export type Receipt = typeof receipts.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type Pickup = typeof pickups.$inferSelect;
 export type Route = typeof routes.$inferSelect;

@@ -15,8 +15,32 @@ const confirmShipmentDeliveryForUser = vi.fn();
 const createPickupForUser = vi.fn();
 const createRouteForUser = vi.fn();
 const assignRouteForUser = vi.fn();
+const listPackagesForUser = vi.fn();
+const createPackageForUser = vi.fn();
+const updatePackageForUser = vi.fn();
+const listInventoryMovementsForUser = vi.fn();
+const recordInventoryMovementForUser = vi.fn();
+const listConsolidationsForUser = vi.fn();
+const createConsolidationForUser = vi.fn();
+const addPackageToConsolidationForUser = vi.fn();
+const advanceConsolidationForUser = vi.fn();
+const listIncidentsForUser = vi.fn();
+const createIncidentForUser = vi.fn();
+const resolveIncidentForUser = vi.fn();
+const listDeliveryAttemptsForUser = vi.fn();
+const recordDeliveryAttemptForUser = vi.fn();
+const listPaymentsForUser = vi.fn();
+const collectPaymentForUser = vi.fn();
+const listCashSessionsForUser = vi.fn();
+const openCashSessionForUser = vi.fn();
+const closeCashSessionForUser = vi.fn();
+const listInvoicesForUser = vi.fn();
+const issueInvoiceForUser = vi.fn();
+const listShipmentServicesForUser = vi.fn();
+const createShipmentServiceForUser = vi.fn();
+const updateShipmentServiceForUser = vi.fn();
 
-vi.mock("./db", async (importOriginal) => ({ ...(await importOriginal<typeof import("./db")>()), getOrganizationForUser, canUser, listTrackingPointsForUser, recordTrackingPoint, appendAuditLog, listAuditLogsForUser, listShipmentsForUser, listEventsForUser, appendShipmentEvent, uploadShipmentDocumentForUser, confirmShipmentDeliveryForUser, createPickupForUser, createRouteForUser, assignRouteForUser }));
+vi.mock("./db", async (importOriginal) => ({ ...(await importOriginal<typeof import("./db")>()), getOrganizationForUser, canUser, listTrackingPointsForUser, recordTrackingPoint, appendAuditLog, listAuditLogsForUser, listShipmentsForUser, listEventsForUser, appendShipmentEvent, uploadShipmentDocumentForUser, confirmShipmentDeliveryForUser, createPickupForUser, createRouteForUser, assignRouteForUser, listPackagesForUser, createPackageForUser, updatePackageForUser, listInventoryMovementsForUser, recordInventoryMovementForUser, listConsolidationsForUser, createConsolidationForUser, addPackageToConsolidationForUser, advanceConsolidationForUser, listIncidentsForUser, createIncidentForUser, resolveIncidentForUser, listDeliveryAttemptsForUser, recordDeliveryAttemptForUser, listPaymentsForUser, collectPaymentForUser, listCashSessionsForUser, openCashSessionForUser, closeCashSessionForUser, listInvoicesForUser, issueInvoiceForUser, listShipmentServicesForUser, createShipmentServiceForUser, updateShipmentServiceForUser }));
 const { appRouter } = await import("./routers");
 
 function context(): TrpcContext { return { user: { id: 9, openId: "gps-user", email: "gps@example.com", name: "GPS User", loginMethod: "manus", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: {} as TrpcContext["req"], res: {} as TrpcContext["res"] }; }
@@ -115,5 +139,109 @@ describe("router authorization and audit", () => {
     getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); uploadShipmentDocumentForUser.mockResolvedValue(null); appendAuditLog.mockClear();
     await expect(appRouter.createCaller(context()).documents.upload({ shipmentId: 999, documentType: "label", fileName: "label.pdf", mimeType: "application/pdf", dataBase64: "ZmFrZQ==" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects package listing without packages:view", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(false); listPackagesForUser.mockClear();
+    await expect(appRouter.createCaller(context()).packages.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(listPackagesForUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects package creation when its shipment belongs to another organization", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createPackageForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).packages.create({ shipmentId: 999, description: "Caja", weight: 2, weightUnit: "kg", dimensionUnit: "cm" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects an inventory movement when the package or warehouse is outside the organization", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); recordInventoryMovementForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).inventory.move({ packageId: 999, warehouseId: 888, movementType: "putaway", toLocation: "A-01-03" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("audits an authorized package movement", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); updatePackageForUser.mockResolvedValue({ id: 8, packageCode: "PKG-REAL", status: "stored", locationCode: "A-01-03" }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).packages.update({ id: 8, status: "stored", locationCode: "A-01-03" });
+    expect(result.status).toBe("stored");
+    expect(updatePackageForUser).toHaveBeenCalledWith(9, 8, expect.objectContaining({ status: "stored", locationCode: "A-01-03" }));
+    expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "package.updated", resourceId: "8" }));
+  });
+
+  it("audits consolidation creation and rejects packages outside its tenant", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createConsolidationForUser.mockResolvedValue({ id: 5, code: "CON-REAL", status: "open" }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).consolidations.create({ fromBranchId: 2, toBranchId: 3 });
+    expect(result.code).toBe("CON-REAL"); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "consolidation.created", resourceId: "5" }));
+    addPackageToConsolidationForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).consolidations.addPackage({ consolidationId: 5, packageId: 999 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects an incident when its shipment is outside the active organization", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createIncidentForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).incidents.create({ shipmentId: 999, type: "return_requested", severity: "high", description: "Devolución solicitada por el cliente" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("audits an authorized return incident", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createIncidentForUser.mockResolvedValue({ id: 21, shipmentId: 12, type: "return_requested", status: "returned" }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).incidents.create({ shipmentId: 12, type: "return_requested", severity: "high", description: "Cliente solicita devolución" });
+    expect(result.status).toBe("returned"); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "shipment.incident.created", resourceId: "21" }));
+  });
+
+  it("rejects a delivery attempt when its shipment or stop is outside the active organization", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); recordDeliveryAttemptForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).deliveryAttempts.create({ shipmentId: 999, routeStopId: 888, status: "failed", reason: "Destinatario ausente" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("audits an authorized failed delivery attempt", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); recordDeliveryAttemptForUser.mockResolvedValue({ id: 22, shipmentId: 12, attemptNumber: 1, status: "failed", reason: "Destinatario ausente" }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).deliveryAttempts.create({ shipmentId: 12, status: "failed", reason: "Destinatario ausente" });
+    expect(result.attemptNumber).toBe(1); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "shipment.delivery_attempt.recorded", resourceId: "22" }));
+  });
+
+  it("rejects a collection when the shipment is outside the active organization", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); collectPaymentForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).payments.collect({ shipmentId: 999, amount: "500.00", method: "cash", cashSessionId: 1 })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("audits an authorized collection with receipt", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); collectPaymentForUser.mockResolvedValue({ payment: { id: 31, shipmentId: 12, amount: "500.00" }, receipt: { receiptNumber: "REC-REAL" } }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).payments.collect({ shipmentId: 12, amount: "500.00", method: "transfer", reference: "BANK-01" });
+    expect(result.receipt.receiptNumber).toBe("REC-REAL"); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "payment.collected", resourceId: "31" }));
+  });
+
+  it("rejects opening a cash session for an invalid branch", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); openCashSessionForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).cash.open({ branchId: 999, openingAmount: "1000.00" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("audits an issued invoice", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); issueInvoiceForUser.mockResolvedValue({ id: 41, invoiceNumber: "FAC-REAL", shipmentId: 12, total: "575.00", currency: "DOP" }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).invoices.issue({ shipmentId: 12, subtotal: "500.00", tax: "75.00" });
+    expect(result.invoiceNumber).toBe("FAC-REAL"); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "invoice.issued", resourceId: "41" }));
+  });
+
+  it("rejects a special service when its shipment is outside the active organization", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createShipmentServiceForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).services.create({ shipmentId: 999, serviceType: "moving", handlingNotes: "Dos personas y vehículo especial" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("audits a special service request and status update", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); createShipmentServiceForUser.mockResolvedValue({ id: 51, shipmentId: 12, serviceType: "heavy_cargo", status: "requested", requiresSpecialVehicle: true }); appendAuditLog.mockClear();
+    const created = await appRouter.createCaller(context()).services.create({ shipmentId: 12, serviceType: "heavy_cargo" });
+    expect(created.requiresSpecialVehicle).toBe(true); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "shipment.service.created", resourceId: "51" }));
+    updateShipmentServiceForUser.mockResolvedValue({ id: 51, status: "approved", shipmentId: 12 }); appendAuditLog.mockClear();
+    const updated = await appRouter.createCaller(context()).services.update({ serviceId: 51, status: "approved" });
+    expect(updated.status).toBe("approved"); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "shipment.service.updated", resourceId: "51" }));
+  });
+
+  it("audits an authorized consolidation advance", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); advanceConsolidationForUser.mockResolvedValue({ id: 5, status: "in_transit" }); appendAuditLog.mockClear();
+    const result = await appRouter.createCaller(context()).consolidations.advance({ consolidationId: 5, nextStatus: "in_transit" });
+    expect(result.status).toBe("in_transit"); expect(appendAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "consolidation.advanced", resourceId: "5" }));
   });
 });
