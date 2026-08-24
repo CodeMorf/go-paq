@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 
-const expectedTables = ["users", "organizations", "branches", "memberships", "shipments", "packages", "shipment_events", "api_keys", "shipment_documents", "tracking_points", "pickups", "routes", "route_stops", "manifests", "tariffs", "warehouses", "role_permissions", "audit_logs"];
+const expectedTables = ["users", "customer_profiles", "customer_addresses", "customer_contacts", "support_tickets", "organizations", "branches", "memberships", "shipments", "packages", "shipment_services", "shipment_events", "api_keys", "shipment_documents", "tracking_points", "pickups", "routes", "route_stops", "route_expenses", "manifests", "tariff_zones", "tariffs", "warehouses", "role_permissions", "inventory_movements", "consolidations", "consolidation_items", "shipment_incidents", "delivery_attempts", "payments", "cash_sessions", "cash_movements", "invoices", "receipts", "api_idempotency_keys", "api_request_logs", "audit_logs"];
 const databaseUrl = process.env.CLEAN_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL es obligatorio");
 const parsed = new URL(databaseUrl);
@@ -14,7 +14,7 @@ try {
   admin = await mysql.createConnection(baseConfig);
   await admin.query(`CREATE DATABASE \`${database}\``);
   clean = await mysql.createConnection({ ...baseConfig, database, multipleStatements: false });
-  const migrationFiles = process.env.CLEAN_MIGRATIONS === "single" ? ["../drizzle/0000_open_micromax.sql"] : JSON.parse(await readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8")).entries.map((entry) => `../drizzle/${entry.tag}.sql`);
+  const migrationFiles = JSON.parse(await readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8")).entries.map((entry) => `../drizzle/${entry.tag}.sql`);
   for (const migrationFile of migrationFiles) {
     const migration = await readFile(new URL(migrationFile, import.meta.url), "utf8");
     for (const statement of migration.split(/--> statement-breakpoint/).map((item) => item.trim()).filter(Boolean)) await clean.query(statement);

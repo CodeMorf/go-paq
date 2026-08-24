@@ -1,8 +1,8 @@
 export type ShipmentDomain = "commercial" | "physical" | "transport" | "financial" | "incident";
-export type ShipmentState = "draft" | "confirmed" | "expected" | "received" | "inspection" | "ready" | "in_transit" | "at_destination" | "out_for_delivery" | "delivered" | "incident" | "returned" | "cancelled" | "paid" | "unpaid" | "open" | "resolved";
+export type ShipmentState = "draft" | "quoted" | "confirmed" | "expected" | "received" | "inspection" | "ready" | "in_transit" | "at_destination" | "out_for_delivery" | "delivered" | "incident" | "returned" | "cancelled" | "paid" | "unpaid" | "open" | "resolved";
 
 const transitions: Record<ShipmentDomain, Record<string, string[]>> = {
-  commercial: { draft: ["confirmed", "cancelled"], confirmed: ["cancelled"] },
+  commercial: { draft: ["confirmed", "cancelled"], quoted: ["confirmed", "cancelled"], confirmed: ["cancelled"] },
   physical: { confirmed: ["received"], received: ["in_transit"] },
   transport: { in_transit: ["out_for_delivery"], out_for_delivery: ["delivered"] },
   financial: { unpaid: ["paid"] },

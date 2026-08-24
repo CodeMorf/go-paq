@@ -334,6 +334,18 @@ export async function updateShipmentForUser(userId: number, shipmentId: number, 
   return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
 }
 
+export async function cancelShipmentForUser(userId: number, shipmentId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const current = await db.select({ id: shipments.id, commercialStatus: shipments.commercialStatus, physicalStatus: shipments.physicalStatus, transportStatus: shipments.transportStatus }).from(shipments).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  const shipment = current[0];
+  if (!shipment || (shipment.commercialStatus !== "draft" && shipment.commercialStatus !== "quoted" && shipment.commercialStatus !== "confirmed") || shipment.physicalStatus !== "expected" || shipment.transportStatus !== "unassigned") return null;
+  transitionShipment("commercial", shipment.commercialStatus, "cancelled");
+  await db.update(shipments).set({ commercialStatus: "cancelled" }).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id)));
+  const rows = await db.select().from(shipments).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ? withoutDeliveryPinHash(rows[0]) : null;
+}
+
 export async function confirmShipmentDeliveryForUser(userId: number, input: { shipmentId: number; recipientName: string; deliveryPin?: string; note?: string; evidenceUrl?: string; latitude?: string; longitude?: string; idempotencyKey: string }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
@@ -1209,4 +1221,25 @@ export async function listTrackingPointsForUser(userId: number, shipmentId?: num
   if (shipmentId) filters.push(eq(trackingPoints.shipmentId, shipmentId));
   if (routeId) filters.push(eq(trackingPoints.routeId, routeId));
   return db.select().from(trackingPoints).where(and(...filters)).orderBy(desc(trackingPoints.capturedAt)).limit(500);
+}
+
+
+export async function listOrganizationsForSuperAdmin(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const actor = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  if (actor[0]?.role !== "admin") return null;
+  return db.select().from(organizations).orderBy(desc(organizations.createdAt)).limit(500);
+}
+
+export async function updateOrganizationStatusForSuperAdmin(userId: number, organizationId: number, status: "trial" | "active" | "suspended") {
+  const db = await getDb();
+  if (!db) return null;
+  const actor = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  if (actor[0]?.role !== "admin") return null;
+  const current = await db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+  if (!current[0]) return null;
+  await db.update(organizations).set({ status }).where(eq(organizations.id, organizationId));
+  const updated = await db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+  return { before: current[0], after: updated[0] ?? null };
 }

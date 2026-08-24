@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const baselineTables = ["users", "organizations", "branches", "memberships", "shipments", "packages", "shipment_events", "api_keys", "shipment_documents", "tracking_points", "pickups", "routes", "route_stops", "manifests", "tariffs", "warehouses", "role_permissions", "audit_logs"];
+const expectedTables = ["users", "customer_profiles", "customer_addresses", "customer_contacts", "support_tickets", "organizations", "branches", "memberships", "shipments", "packages", "shipment_services", "shipment_events", "api_keys", "shipment_documents", "tracking_points", "pickups", "routes", "route_stops", "route_expenses", "manifests", "tariff_zones", "tariffs", "warehouses", "role_permissions", "inventory_movements", "consolidations", "consolidation_items", "shipment_incidents", "delivery_attempts", "payments", "cash_sessions", "cash_movements", "invoices", "receipts", "api_idempotency_keys", "api_request_logs", "audit_logs"];
 const migrationDirectory = resolve(process.cwd(), "drizzle");
 
 function migrationSqlFiles() {
@@ -10,11 +10,15 @@ function migrationSqlFiles() {
 }
 
 describe("migraciones de checkout limpio", () => {
-  it("incluye la línea base de 18 tablas sin operaciones destructivas", () => {
-    const sql = readFileSync(resolve(migrationDirectory, "0000_open_micromax.sql"), "utf8");
-    for (const table of baselineTables) expect(sql).toContain(`CREATE TABLE \`${table}\``);
-    expect(sql.toUpperCase()).not.toContain("DROP TABLE");
-    expect(sql.match(/CREATE TABLE/g)?.length).toBe(baselineTables.length);
+  it("incluye la migración inicial referenciada por el journal sin operaciones destructivas", () => {
+    const sql = readFileSync(resolve(migrationDirectory, "0000_greedy_black_tom.sql"), "utf8");
+    expect(sql).toContain("CREATE TABLE `users`");
+    expect(sql.toUpperCase()).not.toMatch(/DROP\s+(TABLE|DATABASE)/);
+  });
+
+  it("declara las 37 tablas del schema actual en el conjunto de migraciones", () => {
+    const sql = migrationSqlFiles().map((file) => readFileSync(file, "utf8")).join("\n");
+    for (const table of expectedTables) expect(sql).toContain(`CREATE TABLE \`${table}\``);
   });
 
   it("crea la tabla de idempotencia REST con scope único", () => {
@@ -32,7 +36,7 @@ describe("migraciones de checkout limpio", () => {
   });
 
   it("mantiene toda la cadena SQL incremental libre de DROP y TRUNCATE", () => {
-    expect(migrationSqlFiles().length).toBeGreaterThanOrEqual(13);
+    expect(migrationSqlFiles().length).toBe(22);
     for (const file of migrationSqlFiles()) {
       const sql = readFileSync(file, "utf8").toUpperCase();
       expect(sql, file).not.toMatch(/DROP\s+(TABLE|DATABASE)/);

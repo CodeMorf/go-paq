@@ -8,4 +8,13 @@ describe("shipment state machine", () => {
     expect(canTransition("transport", "received", "delivered")).toBe(false);
     expect(() => transitionShipment("incident", "open", "delivered")).toThrow("Transizione non consentita");
   });
+
+  it("allows cancellation only before physical processing", () => {
+    expect(transitionShipment("commercial", "draft", "cancelled")).toBe("cancelled");
+    expect(transitionShipment("commercial", "quoted", "cancelled")).toBe("cancelled");
+    expect(transitionShipment("commercial", "confirmed", "cancelled")).toBe("cancelled");
+    expect(canTransition("commercial", "cancelled", "confirmed")).toBe(false);
+    expect(canTransition("commercial", "closed", "cancelled")).toBe(false);
+    expect(() => transitionShipment("commercial", "closed", "cancelled")).toThrow("Transizione non consentita");
+  });
 });

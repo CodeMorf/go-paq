@@ -10,7 +10,7 @@ La plataforma está diseñada para conectar clientes, sucursales, almacenes, con
 
 ## Estado actual
 
-GoPaq se encuentra en desarrollo avanzado sobre staging. El núcleo operativo y la API REST ya cuentan con aislamiento por organización, permisos por recurso y acción, auditoría, cotización, pickups, envíos, tracking, rutas, manifiestos, inventario, cobros, facturación, documentos y servicios especiales.
+GoPaq se encuentra en desarrollo avanzado sobre staging. El núcleo operativo y la API REST ya cuentan con aislamiento por organización, permisos por recurso y acción, auditoría, cotización, pickups, creación/edición/cancelación de envíos, tracking, rutas, manifiestos, inventario, cobros, facturación, documentos y servicios especiales. El portal Super Admin incorpora gestión global de organizaciones y estados, separada de la operación tenant-scoped.
 
 La ejecución con clientes, cobros o paquetes reales requiere completar la configuración de infraestructura y las validaciones autenticadas descritas en [`PRODUCTION_READINESS.md`](./PRODUCTION_READINESS.md). En particular, el entorno productivo debe proporcionar una conexión Redis TLS válida, secretos OAuth reales y una sesión de base de datos con permisos de migración verificables. El proyecto no incluye datos de clientes, reseñas, testimonios ni credenciales ficticias.
 
@@ -25,7 +25,7 @@ La ejecución con clientes, cobros o paquetes reales requiere completar la confi
 | PWA driver | Cola offline cifrada con AES-GCM, idempotencia, recuperación, conflictos, rechazo y límite de capacidad. |
 | Seguridad | OAuth Manus, permisos por recurso/acción, API keys revocables, scopes, rate limiting Redis y auditoría. |
 | Finanzas | Caja de sucursal, cobros contra entrega, recibos, facturas y estados financieros. |
-| Integraciones | Google Maps, almacenamiento seguro, agente LLM asistido y API REST versionada. |
+| Integraciones | Google Maps, almacenamiento seguro, agente LLM asistido, API REST versionada y trazabilidad de requests. |
 | Identidad | Marca GoPaq Hawk, interfaz en español, tema claro predeterminado y tema oscuro opcional. |
 
 ## Arquitectura
@@ -48,11 +48,11 @@ Las migraciones se generan desde el esquema Drizzle y se aplican mediante el flu
 
 ## Portales
 
-El portal `/admin` concentra la configuración de la organización, permisos, API keys, auditoría, perfiles, rutas, documentos y supervisión operativa. `/sucursal` está orientado a recepción, pickups, inventario, almacenes, manifiestos, caja y movimientos de paquetes. `/driver` es una PWA móvil para rutas, paradas, escaneo, GPS, POD y operación offline. `/cliente` permite cotizar, crear envíos, solicitar pickups, consultar tracking y revisar documentos autorizados. `/docs-api` documenta autenticación, scopes, formatos, errores, versionamiento y ejemplos de integración.
+El portal `/admin` concentra la configuración de la organización, gestión global Super Admin de organizaciones, permisos, API keys, auditoría, perfiles, rutas, documentos y supervisión operativa. `/sucursal` está orientado a recepción, pickups, inventario, almacenes, manifiestos, caja y movimientos de paquetes. `/driver` es una PWA móvil para rutas, paradas, escaneo, GPS, POD y operación offline. `/cliente` permite cotizar, crear envíos, solicitar pickups, consultar tracking y revisar documentos autorizados. `/docs-api` documenta autenticación, scopes, formatos, errores, versionamiento y ejemplos de integración.
 
 ## API pública
 
-La API utiliza Bearer API keys revocables, scopes explícitos, aislamiento por organización, rate limiting distribuido y respuestas JSON versionadas. Las rutas principales cubren cotizaciones, envíos, pickups, tracking y webhooks según la documentación integrada en `/docs-api`.
+La API utiliza Bearer API keys revocables, scopes explícitos, aislamiento por organización, rate limiting distribuido y respuestas JSON versionadas. Las rutas principales verificadas cubren cotizaciones, envíos, pickups y tracking; la firma HMAC de webhooks está probada, pero el dispatch outbound por organización aún es un pendiente documentado en la auditoría.
 
 ```bash
 curl -X POST https://tu-dominio.example/api/v1/quotes \
@@ -99,7 +99,7 @@ La cola offline del conductor no autoriza localmente pagos ni confirmaciones sen
 
 ## Pruebas y calidad
 
-La suite Vitest cubre autenticación, API keys, rate limiting, permisos, aislamiento, GPS, estados de paquetes y envíos, manifiestos, agente LLM, webhooks, migraciones y cola offline. Antes de cada cambio relevante se recomienda ejecutar TypeScript, tests y build; antes de un release se debe realizar además una validación autenticada de los portales en desktop y móvil.
+La suite Vitest cubre autenticación, API keys, rate limiting, permisos, aislamiento, GPS, estados de paquetes y envíos, cancelación comercial, manifiestos, agente LLM, autorización Super Admin, firma HMAC de webhooks, migraciones, logs REST y cola offline: 106 pruebas aprobadas y 2 Shopify omitidas en la validación actual. Antes de cada cambio relevante se recomienda ejecutar TypeScript, tests y build; antes de un release se debe realizar además una validación autenticada de los portales en desktop y móvil.
 
 El proyecto documenta de forma explícita los elementos que todavía dependen de infraestructura o de una sesión autenticada. Esta transparencia es intencional: una prueba de staging o una interfaz sin sesión no debe presentarse como evidencia de producción con datos reales.
 
@@ -111,6 +111,8 @@ El proyecto documenta de forma explícita los elementos que todavía dependen de
 | [`PRODUCTION_CONFIGURATION.md`](./PRODUCTION_CONFIGURATION.md) | Variables, integraciones y configuración de despliegue. |
 | [`PRODUCTION_READINESS.md`](./PRODUCTION_READINESS.md) | Checklist vivo de preparación para producción. |
 | [`VISUAL_VALIDATION.md`](./VISUAL_VALIDATION.md) | Evidencia y pendientes de validación visual. |
+| [`docs/PRIVACY_AND_RETENTION.md`](./docs/PRIVACY_AND_RETENTION.md) | Controles operativos de privacidad, minimización y retención. |
+| [`docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md`](./docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md) | Migración limpia, backups, rollback y criterio de salida. |
 | [`todo.md`](./todo.md) | Historial de funcionalidades completadas y trabajo pendiente. |
 
 ## Licencia y contacto

@@ -14,11 +14,11 @@ No se encontraron indicios de que deban crearse tablas duplicadas. El esquema ac
 
 | Superficie | Estado observado | Evidencia | Riesgo o dependencia |
 | --- | --- | --- | --- |
-| Cliente | Parcialmente funcional | Cotizador, solicitud de pickup, tracking, documentos, lista de envíos y servicios especiales conectados a tRPC | Faltan perfil, direcciones, contactos, checkout/saldo, tickets y devoluciones completos |
+| Cliente | Parcialmente funcional | Cotizador, solicitud de pickup, tracking, documentos, lista de envíos, cancelación previa a recepción y servicios especiales conectados a tRPC; perfil, direcciones, contactos y tickets persistentes | Faltan checkout/saldo, devoluciones completas y E2E autenticado |
 | Driver | Parcialmente funcional | Rutas asignadas, inicio/cierre de turno, paradas, escaneo protegido, GPS limitado a ruta `active`, entrega/POD, incidencias y cola offline cifrada | Faltan disponibilidad formal, gastos, conciliación visual autenticada y prueba real con cámara |
 | Sucursal | Parcialmente funcional | Pickups, recepción/escaneo con cámara y fallback manual, almacén, paquetes, separación, reempaque, inventario, rutas, manifiestos, incidencias, finanzas y servicios especiales | Faltan fotos/etiquetas imprimibles, transferencias E2E y flujo autenticado completo |
-| Super Admin | Parcialmente funcional | Perfil de organización, API keys, auditoría, rutas y paneles operativos reutilizables | Faltan gestión global de organizaciones, planes, usuarios, vehículos, zonas, tarifas e integraciones |
-| API REST | Implementada parcialmente | Quotes, shipments, pickups y tracking con API key, scope, tenant isolation, rate limit y rechazo de tarifa ausente; `/docs-api` actualizado con `organizationSlug`/`zoneCode` | Falta cerrar idempotencia uniforme, request ID, webhooks firmados y documentos |
+| Super Admin | Parcialmente funcional | Perfil tenant, API keys, auditoría, rutas, paneles operativos y módulo global de organizaciones con cambio de estado protegido por rol `admin` | Faltan planes, límites, usuarios globales, vehículos, integraciones y validación autenticada |
+| API REST | Implementada parcialmente | Quotes, shipments, pickups y tracking con API key, scope, tenant isolation, rate limit, idempotencia, hash canónico, `X-Request-Id`, logs de requests y rechazo de tarifa ausente | Falta dispatch outbound de webhooks por organización y documentos REST |
 | Tenancy | Parcialmente reforzado | Helpers derivan la organización del contexto; `memberships.list/updateScope` muestra y valida branch/warehouse; permisos y ownership de rutas aplican scope activo | Falta una batería completa cross-tenant sobre base limpia y pruebas autenticadas del panel |
 | Tarifas | Implementadas con límites | Catálogo server-side versionado con zonas, vigencia, divisor volumétrico, recargo, combustible, descuento, impuesto y moneda; REST y `quote.preview` rechazan tarifa ausente | Faltan pruebas de producción con catálogo real y validación visual admin autenticada |
 | Offline | Implementada | AES-GCM, idempotencia, recuperación, conflictos, rechazo y límite de capacidad | Falta E2E con servidor real y pruebas móviles autenticadas |
@@ -26,9 +26,9 @@ No se encontraron indicios de que deban crearse tablas duplicadas. El esquema ac
 
 ## Esquema y migraciones
 
-El esquema fuente se encuentra en `drizzle/schema.ts`. La cadena de migraciones versionada está en `drizzle/0000_*.sql` hasta `drizzle/0016_*.sql`, con snapshots y journal en `drizzle/meta/`. El repositorio también conserva un script de verificación de schema limpio. No se aplica ninguna migración destructiva durante esta auditoría.
+El esquema fuente se encuentra en `drizzle/schema.ts`. La cadena de migraciones versionada llega a las 22 migraciones oficiales del journal, con snapshots y journal en `drizzle/meta/`. El repositorio también conserva un script de verificación de schema limpio. No se aplica ninguna migración destructiva durante esta auditoría.
 
-La configuración documenta que una instalación limpia fue comprobada con 29 tablas. `PRODUCTION_READINESS.md` contenía una referencia histórica a 18 tablas; debe mantenerse alineada con la cifra actual de 29 para evitar evidencia contradictoria.
+La configuración documenta que una instalación limpia fue comprobada con 37 tablas. El journal es la fuente de verdad y no se debe usar el conteo histórico de 18/29 tablas.
 
 ## Rutas y procedimientos existentes
 
@@ -38,13 +38,13 @@ Las rutas React están registradas para `/`, `/admin`, `/sucursal`, `/driver`, `
 
 ## Pruebas ejecutadas durante la auditoría
 
-Se ejecutaron `pnpm exec tsc --noEmit`, `pnpm test -- --run` y `pnpm build`. El resultado observado fue TypeScript sin errores, **84 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
+Se ejecutaron `pnpm check`, `pnpm test` y `pnpm build`. El resultado observado fue TypeScript sin errores, **106 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
 
 No se ejecutó una prueba E2E autenticada completa del flujo `Cliente → cotización → envío → pickup → sucursal → almacén → manifiesto → driver → entrega → POD → tracking → documento → cobro`, porque requiere una sesión OAuth y datos/credenciales de infraestructura apropiados. Por tanto, ese flujo permanece pendiente y no se declara aprobado.
 
 ## Prioridad de implementación
 
-La siguiente prioridad técnica debe ser completar el ciclo Cliente y Driver de gastos/conciliación, recepción con fotografía, etiquetas imprimibles, transferencias E2E y validación visual autenticada. Ya existen `approve` para servicios especiales, `refund` financiero, exportaciones protegidas, tarifas server-side, compra asistida, separación/reempaque y ownership de rutas Driver. Después deben cerrarse request IDs/idempotencia REST/webhooks, pruebas E2E autenticadas y la configuración de Redis TLS/OAuth/storage/mapas.
+La siguiente prioridad técnica debe ser completar los módulos globales Super Admin restantes, el dispatch outbound de webhooks con destinos persistentes y reintentos, además de la validación visual/E2E autenticada. Ya existen cancelación comercial tenant-scoped, `approve` para servicios especiales, `refund` financiero, exportaciones protegidas, tarifas server-side, compra asistida, separación/reempaque, idempotencia REST, request IDs, logs y ownership de rutas Driver. Persisten la configuración de Redis TLS/OAuth/storage/mapas y la aceptación con datos reales.
 
 ## Dependencias externas
 
@@ -98,3 +98,11 @@ La firma HMAC de `webhook.ts` ahora queda cubierta por casos de payload alterado
 ## KPI operativo adicional
 
 `logistics.overview` ahora obtiene también el conteo real de paquetes mediante `listPackagesForUser`, manteniendo scope por organización y permiso `shipments:view`; el shell muestra `Paquetes controlados` junto a envíos activos, entregas e incidentes. No se han añadido ingresos, retrasos ni estado de integraciones con valores ficticios: esos indicadores requieren fuentes financieras y conectores reales.
+
+## Auditoría integral del árbol de migraciones
+
+La revisión del schema actual identifica **37 tablas**. El journal Drizzle referencia **22 migraciones oficiales**, desde `0000_greedy_black_tom.sql` hasta `0021_minor_risque.sql`. Existía un `0000_open_micromax.sql` adicional, no referenciado por `_journal.json`, que contenía una línea base antigua de 18 tablas; se retiró del árbol para que la instalación limpia tenga una única fuente de verdad. `schema.migration.test.ts` y `scripts/verify-clean-schema.mjs` fueron alineados al journal y a las 37 tablas actuales. La instalación administrada completa todavía requiere un usuario bootstrap con permisos de creación de base, por lo que no se declara restauración productiva verificada.
+
+## Preflight productivo actualizado
+
+El 24-08-2026 se ejecutó `NODE_ENV=production pnpm preflight`. El proceso terminó con código 1 e informó únicamente `Faltan variables críticas: REDIS_URL`; no imprimió secretos ni intentó degradar a rate limit local. Esto confirma que el entorno actual no puede recibir tráfico operativo real hasta configurar una URL Redis TLS (`rediss://`) válida y repetir el preflight.

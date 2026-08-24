@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { addPackageToConsolidationForUser, advanceConsolidationForUser, advanceManifestForUser, createIncidentForUser, appendAuditLog, collectPaymentForUser, createShipmentServiceForUser, closeCashSessionForUser, issueInvoiceForUser, appendShipmentEvent, canUser, assignRouteForUser, createApiKeyForUser, createConsolidationForUser, createManifestForUser, createPickupForUser, createRouteForUser, createRouteStopForUser, isRouteAssignedToUser, isRouteStopAssignedToUser, isActiveRouteStopAssignedToUser, isShipmentOnAssignedRouteForUser, createShipmentForUser, createPackageForUser, createWarehouseForUser, confirmShipmentDeliveryForUser, getActiveTariffForOrganization, getOrganizationForUser, getOrganizationBySlug, getPublicTrackingByCode, listApiKeysForUser, listApiRequestLogsForUser, listAuditLogsForUser, listBranchesForUser, listConsolidationsForUser, listDriversForUser, listIncidentsForUser, listInventoryMovementsForUser, listPackagesForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteExpensesForUser, createRouteExpenseForUser, reviewRouteExpenseForUser, listAssignedRouteStopsForUser, listAssignedRoutesForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, listWarehousesForUser, listDeliveryAttemptsForUser, listCashSessionsForUser, listInvoicesForUser, listPaymentsForUser, listShipmentServicesForUser, recordDeliveryAttemptForUser, recordInventoryMovementForUser, recordTrackingPoint, revokeApiKeyForUser, resolveIncidentForUser, scanPackageForUser, updateAssignedRouteForUser, updateRouteStopForUser, openCashSessionForUser, updateShipmentForUser, updateShipmentServiceForUser, updatePackageForUser, updateWarehouseForUser, listMembershipsForUser, listRolePermissionsForUser, grantRolePermissionForUser, revokeRolePermissionForUser, refundPaymentForUser, repackPackageForUser, splitPackageForUser, listTariffZonesForUser, createTariffZoneForUser, listTariffsForUser, createTariffForUser, updateMembershipScopeForUser, updateOrganizationProfileForUser, uploadShipmentDocumentForUser, getCustomerProfileForUser, upsertCustomerProfileForUser, listCustomerAddressesForUser, createCustomerAddressForUser, updateCustomerAddressForUser, listCustomerContactsForUser, createCustomerContactForUser, updateCustomerContactForUser, listSupportTicketsForUser, createSupportTicketForUser, updateSupportTicketForUser } from "./db";
+import { addPackageToConsolidationForUser, advanceConsolidationForUser, advanceManifestForUser, createIncidentForUser, appendAuditLog, collectPaymentForUser, createShipmentServiceForUser, closeCashSessionForUser, issueInvoiceForUser, appendShipmentEvent, canUser, assignRouteForUser, createApiKeyForUser, createConsolidationForUser, createManifestForUser, createPickupForUser, createRouteForUser, createRouteStopForUser, isRouteAssignedToUser, isRouteStopAssignedToUser, isActiveRouteStopAssignedToUser, isShipmentOnAssignedRouteForUser, createShipmentForUser, cancelShipmentForUser, createPackageForUser, createWarehouseForUser, confirmShipmentDeliveryForUser, getActiveTariffForOrganization, getOrganizationForUser, getOrganizationBySlug, getPublicTrackingByCode, listApiKeysForUser, listApiRequestLogsForUser, listAuditLogsForUser, listBranchesForUser, listConsolidationsForUser, listDriversForUser, listIncidentsForUser, listInventoryMovementsForUser, listPackagesForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteExpensesForUser, createRouteExpenseForUser, reviewRouteExpenseForUser, listAssignedRouteStopsForUser, listAssignedRoutesForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, listWarehousesForUser, listDeliveryAttemptsForUser, listCashSessionsForUser, listInvoicesForUser, listPaymentsForUser, listShipmentServicesForUser, recordDeliveryAttemptForUser, recordInventoryMovementForUser, recordTrackingPoint, revokeApiKeyForUser, resolveIncidentForUser, scanPackageForUser, updateAssignedRouteForUser, updateRouteStopForUser, openCashSessionForUser, updateShipmentForUser, updateShipmentServiceForUser, updatePackageForUser, updateWarehouseForUser, listMembershipsForUser, listRolePermissionsForUser, grantRolePermissionForUser, revokeRolePermissionForUser, refundPaymentForUser, repackPackageForUser, splitPackageForUser, listTariffZonesForUser, createTariffZoneForUser, listTariffsForUser, createTariffForUser, updateMembershipScopeForUser, updateOrganizationProfileForUser, uploadShipmentDocumentForUser, getCustomerProfileForUser, upsertCustomerProfileForUser, listCustomerAddressesForUser, createCustomerAddressForUser, updateCustomerAddressForUser, listCustomerContactsForUser, createCustomerContactForUser, updateCustomerContactForUser, listSupportTicketsForUser, createSupportTicketForUser, updateSupportTicketForUser, listOrganizationsForSuperAdmin, updateOrganizationStatusForSuperAdmin } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -12,6 +12,19 @@ import { buildTrackingAuditMetadata, trackingResourceId } from "./trackingAudit"
 import { buildDopTariffInput } from "./tariffCatalog";
 
 export const appRouter = router({
+  superAdmin: router({
+    organizations: protectedProcedure.query(async ({ ctx }) => {
+      const result = await listOrganizationsForSuperAdmin(ctx.user.id);
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Se requiere rol Super Admin" });
+      return result;
+    }),
+    updateOrganizationStatus: protectedProcedure.input(z.object({ organizationId: z.number().int().positive(), status: z.enum(["trial", "active", "suspended"]) })).mutation(async ({ ctx, input }) => {
+      const result = await updateOrganizationStatusForSuperAdmin(ctx.user.id, input.organizationId, input.status);
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "No autorizado o organización inexistente" });
+      await appendAuditLog({ organizationId: input.organizationId, actorUserId: ctx.user.id, category: "security", action: "super_admin.organization.status_updated", resourceType: "organization", resourceId: String(input.organizationId), metadata: { previousStatus: result.before.status, nextStatus: result.after?.status ?? input.status } });
+      return result.after;
+    }),
+  }),
   organization: router({
     updateProfile: protectedProcedure.input(z.object({ country: z.string().min(2).max(80), language: z.string().min(2).max(8), currency: z.string().min(3).max(8), timezone: z.string().min(3).max(80), activeServices: z.array(z.string().min(2).max(48)).max(20) })).mutation(async ({ ctx, input }) => {
       const scope = await getOrganizationForUser(ctx.user.id);
@@ -134,6 +147,14 @@ export const appRouter = router({
         const result = await updateShipmentForUser(ctx.user.id, id, changes);
         if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Envío no encontrado o ya no está editable" });
         await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.updated", resourceType: "shipment", resourceId: String(id), metadata: changes });
+        return result;
+      }),
+      cancel: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+        const scope = await getOrganizationForUser(ctx.user.id);
+        if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "edit"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de cancelación de envíos no disponible" });
+        const result = await cancelShipmentForUser(ctx.user.id, input.id);
+        if (!result) throw new TRPCError({ code: "BAD_REQUEST", message: "El envío no existe, ya fue procesado o no puede cancelarse en su estado actual" });
+        await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.cancelled", resourceType: "shipment", resourceId: String(result.id), metadata: { trackingCode: result.trackingCode, nextState: result.commercialStatus } });
         return result;
       }),
     }),

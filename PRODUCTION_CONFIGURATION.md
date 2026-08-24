@@ -32,15 +32,19 @@ Los mapas usan el proxy de Forge y el componente `MapView`; no se debe solicitar
 
 ## Base de datos y migraciones
 
-Una instalación limpia se verificó aplicando la secuencia completa del journal sobre MariaDB vacío: se crearon **29 tablas** y el default regional de `organizations.language` quedó en `es`. El esquema mantiene `DOP` como moneda por defecto y `America/Santo_Domingo` como zona horaria.
+Una instalación limpia se verificó aplicando la secuencia completa del journal sobre MariaDB vacío: se crearon **37 tablas** a partir de las 22 migraciones oficiales del journal y el default regional de `organizations.language` quedó en `es`. El esquema mantiene `DOP` como moneda por defecto y `America/Santo_Domingo` como zona horaria.
 
-Para cambios posteriores se debe modificar primero `drizzle/schema.ts`, ejecutar `pnpm drizzle-kit generate`, revisar el SQL generado y aplicar la migración en el entorno correspondiente. Las migraciones no deben contener `DROP TABLE` ni alteraciones destructivas sin una estrategia explícita de respaldo y reversión.
+El procedimiento completo de instalación limpia, backup, restore, rollback y validación posterior está en [`docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md`](./docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md). Para cambios posteriores se debe modificar primero `drizzle/schema.ts`, ejecutar `pnpm drizzle-kit generate`, revisar el SQL generado y aplicar la migración en el entorno correspondiente. Las migraciones no deben contener `DROP TABLE` ni alteraciones destructivas sin una estrategia explícita de respaldo y reversión.
 
 ## Seguridad operativa
 
 Todas las consultas operativas deben derivar `organizationId` del contexto autenticado. Documentos, puntos GPS, eventos, pickups, rutas y confirmaciones POD validan la pertenencia de sus referencias; el cliente no puede fijar tarifas ni cambiar estados fuera de las transiciones permitidas. Las cargas de documentos deben pasar por el backend y utilizar storage administrado, nunca bytes persistidos en columnas ni rutas locales.
 
 El service worker no almacena llamadas API, respuestas con credenciales ni portales autenticados. La cola offline puede conservar operaciones limitadas para sincronización, pero no debe confirmar localmente cobros, entregas ni cambios críticos de estado. Los conflictos de sincronización se conservan con razón y requieren reintento o descarte explícito; las sincronizaciones concurrentes del mismo dispositivo se serializan.
+
+## Privacidad y retención
+
+La política operativa de minimización, acceso, GPS, POD, logs, backups y plazos propuestos está en [`docs/PRIVACY_AND_RETENTION.md`](./docs/PRIVACY_AND_RETENTION.md). Sus plazos son una propuesta técnica y deben ser aprobados por la organización y asesoría legal local; no existe eliminación automática habilitada en este checkpoint.
 
 ## Checklist antes de operar paquetes reales
 
