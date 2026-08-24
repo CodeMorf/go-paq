@@ -132,6 +132,7 @@ export const appRouter = router({
     }),
   }),
   tracking: router({
+    privateByShipment: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive() })).query(async ({ ctx, input }) => listEventsForUser(ctx.user.id, input.shipmentId)),
     publicByCode: publicProcedure.input(z.object({ code: z.string().min(6).max(48) })).query(async ({ input }) => {
       const result = await getPublicTrackingByCode(input.code);
       if (!result) return { trackingCode: input.code, status: "not_found" as const, message: "Inserisci un codice valido o accedi al tuo spazio cliente." };

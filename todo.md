@@ -151,3 +151,5 @@
 - [x] Applicare permessi organizzativi `routes:view`, `pickups:view` e `pickups:create` alle procedure operative di rotte e pickup.
 
 - [x] Applicare rate limit per chiave API all’endpoint REST quote con risposta 429 e header `Retry-After`.
+
+- [x] Aggiungere procedura `tracking.privateByShipment` per timeline privata autenticata, con isolamento tramite `listEventsForUser`.
