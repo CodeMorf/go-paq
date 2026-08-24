@@ -1339,3 +1339,14 @@ export async function updatePickupStatusForUser(userId: number, input: { pickupI
   await dispatchWebhooksForEvent(scope.organization.id, "pickup_status_changed", { pickupId: input.pickupId, shipmentId: updated[0].shipmentId, status: input.status, failureReason: input.failureReason }).catch(() => undefined);
   return { previousStatus: current[0].status, pickup: updated[0] };
 }
+
+
+export async function listWebhookDeliveriesForOrganization(organizationId: number, filters?: { endpointId?: number; eventType?: string; status?: "pending" | "delivered" | "failed" | "exhausted" }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(webhookDeliveries.organizationId, organizationId)];
+  if (filters?.endpointId) conditions.push(eq(webhookDeliveries.endpointId, filters.endpointId));
+  if (filters?.eventType) conditions.push(eq(webhookDeliveries.eventType, filters.eventType));
+  if (filters?.status) conditions.push(eq(webhookDeliveries.status, filters.status));
+  return db.select({ id: webhookDeliveries.id, endpointId: webhookDeliveries.endpointId, eventType: webhookDeliveries.eventType, payloadHash: webhookDeliveries.payloadHash, status: webhookDeliveries.status, attempts: webhookDeliveries.attempts, responseStatus: webhookDeliveries.responseStatus, lastError: webhookDeliveries.lastError, deliveredAt: webhookDeliveries.deliveredAt, createdAt: webhookDeliveries.createdAt, updatedAt: webhookDeliveries.updatedAt }).from(webhookDeliveries).where(and(...conditions)).orderBy(desc(webhookDeliveries.createdAt)).limit(200);
+}

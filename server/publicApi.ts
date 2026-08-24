@@ -7,6 +7,7 @@ import {
   createShipmentForOrganization,
   getActiveTariffForOrganization,
   getShipmentByTrackingForOrganization,
+  listWebhookDeliveriesForOrganization,
   recordApiRequestLog,
   beginApiIdempotencyForRequest,
   completeApiIdempotencyForRequest,
@@ -140,6 +141,22 @@ export function registerPublicApi(app: Application) {
     const responseBody = { data: pickup, requestId: id };
     await completeApiIdempotencyForRequest(idempotency.id, 201, responseBody, "pickup", pickup.id);
     return res.status(201).json(responseBody);
+  });
+
+  app.get("/api/v1/webhook-deliveries", async (req: Request, res: Response) => {
+    const id = requestIdFor(req);
+    res.setHeader("X-Request-Id", id);
+    const auth = await authorize(req, "webhooks:read");
+    if (!auth.ok) return res.status(auth.error.status).json({ error: { code: auth.error.code, message: auth.error.message }, requestId: id });
+    const rate = await consumeApiRateLimit(String(auth.key.id));
+    if (!rate.allowed) return res.status(429).setHeader("Retry-After", String(rate.retryAfterSeconds ?? 60)).json({ error: { code: "rate_limited", message: "Demasiados intentos; inténtalo más tarde" }, requestId: id });
+    const endpointId = req.query.endpointId ? Number(req.query.endpointId) : undefined;
+    const status = typeof req.query.status === "string" && ["pending", "delivered", "failed", "exhausted"].includes(req.query.status) ? req.query.status as "pending" | "delivered" | "failed" | "exhausted" : undefined;
+    const eventType = typeof req.query.eventType === "string" ? req.query.eventType.trim().slice(0, 120) || undefined : undefined;
+    if (req.query.endpointId && (!Number.isInteger(endpointId) || !endpointId || !status && req.query.status)) return res.status(422).json({ error: { code: "validation_error", message: "Filtros webhook no válidos" }, requestId: id });
+    if (req.query.status && !status) return res.status(422).json({ error: { code: "validation_error", message: "Estado webhook no válido" }, requestId: id });
+    const deliveries = await listWebhookDeliveriesForOrganization(auth.key.organizationId, { endpointId, eventType, status });
+    return res.status(200).json({ data: deliveries, requestId: id });
   });
 
   app.get("/api/v1/tracking/:trackingCode", async (req: Request, res: Response) => {
