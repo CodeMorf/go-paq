@@ -36,4 +36,4 @@ Le credenziali non vanno inserite nel codice o nel client. Ogni provider esterno
 
 ## Confini della prima release
 
-La prima release rende verificabili il routing, il tema GoPaq, il modello dati centrale, l’accesso protetto, la base PWA e l’impostazione dei portali. La gestione completa di pagamenti, tracking realtime, webhook, mappe operative, documenti generati e agente LLM richiede l’implementazione dei rispettivi adattatori e test di integrazione con credenziali reali; non viene sostituita da dati finti o da integrazioni simulate.
+La prima release rende verificabili il routing, il tema GoPaq, il modello dati centrale, l’accesso protetto, la base PWA e l’impostazione dei portali. Pagamenti, tracking realtime, webhook firmados, mappe operative, documenti generati e agente LLM cuentan con componentes conectados en staging, pero requieren credenciales reales y pruebas de integración antes de producción; no se sustituyen por datos ficticios ni integraciones simuladas.

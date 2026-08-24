@@ -72,11 +72,11 @@
 
 ## API pubblica e `/docs-api`
 
-- [ ] Definire autenticazione API con chiavi revocabili, scope, rate limit e isolamento organizzativo.
+- [x] Implementar autenticación API con claves revocables, scopes, rate limit e aislamiento organizativo; contratos REST y pruebas existentes lo verifican.
 - [ ] Definire endpoint documentati per quotazioni, spedizioni, pacchi, tracking, pickup, webhooks e documenti.
 - [x] Costruire `/docs-api` con contratti, esempi request/response, errori, autenticazione e versionamento.
 - [x] Implementar webhooks firmados para eventos de envío, tracking, entrega e incidentes; cada mutación persiste intentos y no bloquea el evento si el destino falla. La cola externa y el contrato REST siguen pendientes.
-- [ ] Implementare log API, tentativi, risposte, revoche e strumenti di verifica.
+- [x] Implementar logs API, intentos/respuestas de entrega, revocaciones y herramientas de consulta protegidas; cuerpos sensibles y secretos no se registran.
 
 ## Agente LLM operativo
 
@@ -393,3 +393,6 @@
 - [x] Implementar cancelación tenant-scoped de envíos en estados `draft`, `quoted` o `confirmed`, bloqueando paquetes recibidos/rutas asignadas, auditando `shipment.cancelled` y cubriendo la máquina de estados con Vitest (107 pruebas aprobadas, 2 Shopify omitidas).
 - [x] Completar módulo Super Admin global para listar organizaciones y actualizar su estado con autorización global, persistencia, auditoría y UI real; `pnpm check` y 107 pruebas Vitest aprobadas (2 Shopify omitidas).
 - [x] Añadir destinos de webhook por organización y mecanismo de entrega firmado con hasta tres intentos, timeout de 10 s, secreto AES-GCM y auditoría; migración 0022 aplicada, 107 pruebas aprobadas y build correcta. Shipment, tracking, entrega e incidentes ya disparan eventos automáticamente.
+- [x] Añadir helper/query tRPC protegida para listar `webhook_deliveries` por organización con filtros básicos de endpoint, evento y estado.
+- [x] Crear panel admin para verificar intentos, estado final, `responseStatus`, errores, hash y timestamps de entregas webhook sin exponer secretos.
+- [x] Agregar prueba Vitest de rechazo sin autenticación para la consulta de entregas webhook; el helper aplica filtro por organización activa.

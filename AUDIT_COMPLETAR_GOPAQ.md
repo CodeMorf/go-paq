@@ -18,7 +18,7 @@ No se encontraron indicios de que deban crearse tablas duplicadas. El esquema ac
 | Driver | Parcialmente funcional | Rutas asignadas, inicio/cierre de turno, paradas, escaneo protegido, GPS limitado a ruta `active`, entrega/POD, incidencias y cola offline cifrada | Faltan disponibilidad formal, gastos, conciliación visual autenticada y prueba real con cámara |
 | Sucursal | Parcialmente funcional | Pickups, recepción/escaneo con cámara y fallback manual, almacén, paquetes, separación, reempaque, inventario, rutas, manifiestos, incidencias, finanzas y servicios especiales | Faltan fotos/etiquetas imprimibles, transferencias E2E y flujo autenticado completo |
 | Super Admin | Parcialmente funcional | Perfil tenant, API keys, auditoría, rutas, paneles operativos y módulo global de organizaciones con cambio de estado protegido por rol `admin` | Faltan planes, límites, usuarios globales, vehículos, integraciones y validación autenticada |
-| API REST | Implementada parcialmente | Quotes, shipments, pickups y tracking con API key, scope, tenant isolation, rate limit, idempotencia, hash canónico, `X-Request-Id`, logs de requests, destinos HTTPS webhook por organización, firma HMAC, hasta tres intentos y rechazo de tarifa ausente | Falta emisión automática desde eventos de dominio, cola de reintentos fuera de request y documentos REST |
+| API REST | Implementada parcialmente | Quotes, shipments, pickups y tracking con API key, scope, tenant isolation, rate limit, idempotencia, hash canónico, `X-Request-Id`, logs de requests, destinos HTTPS webhook por organización, firma HMAC, hasta tres intentos y emisión automática desde eventos operativos | Falta cola de reintentos fuera de request, contrato REST de webhooks y documentos REST |
 | Tenancy | Parcialmente reforzado | Helpers derivan la organización del contexto; `memberships.list/updateScope` muestra y valida branch/warehouse; permisos y ownership de rutas aplican scope activo | Falta una batería completa cross-tenant sobre base limpia y pruebas autenticadas del panel |
 | Tarifas | Implementadas con límites | Catálogo server-side versionado con zonas, vigencia, divisor volumétrico, recargo, combustible, descuento, impuesto y moneda; REST y `quote.preview` rechazan tarifa ausente | Faltan pruebas de producción con catálogo real y validación visual admin autenticada |
 | Offline | Implementada | AES-GCM, idempotencia, recuperación, conflictos, rechazo y límite de capacidad | Falta E2E con servidor real y pruebas móviles autenticadas |
@@ -44,7 +44,7 @@ No se ejecutó una prueba E2E autenticada completa del flujo `Cliente → cotiza
 
 ## Prioridad de implementación
 
-La siguiente prioridad técnica debe ser completar los módulos globales Super Admin restantes, el dispatch outbound de webhooks con destinos persistentes y reintentos, además de la validación visual/E2E autenticada. Ya existen cancelación comercial tenant-scoped, `approve` para servicios especiales, `refund` financiero, exportaciones protegidas, tarifas server-side, compra asistida, separación/reempaque, idempotencia REST, request IDs, logs y ownership de rutas Driver. Persisten la configuración de Redis TLS/OAuth/storage/mapas y la aceptación con datos reales.
+La siguiente prioridad técnica debe ser completar los módulos globales Super Admin restantes, la cola externa de reintentos webhook y el contrato REST de webhooks, además de la validación visual/E2E autenticada. Ya existen cancelación comercial tenant-scoped, `approve` para servicios especiales, `refund` financiero, exportaciones protegidas, tarifas server-side, compra asistida, separación/reempaque, idempotencia REST, request IDs, logs y ownership de rutas Driver. Persisten la configuración de Redis TLS/OAuth/storage/mapas y la aceptación con datos reales.
 
 ## Dependencias externas
 
@@ -93,7 +93,7 @@ Se amplió `tariffEngine.test.ts` para comprobar divisor volumétrico configurab
 
 ## Verificación adicional de webhooks
 
-La firma HMAC de `webhook.ts` ahora queda cubierta por casos de payload alterado, replay fuera de tolerancia y formato malformado, usando comparación temporal segura. Esto valida la primitiva criptográfica existente, pero no se presenta como dispatch outbound: todavía falta configurar endpoints por organización, reintentos y entrega auditable sin un servicio de cola real.
+La firma HMAC de `webhook.ts` queda cubierta por payload alterado, replay fuera de tolerancia y formato malformado, usando comparación temporal segura. Además, la migración 0022, el panel admin y el dispatcher cubren endpoints HTTPS por organización, secreto cifrado, reintentos en request y entregas auditables; la cola externa de reintentos y el contrato REST siguen pendientes.
 
 ## KPI operativo adicional
 

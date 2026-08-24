@@ -1308,3 +1308,14 @@ export async function dispatchWebhookForUser(userId: number, input: { endpointId
   await db.update(webhookDeliveries).set({ status: delivered ? "delivered" : "exhausted", attempts: attemptCount, responseStatus: result?.status ?? null, lastError: delivered ? null : lastError, deliveredAt: delivered ? new Date() : null }).where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.organizationId, scope.organization.id)));
   return { deliveryId, status: delivered ? "delivered" : "exhausted", responseStatus: result?.status ?? null } as const;
 }
+
+
+export async function listWebhookDeliveriesForUser(userId: number, filters?: { endpointId?: number; eventType?: string; status?: "pending" | "delivered" | "failed" | "exhausted" }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  const conditions = [eq(webhookDeliveries.organizationId, scope.organization.id)];
+  if (filters?.endpointId) conditions.push(eq(webhookDeliveries.endpointId, filters.endpointId));
+  if (filters?.eventType) conditions.push(eq(webhookDeliveries.eventType, filters.eventType));
+  if (filters?.status) conditions.push(eq(webhookDeliveries.status, filters.status));
+  return db.select({ id: webhookDeliveries.id, organizationId: webhookDeliveries.organizationId, endpointId: webhookDeliveries.endpointId, eventType: webhookDeliveries.eventType, payloadHash: webhookDeliveries.payloadHash, status: webhookDeliveries.status, attempts: webhookDeliveries.attempts, responseStatus: webhookDeliveries.responseStatus, lastError: webhookDeliveries.lastError, nextAttemptAt: webhookDeliveries.nextAttemptAt, deliveredAt: webhookDeliveries.deliveredAt, createdAt: webhookDeliveries.createdAt, updatedAt: webhookDeliveries.updatedAt }).from(webhookDeliveries).where(and(...conditions)).orderBy(desc(webhookDeliveries.createdAt)).limit(200);
+}

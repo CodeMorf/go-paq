@@ -11,4 +11,9 @@ describe("super admin router", () => {
     const caller = appRouter.createCaller({ user: null } as never);
     await expect(caller.superAdmin.updateOrganizationStatus({ organizationId: 1, status: "active" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
+
+  it("rejects webhook delivery verification without authentication", async () => {
+    const caller = appRouter.createCaller({ user: null } as never);
+    await expect(caller.webhooks.deliveries({ status: "delivered" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
 });
