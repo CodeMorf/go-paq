@@ -70,3 +70,7 @@ La API pública de envíos y recogidas ahora requiere `Idempotency-Key` de 8 a 1
 
 Todas las rutas REST documentadas exponen `requestId` en el cuerpo y `X-Request-Id` en headers. Las pruebas de contrato cubren clave ausente, creación, replay, conflicto, liberación en error y trazabilidad. La validación observada queda en **99 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance, con TypeScript correcto; el hash se calcula con serialización canónica recursiva para evitar conflictos falsos por orden de propiedades. La build completa anterior fue correcta y debe repetirse en el siguiente checkpoint si se modifican dependencias de producción.
 
+
+## Nota de compatibilidad TiDB — audit_logs
+
+Se evaluó reforzar `audit_logs` con triggers `BEFORE UPDATE` y `BEFORE DELETE` en una migración 0021. La base TiDB conectada rechazó `CREATE TRIGGER` con `ERROR 1064`; la migración experimental fue retirada y no se dejó un artefacto desplegable incompatible. Por tanto, el estado actual es **append-only a nivel de aplicación**: no hay rutas de aplicación para actualizar o borrar auditoría, pero la garantía de inmutabilidad a nivel de motor sigue pendiente de una estrategia compatible con TiDB, como control de privilegios del usuario de base de datos, tabla de archivo administrada externamente o hash-chain transaccional.

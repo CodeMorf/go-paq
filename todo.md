@@ -9,21 +9,21 @@
 
 ## Multi-azienda, filiali e accesso
 
-- [ ] Estendere lo schema dati con organizzazioni, filiali, sedi, magazzini, utenti organizzativi e appartenenze.
-- [ ] Implementare ruoli e permessi granulari per visualizzare, creare, modificare, approvare, assegnare, incassare, rimborsare, esportare e configurare.
+- [x] Estendere lo schema dati con organizzazioni, filiali, sedi, magazzini, utenti organizzativi e appartenenze.
+- [x] Implementare ruoli e permessi granulari per visualizzare, creare, modificare, approvare, assegnare, incassare, rimborsare, esportare e configurare.
 - [ ] Applicare isolamento organizzativo a query e mutation tramite contesto autenticato.
-- [ ] Implementare profilo aziendale, configurazione regionale, lingua, valuta, fuso orario e servizi attivi.
+- [x] Implementare profilo aziendale, configurazione regionale, lingua, valuta, fuso orario e servizi attivi.
 - [ ] Implementare audit log immutabile per azioni operative, finanziarie, di sicurezza e agente LLM.
 
 ## Nucleo logistico
 
 - [x] Creare modello spedizione/ordine con riferimenti mittente, destinatario, servizio e organizzazione.
 - [x] Creare modello pacco con peso reale, peso volumetrico, dimensioni, contenuto, valore, restrizioni e stato.
-- [ ] Implementare pickup, tentativi, finestre horarie, assegnazioni, route stop e manifest.
+- [x] Implementare pickup, tentativi, finestre horarie, assegnazioni, route stop e manifest.
 - [ ] Implementare flusso locale, nazionale e internazionale con origine, destinazione, dogana e documenti.
-- [ ] Implementare consolidamento, separazione, reimballaggio, trasferimenti tra filiali e ubicazioni di magazzino.
-- [ ] Implementare macchina degli stati separata per commerciale, fisico, trasporto, finanziario, acquisto assistito e incidenti.
-- [ ] Implementare timeline di eventi con attore, timestamp UTC, filiale, posizione, motivo, evidenza e origine.
+- [x] Implementare consolidamento, separazione, reimballaggio, trasferimenti tra filiali e ubicaciones de almacén.
+- [x] Implementare macchina degli stati separata per commerciale, fisico, trasporto, finanziario, acquisto assistito e incidenti.
+- [x] Implementare timeline di eventi con attore, timestamp UTC, filiale, posizione, motivo, evidenza e origine.
 - [x] Implementare motore tariffe versionado con peso, volume, distanza, zona, servicio, supplementi, tasse, sconti e valuta; schema 0015, catálogo admin y lookup REST server-side.
 
 ## Portale `/admin`
@@ -354,3 +354,5 @@
 - [x] Añadir `api_idempotency_keys` con clave única tenant-scoped por organización, API key y operación; migración 0020 aplicada sin cambios destructivos.
 - [x] Endurecer REST de envíos y pickups con `Idempotency-Key` obligatorio, hash de payload, replay seguro, conflicto 409, liberación en errores y `X-Request-Id` correlacionable.
 - [x] Actualizar `/docs-api` con headers, scopes, request IDs, idempotencia y errores uniformes; ampliar pruebas REST/migración hasta 99 aprobadas y 2 Shopify omitidas.
+- [ ] Endurecer `audit_logs` a nivel de base de datos con una estrategia compatible con TiDB; la migración experimental de triggers 0021 fue retirada porque TiDB devolvió `ERROR 1064` al no soportar `CREATE TRIGGER`.
+- [x] Confirmar que no existen rutas de aplicación `UPDATE`/`DELETE` sobre `audit_logs`; el append-only actual queda documentado como enforcement de aplicación, no como garantía de motor.
