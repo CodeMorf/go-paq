@@ -306,3 +306,4 @@
 - [x] Añadir `reason` explícito a shipment_events y al contrato tRPC appendEvent, preservando actor, sucursal, posición, evidencia, origen e idempotencia.
 - [x] Validar `branchId` de appendEvent contra la organización activa y conservar actor, posición, evidencia, motivo, origen e idempotencia.
 - [x] Añadir al formulario de pickup del cliente ventana horaria opcional desde/hasta, validación de orden y serialización UTC compatible con el esquema real.
+- [x] Exponer mutation protegida para actualizar sucursal y almacén de una membership, validando pertenencia a la organización activa y generando auditoría de seguridad.

@@ -540,6 +540,18 @@ export async function appendShipmentEvent(input: typeof shipmentEvents.$inferIns
   return true;
 }
 
+export async function updateMembershipScopeForUser(userId: number, input: { membershipId: number; branchId?: number | null; warehouseId?: number | null }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const membership = await db.select({ id: memberships.id }).from(memberships).where(and(eq(memberships.id, input.membershipId), eq(memberships.organizationId, scope.organization.id))).limit(1);
+  if (!membership[0]) return null;
+  if (input.branchId !== undefined && !(await branchBelongsToOrganization(db, scope.organization.id, input.branchId ?? undefined))) return null;
+  if (input.warehouseId !== undefined && !(await warehouseBelongsToOrganization(db, scope.organization.id, input.warehouseId ?? undefined))) return null;
+  await db.update(memberships).set({ branchId: input.branchId === undefined ? undefined : input.branchId, warehouseId: input.warehouseId === undefined ? undefined : input.warehouseId }).where(and(eq(memberships.id, input.membershipId), eq(memberships.organizationId, scope.organization.id)));
+  const rows = await db.select().from(memberships).where(and(eq(memberships.id, input.membershipId), eq(memberships.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
+}
+
 export async function listBranchesForUser(userId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];

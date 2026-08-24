@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { addPackageToConsolidationForUser, advanceConsolidationForUser, advanceManifestForUser, createIncidentForUser, appendAuditLog, collectPaymentForUser, createShipmentServiceForUser, closeCashSessionForUser, issueInvoiceForUser, appendShipmentEvent, canUser, assignRouteForUser, createApiKeyForUser, createConsolidationForUser, createManifestForUser, createPickupForUser, createRouteForUser, createRouteStopForUser, createShipmentForUser, createPackageForUser, createWarehouseForUser, confirmShipmentDeliveryForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listBranchesForUser, listConsolidationsForUser, listDriversForUser, listIncidentsForUser, listInventoryMovementsForUser, listPackagesForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, listWarehousesForUser, listDeliveryAttemptsForUser, listCashSessionsForUser, listInvoicesForUser, listPaymentsForUser, listShipmentServicesForUser, recordDeliveryAttemptForUser, recordInventoryMovementForUser, recordTrackingPoint, revokeApiKeyForUser, resolveIncidentForUser, scanPackageForUser, updateRouteStopForUser, openCashSessionForUser, updateShipmentForUser, updateShipmentServiceForUser, updatePackageForUser, updateWarehouseForUser, updateOrganizationProfileForUser, uploadShipmentDocumentForUser } from "./db";
+import { addPackageToConsolidationForUser, advanceConsolidationForUser, advanceManifestForUser, createIncidentForUser, appendAuditLog, collectPaymentForUser, createShipmentServiceForUser, closeCashSessionForUser, issueInvoiceForUser, appendShipmentEvent, canUser, assignRouteForUser, createApiKeyForUser, createConsolidationForUser, createManifestForUser, createPickupForUser, createRouteForUser, createRouteStopForUser, createShipmentForUser, createPackageForUser, createWarehouseForUser, confirmShipmentDeliveryForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listBranchesForUser, listConsolidationsForUser, listDriversForUser, listIncidentsForUser, listInventoryMovementsForUser, listPackagesForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, listWarehousesForUser, listDeliveryAttemptsForUser, listCashSessionsForUser, listInvoicesForUser, listPaymentsForUser, listShipmentServicesForUser, recordDeliveryAttemptForUser, recordInventoryMovementForUser, recordTrackingPoint, revokeApiKeyForUser, resolveIncidentForUser, scanPackageForUser, updateRouteStopForUser, openCashSessionForUser, updateShipmentForUser, updateShipmentServiceForUser, updatePackageForUser, updateWarehouseForUser, updateMembershipScopeForUser, updateOrganizationProfileForUser, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -19,6 +19,16 @@ export const appRouter = router({
       const result = await updateOrganizationProfileForUser(ctx.user.id, input);
       if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "No hay una organización activa" });
       await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "security", action: "organization.profile.updated", resourceType: "organization", resourceId: String(scope.organization.id), metadata: input });
+      return result;
+    }),
+  }),
+  memberships: router({
+    updateScope: protectedProcedure.input(z.object({ membershipId: z.number().int().positive(), branchId: z.number().int().positive().nullable().optional(), warehouseId: z.number().int().positive().nullable().optional() })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "organization", "configure"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de configuración de membresías no disponible" });
+      const result = await updateMembershipScopeForUser(ctx.user.id, input);
+      if (!result) throw new TRPCError({ code: "BAD_REQUEST", message: "La membresía, sucursal o almacén no pertenece a la organización activa" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "security", action: "membership.scope.updated", resourceType: "membership", resourceId: String(result.id), metadata: { branchId: result.branchId, warehouseId: result.warehouseId } });
       return result;
     }),
   }),
