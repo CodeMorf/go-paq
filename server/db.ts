@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentEvents, shipments, users } from "../drizzle/schema";
+import { InsertUser, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -104,4 +104,20 @@ export async function listRouteStopsForUser(userId: number, routeId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];
   return db.select().from(routeStops).where(and(eq(routeStops.organizationId, scope.organization.id), eq(routeStops.routeId, routeId))).orderBy(routeStops.sequence);
+}
+
+export async function recordTrackingPoint(userId: number, input: Omit<typeof trackingPoints.$inferInsert, "organizationId" | "driverUserId">) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  await db.insert(trackingPoints).values({ ...input, organizationId: scope.organization.id, driverUserId: userId });
+  return { success: true } as const;
+}
+
+export async function listTrackingPointsForUser(userId: number, shipmentId?: number, routeId?: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  const filters = [eq(trackingPoints.organizationId, scope.organization.id)];
+  if (shipmentId) filters.push(eq(trackingPoints.shipmentId, shipmentId));
+  if (routeId) filters.push(eq(trackingPoints.routeId, routeId));
+  return db.select().from(trackingPoints).where(and(...filters)).orderBy(desc(trackingPoints.capturedAt)).limit(500);
 }

@@ -113,6 +113,31 @@ export const shipmentEvents = mysqlTable("shipment_events", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const shipmentDocuments = mysqlTable("shipment_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId").notNull(),
+  documentType: mysqlEnum("documentType", ["label", "invoice", "customs", "pod", "incident", "receipt"]).notNull(),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  fileUrl: text("fileUrl").notNull(),
+  mimeType: varchar("mimeType", { length: 120 }).notNull(),
+  uploadedBy: int("uploadedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const trackingPoints = mysqlTable("tracking_points", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId"),
+  routeId: int("routeId"),
+  driverUserId: int("driverUserId"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  accuracyMeters: decimal("accuracyMeters", { precision: 8, scale: 2 }),
+  capturedAt: timestamp("capturedAt").notNull(),
+  source: mysqlEnum("source", ["driver", "branch", "system"]).notNull().default("driver"),
+});
+
 export const pickups = mysqlTable("pickups", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId").notNull(),
@@ -227,3 +252,5 @@ export type Route = typeof routes.$inferSelect;
 export type RouteStop = typeof routeStops.$inferSelect;
 export type Manifest = typeof manifests.$inferSelect;
 export type Tariff = typeof tariffs.$inferSelect;
+export type ShipmentDocument = typeof shipmentDocuments.$inferSelect;
+export type TrackingPoint = typeof trackingPoints.$inferSelect;

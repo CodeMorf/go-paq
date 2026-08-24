@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, appendShipmentEvent, canUser, createPickupForUser, getOrganizationForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser } from "./db";
+import { appendAuditLog, appendShipmentEvent, canUser, createPickupForUser, getOrganizationForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -73,6 +73,14 @@ export const appRouter = router({
       }
       await appendAuditLog({ organizationId: scope?.organization.id, actorUserId: ctx.user.id, category: "llm", action: "agent.suggestion.created", resourceType: "agent", metadata: { ...suggestion, sensitive: suggestion.sensitive, approved: false } });
       return suggestion;
+    }),
+  }),
+  gps: router({
+    points: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), routeId: z.number().int().positive().optional() })).query(({ ctx, input }) => listTrackingPointsForUser(ctx.user.id, input.shipmentId, input.routeId)),
+    record: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), routeId: z.number().int().positive().optional(), latitude: z.number().gte(-90).lte(90), longitude: z.number().gte(-180).lte(180), accuracyMeters: z.number().nonnegative().optional(), capturedAt: z.date(), source: z.enum(["driver", "branch", "system"]).default("driver") })).mutation(async ({ ctx, input }) => {
+      const result = await recordTrackingPoint(ctx.user.id, { ...input, latitude: String(input.latitude), longitude: String(input.longitude), accuracyMeters: input.accuracyMeters === undefined ? undefined : String(input.accuracyMeters) });
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      return result;
     }),
   }),
   quote: router({
