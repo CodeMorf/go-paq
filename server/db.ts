@@ -535,6 +535,7 @@ export async function appendShipmentEvent(input: typeof shipmentEvents.$inferIns
   if (!db) return false;
   const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, input.organizationId))).limit(1);
   if (!shipment[0]) return false;
+  if (!(await branchBelongsToOrganization(db, input.organizationId, input.branchId ?? undefined))) return false;
   await db.insert(shipmentEvents).values(input);
   return true;
 }

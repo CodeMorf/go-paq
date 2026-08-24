@@ -19,12 +19,12 @@
 
 - [x] Creare modello spedizione/ordine con riferimenti mittente, destinatario, servizio e organizzazione.
 - [x] Creare modello pacco con peso reale, peso volumetrico, dimensioni, contenuto, valore, restrizioni e stato.
-- [ ] Implementare pickup, tentativi, finestre orarie, assegnazioni, route stop e manifest.
+- [ ] Implementare pickup, tentativi, finestre horarie, assegnazioni, route stop e manifest.
 - [ ] Implementare flusso locale, nazionale e internazionale con origine, destinazione, dogana e documenti.
 - [ ] Implementare consolidamento, separazione, reimballaggio, trasferimenti tra filiali e ubicazioni di magazzino.
 - [ ] Implementare macchina degli stati separata per commerciale, fisico, trasporto, finanziario, acquisto assistito e incidenti.
 - [ ] Implementare timeline di eventi con attore, timestamp UTC, filiale, posizione, motivo, evidenza e origine.
-- [ ] Implementare motore tariffe versionato con peso, volume, distanza, zona, servizio, supplementi, tasse, sconti e valuta.
+- [ ] Implementare motore tariffe versionado con peso, volume, distanza, zona, servicio, supplementi, tasse, sconti e valuta.
 
 ## Portale `/admin`
 
@@ -49,7 +49,7 @@
 - [ ] Costruire scansione carico, elenco fermate, priorità, navigazione e contatto protetto.
 - [ ] Costruire aggiornamenti di stato pickup/consegna con PIN, firma, nome, foto, coordinate e timestamp.
 - [ ] Costruire gestione tentativo fallito, motivo, evidenze, incassi, spese e chiusura rotta.
-- [ ] Implementare coda offline locale cifrata con idempotenza, stati sincronizzato/in attesa/conflitto/rifiutato.
+- [x] Implementare coda offline locale cifrata con idempotenza, stati sincronizado/en espera/conflicto/rechazado.
 - [ ] Limitare la raccolta GPS alla sessione di turno/rotta attiva e rendere visibile il consenso/policy.
 
 ## Portale `/cliente` e sito pubblico
@@ -300,3 +300,8 @@
 - [x] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
 - [x] Reemplazar las clases de color restantes de Home/docs (`text-slate-*`, `bg-orange-*`, `bg-slate-*` y bordes) por tokens semánticos o clases de marca basadas en variables CSS.
 - [x] Ejecutar una pasada final de contraste claro/oscuro en landing/docs y documentar que no quedan colores hardcodeados fuera de acentos deliberados de marca.
+- [ ] Completar y probar relaciones usuario↔sede/magazzino y enforcement granular de approve, refund, export y action-level.
+- [ ] Ampliar dominio logístico con ventanas horarias de pickup, separación/reempaque, estados de compra asistida y campos completos de timeline (actor, sucursal, posición, motivo y evidencia).
+- [ ] Documentar y testear el motor tarifario versionado completo y el estado offline persistente `rejected`.
+- [x] Añadir `reason` explícito a shipment_events y al contrato tRPC appendEvent, preservando actor, sucursal, posición, evidencia, origen e idempotencia.
+- [x] Validar `branchId` de appendEvent contra la organización activa y conservar actor, posición, evidencia, motivo, origen e idempotencia.

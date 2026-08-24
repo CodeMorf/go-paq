@@ -123,6 +123,7 @@ export const shipmentEvents = mysqlTable("shipment_events", {
   previousStatus: varchar("previousStatus", { length: 80 }),
   nextStatus: varchar("nextStatus", { length: 80 }),
   note: text("note"),
+  reason: text("reason"),
   evidenceUrl: text("evidenceUrl"),
   latitude: decimal("latitude", { precision: 10, scale: 7 }),
   longitude: decimal("longitude", { precision: 10, scale: 7 }),
