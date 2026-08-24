@@ -24,7 +24,7 @@
 - [ ] Implementare consolidamento, separazione, reimballaggio, trasferimenti tra filiali e ubicazioni di magazzino.
 - [ ] Implementare macchina degli stati separata per commerciale, fisico, trasporto, finanziario, acquisto assistito e incidenti.
 - [ ] Implementare timeline di eventi con attore, timestamp UTC, filiale, posizione, motivo, evidenza e origine.
-- [ ] Implementare motore tariffe versionado con peso, volume, distanza, zona, servicio, supplementi, tasse, sconti e valuta.
+- [x] Implementare motore tariffe versionado con peso, volume, distanza, zona, servicio, supplementi, tasse, sconti e valuta; schema 0015, catálogo admin y lookup REST server-side.
 
 ## Portale `/admin`
 
@@ -110,7 +110,7 @@
 
 - [ ] Aggiungere lingua e servizi attivi dell’organizzazione con query e UI di profilo.
 - [ ] Estendere i pacchi con restrizioni e stato del pacco.
-- [ ] Introdurre stati separati per acquisto assistito e incidenti con transizioni validate lato backend.
+- [x] Introdurre stati separati per acquisto assistito e incidenti con transiciones validadas lato backend; estados de compra asistida ampliados en migración 0014 y cubiertos con Vitest.
 - [x] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
 - [x] Collegare utenti organizzativi a magazzini o sedi operative in modo esplicito mediante `memberships.list` y `memberships.updateScope`, con validación tenant-scoped y auditoría.
 
@@ -324,3 +324,7 @@
 - [x] Aplicar `approve` explícito a la transición `approved` de servicios especiales, dejando `edit` para las demás transiciones.
 - [x] Añadir `payments.refund` tenant-scoped con motivo obligatorio, caja abierta para efectivo, transición financiera y auditoría.
 - [x] Añadir exportaciones tenant-scoped de envíos, cobros y facturas con permiso `export` y auditoría de cada extracción.
+- [x] Ampliar `shipment_services.status` con estados de compra asistida (`awaiting_approval`, `purchasing`, `purchased`, `fulfillment`, `rejected`), aplicar migración 0014 y validar transiciones con Vitest.
+- [ ] Completar validación visual y funcional del escáner QR/código de barras con cámara en un dispositivo o navegador autenticado.
+- [x] Actualizar `quote.preview` y el cotizador autenticado/público para resolver tarifas vigentes del servidor por organización, zona y servicio en vez de `buildDopTariffInput` estático; el slug público llega por `?org=` y no se acepta `organizationId` arbitrario.
+- [x] Añadir pruebas Vitest para administración tarifaria autenticada y rechazo de `quote.preview` sin organización pública resoluble; REST conserva cobertura de tarifa ausente y selección server-side.

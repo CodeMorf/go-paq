@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
-import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
+import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
@@ -52,21 +52,65 @@ export async function getOrganizationForUser(userId: number) {
   return result[0];
 }
 
+export async function getOrganizationBySlug(slug: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(organizations).where(and(eq(organizations.slug, slug), eq(organizations.status, "active"))).limit(1);
+  return result[0];
+}
+
 export async function canUser(userId: number, organizationId: number, resource: string, action: "view" | "create" | "edit" | "approve" | "assign" | "collect" | "refund" | "export" | "configure") {
   const db = await getDb();
   if (!db) return false;
   const result = await db.select({ role: memberships.role }).from(memberships).where(and(eq(memberships.userId, userId), eq(memberships.organizationId, organizationId))).limit(1);
   if (!result[0]) return false;
-  if (result[0].role === "owner" || result[0].role === "manager") return true;
+  if (result[0].role === "owner") return true;
   const permissions = await db.select().from(rolePermissions).where(and(eq(rolePermissions.organizationId, organizationId), eq(rolePermissions.role, result[0].role), eq(rolePermissions.resource, resource), eq(rolePermissions.action, action))).limit(1);
   return Boolean(permissions[0]);
 }
 
-export async function getActiveTariffForOrganization(organizationId: number, serviceType: string) {
+export async function getActiveTariffForOrganization(organizationId: number, serviceType: string, zoneCode?: string) {
   const db = await getDb();
   if (!db) return null;
   const now = new Date();
-  const rows = await db.select().from(tariffs).where(and(eq(tariffs.organizationId, organizationId), eq(tariffs.serviceType, serviceType), eq(tariffs.isActive, true), lte(tariffs.validFrom, now), or(isNull(tariffs.validUntil), gte(tariffs.validUntil, now)))).orderBy(desc(tariffs.version), desc(tariffs.validFrom)).limit(1);
+  const common = and(eq(tariffs.organizationId, organizationId), eq(tariffs.serviceType, serviceType), eq(tariffs.isActive, true), lte(tariffs.validFrom, now), or(isNull(tariffs.validUntil), gte(tariffs.validUntil, now)));
+  if (zoneCode) {
+    const zoned = await db.select({ tariff: tariffs }).from(tariffs).innerJoin(tariffZones, eq(tariffs.zoneId, tariffZones.id)).where(and(common, eq(tariffZones.organizationId, organizationId), eq(tariffZones.code, zoneCode), eq(tariffZones.isActive, true))).orderBy(desc(tariffs.version), desc(tariffs.validFrom)).limit(1);
+    if (zoned[0]?.tariff) return zoned[0].tariff;
+  }
+  const global = await db.select().from(tariffs).where(and(common, isNull(tariffs.zoneId))).orderBy(desc(tariffs.version), desc(tariffs.validFrom)).limit(1);
+  return global[0] ?? null;
+}
+
+export async function listTariffZonesForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(tariffZones).where(eq(tariffZones.organizationId, scope.organization.id)).orderBy(desc(tariffZones.createdAt)).limit(200);
+}
+
+export async function createTariffZoneForUser(userId: number, input: { code: string; name: string; originCountry: string; destinationCountry: string; originPostalPrefix?: string; destinationPostalPrefix?: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  await db.insert(tariffZones).values({ ...input, organizationId: scope.organization.id });
+  const rows = await db.select().from(tariffZones).where(and(eq(tariffZones.organizationId, scope.organization.id), eq(tariffZones.code, input.code))).orderBy(desc(tariffZones.id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listTariffsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select({ tariff: tariffs, zone: tariffZones }).from(tariffs).leftJoin(tariffZones, eq(tariffs.zoneId, tariffZones.id)).where(eq(tariffs.organizationId, scope.organization.id)).orderBy(desc(tariffs.version), desc(tariffs.validFrom)).limit(200);
+}
+
+export async function createTariffForUser(userId: number, input: { name: string; serviceType: string; zoneId?: number; currency: string; minAmount: string; perKg: string; perKm: string; fixedSurcharge: string; fuelSurchargePct: string; discountPct: string; taxPct: string; volumetricDivisor: string; version: number; validFrom: Date; validUntil?: Date }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  if (input.zoneId !== undefined) {
+    const zone = await db.select({ id: tariffZones.id }).from(tariffZones).where(and(eq(tariffZones.id, input.zoneId), eq(tariffZones.organizationId, scope.organization.id), eq(tariffZones.isActive, true))).limit(1);
+    if (!zone[0]) return null;
+  }
+  await db.insert(tariffs).values({ ...input, organizationId: scope.organization.id });
+  const rows = await db.select().from(tariffs).where(and(eq(tariffs.organizationId, scope.organization.id), eq(tariffs.serviceType, input.serviceType), eq(tariffs.version, input.version))).orderBy(desc(tariffs.id)).limit(1);
   return rows[0] ?? null;
 }
 
@@ -403,7 +447,11 @@ export async function recordDeliveryAttemptForUser(userId: number, input: { ship
   return rows[0] ?? null;
 }
 
-const serviceTransitions: Record<string, string[]> = { requested: ["quoted", "cancelled"], quoted: ["approved", "cancelled"], approved: ["scheduled", "cancelled"], scheduled: ["in_progress", "cancelled"], in_progress: ["completed", "cancelled"], completed: [], cancelled: [] };
+const serviceTransitions: Record<string, string[]> = { requested: ["quoted", "awaiting_approval", "cancelled"], quoted: ["awaiting_approval", "approved", "rejected", "cancelled"], awaiting_approval: ["approved", "rejected", "cancelled"], approved: ["purchasing", "scheduled", "cancelled"], purchasing: ["purchased", "cancelled"], purchased: ["fulfillment", "scheduled", "cancelled"], fulfillment: ["scheduled", "in_progress", "cancelled"], scheduled: ["in_progress", "cancelled"], in_progress: ["completed", "cancelled"], completed: [], cancelled: [], rejected: [] };
+
+export function isAllowedSpecialServiceTransition(currentStatus: string, nextStatus: string) {
+  return serviceTransitions[currentStatus]?.includes(nextStatus) ?? false;
+}
 
 export async function listShipmentServicesForUser(userId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
@@ -423,12 +471,12 @@ export async function createShipmentServiceForUser(userId: number, input: { ship
   return rows[0] ?? null;
 }
 
-export async function updateShipmentServiceForUser(userId: number, serviceId: number, input: { status: "quoted" | "approved" | "scheduled" | "in_progress" | "completed" | "cancelled"; quoteReference?: string; handlingNotes?: string; scheduledAt?: Date }) {
+export async function updateShipmentServiceForUser(userId: number, serviceId: number, input: { status: "quoted" | "awaiting_approval" | "approved" | "purchasing" | "purchased" | "fulfillment" | "scheduled" | "in_progress" | "completed" | "cancelled" | "rejected"; quoteReference?: string; handlingNotes?: string; scheduledAt?: Date }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
   const current = await db.select().from(shipmentServices).where(and(eq(shipmentServices.id, serviceId), eq(shipmentServices.organizationId, scope.organization.id))).limit(1);
   if (!current[0]) return null;
-  if (!serviceTransitions[current[0].status].includes(input.status)) throw new Error("Transición de servicio especial no permitida");
+  if (!isAllowedSpecialServiceTransition(current[0].status, input.status)) throw new Error("Transición de servicio especial no permitida");
   await db.update(shipmentServices).set({ status: input.status, quoteReference: input.quoteReference, handlingNotes: input.handlingNotes, scheduledAt: input.scheduledAt }).where(and(eq(shipmentServices.id, serviceId), eq(shipmentServices.organizationId, scope.organization.id)));
   const rows = await db.select().from(shipmentServices).where(and(eq(shipmentServices.id, serviceId), eq(shipmentServices.organizationId, scope.organization.id))).limit(1);
   return rows[0] ?? null;

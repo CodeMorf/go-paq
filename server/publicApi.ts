@@ -11,7 +11,7 @@ import { hasApiScope, isSupportedApiVersion, parseApiAuthorization } from "./api
 import { calculateQuote } from "./tariffEngine";
 import { consumeApiRateLimit } from "./apiRateLimit";
 
-const quoteInput = z.object({ actualWeightKg: z.number().positive(), lengthCm: z.number().positive(), widthCm: z.number().positive(), heightCm: z.number().positive(), distanceKm: z.number().nonnegative(), serviceType: z.enum(["local", "national", "international", "assisted_purchase", "heavy_cargo", "moving"]).default("national") });
+const quoteInput = z.object({ actualWeightKg: z.number().positive(), lengthCm: z.number().positive(), widthCm: z.number().positive(), heightCm: z.number().positive(), distanceKm: z.number().nonnegative(), zoneCode: z.string().trim().min(1).max(40).optional(), serviceType: z.enum(["local", "national", "international", "assisted_purchase", "heavy_cargo", "moving"]).default("national") });
 const shipmentInput = z.object({
   branchId: z.number().int().positive().optional(),
   serviceType: z.enum(["local", "national", "international", "assisted_purchase", "heavy_cargo", "moving"]),
@@ -54,11 +54,11 @@ export function registerPublicApi(app: Application) {
     if (!rate.allowed) return res.status(429).setHeader("Retry-After", String(rate.retryAfterSeconds ?? 60)).json({ error: { code: "rate_limited", message: "Demasiados intentos; inténtalo más tarde" }, requestId: id });
     const parsed = quoteInput.safeParse(req.body);
     if (!parsed.success) return res.status(422).json({ error: { code: "validation_error", message: "Datos de cotización no válidos" }, requestId: id });
-    const tariff = await getActiveTariffForOrganization(auth.key.organizationId, parsed.data.serviceType);
+    const tariff = await getActiveTariffForOrganization(auth.key.organizationId, parsed.data.serviceType, parsed.data.zoneCode);
     if (!tariff) return res.status(409).json({ error: { code: "tariff_unavailable", message: "No existe una tarifa vigente para este servicio en la organización" }, requestId: id });
-    const resolvedTariff = { minAmount: Number(tariff.minAmount), perKg: Number(tariff.perKg), perKm: Number(tariff.perKm), fuelSurchargePct: Number(tariff.fuelSurchargePct), currency: tariff.currency };
-    const { serviceType, ...measurements } = parsed.data;
-    return res.status(200).json({ data: { ...calculateQuote({ ...measurements, ...resolvedTariff }), currency: resolvedTariff.currency, serviceType, tariffSource: "organization" }, requestId: id });
+    const resolvedTariff = { minAmount: Number(tariff.minAmount), perKg: Number(tariff.perKg), perKm: Number(tariff.perKm), fixedSurcharge: Number(tariff.fixedSurcharge ?? 0), fuelSurchargePct: Number(tariff.fuelSurchargePct ?? 0), discountPct: Number(tariff.discountPct ?? 0), taxPct: Number(tariff.taxPct ?? 0), volumetricDivisor: Number(tariff.volumetricDivisor ?? 5000), currency: tariff.currency };
+    const { serviceType, zoneCode, ...measurements } = parsed.data;
+    return res.status(200).json({ data: { ...calculateQuote({ ...measurements, ...resolvedTariff }), currency: resolvedTariff.currency, serviceType, zoneCode: zoneCode ?? null, tariffSource: "organization" }, requestId: id });
   });
 
   app.post("/api/v1/shipments", async (req: Request, res: Response) => {

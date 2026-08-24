@@ -2,7 +2,11 @@ export type TariffInput = {
   minAmount: number;
   perKg: number;
   perKm: number;
+  fixedSurcharge?: number;
   fuelSurchargePct: number;
+  discountPct?: number;
+  taxPct?: number;
+  volumetricDivisor?: number;
   actualWeightKg: number;
   lengthCm: number;
   widthCm: number;
@@ -10,10 +14,29 @@ export type TariffInput = {
   distanceKm: number;
 };
 
+const money = (value: number) => Number(value.toFixed(2));
+
 export function calculateQuote(input: TariffInput) {
-  const volumetricWeightKg = (input.lengthCm * input.widthCm * input.heightCm) / 5000;
+  const volumetricDivisor = input.volumetricDivisor && input.volumetricDivisor > 0 ? input.volumetricDivisor : 5000;
+  const volumetricWeightKg = (input.lengthCm * input.widthCm * input.heightCm) / volumetricDivisor;
   const billableWeightKg = Math.max(input.actualWeightKg, volumetricWeightKg);
-  const base = Math.max(input.minAmount, billableWeightKg * input.perKg + input.distanceKm * input.perKm);
+  const variableBase = billableWeightKg * input.perKg + input.distanceKm * input.perKm;
+  const base = Math.max(input.minAmount, variableBase) + (input.fixedSurcharge ?? 0);
   const fuelSurcharge = base * (input.fuelSurchargePct / 100);
-  return { volumetricWeightKg: Number(volumetricWeightKg.toFixed(2)), billableWeightKg: Number(billableWeightKg.toFixed(2)), base: Number(base.toFixed(2)), fuelSurcharge: Number(fuelSurcharge.toFixed(2)), total: Number((base + fuelSurcharge).toFixed(2)) };
+  const beforeDiscount = base + fuelSurcharge;
+  const discount = beforeDiscount * ((input.discountPct ?? 0) / 100);
+  const taxableSubtotal = Math.max(0, beforeDiscount - discount);
+  const tax = taxableSubtotal * ((input.taxPct ?? 0) / 100);
+  const total = taxableSubtotal + tax;
+  return {
+    volumetricWeightKg: money(volumetricWeightKg),
+    billableWeightKg: money(billableWeightKg),
+    base: money(base),
+    fuelSurcharge: money(fuelSurcharge),
+    discount: money(discount),
+    subtotal: money(taxableSubtotal),
+    tax: money(tax),
+    total: money(total),
+  };
 }
+

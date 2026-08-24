@@ -8,4 +8,14 @@ describe("calculateQuote", () => {
     expect(quote.billableWeightKg).toBe(12);
     expect(quote.total).toBe(88);
   });
+
+  it("applies fixed surcharge, discount and tax in the declared order", () => {
+    const quote = calculateQuote({ minAmount: 100, perKg: 10, perKm: 0, fixedSurcharge: 20, fuelSurchargePct: 10, discountPct: 10, taxPct: 18, actualWeightKg: 5, lengthCm: 10, widthCm: 10, heightCm: 10, distanceKm: 0 });
+    expect(quote.base).toBe(120);
+    expect(quote.fuelSurcharge).toBe(12);
+    expect(quote.discount).toBe(13.2);
+    expect(quote.subtotal).toBe(118.8);
+    expect(quote.tax).toBe(21.38);
+    expect(quote.total).toBe(140.18);
+  });
 });

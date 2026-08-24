@@ -52,7 +52,7 @@ describe("REST API pública", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authMock.mockResolvedValue({ id: 7, organizationId: 42, scopes: '["quotes:read","shipments:write","pickups:write","tracking:read"]' } as never);
-    tariffMock.mockResolvedValue({ minAmount: "100", perKg: "10", perKm: "2", fuelSurchargePct: "0", currency: "DOP" } as never);
+    tariffMock.mockResolvedValue({ minAmount: "100", perKg: "10", perKm: "2", fixedSurcharge: "0", fuelSurchargePct: "0", discountPct: "0", taxPct: "0", volumetricDivisor: "5000", currency: "DOP" } as never);
     shipmentMock.mockResolvedValue({ id: 11, organizationId: 42, trackingCode: "GPQ-TEST" } as never);
     pickupMock.mockResolvedValue({ id: 12, organizationId: 42, status: "requested" } as never);
     trackingMock.mockResolvedValue({ id: 11, organizationId: 42, trackingCode: "GPQ-TEST", commercialStatus: "created" } as never);
@@ -62,7 +62,7 @@ describe("REST API pública", () => {
     const response = makeResponse();
     await makeHandler("post", "/api/v1/quotes")(request({ actualWeightKg: 2, lengthCm: 10, widthCm: 10, heightCm: 10, distanceKm: 5, serviceType: "national", minAmount: 0, perKg: 0, perKm: 0, fuelSurchargePct: 100 }), response);
     expect(response.statusCode).toBe(200);
-    expect(tariffMock).toHaveBeenCalledWith(42, "national");
+    expect(tariffMock).toHaveBeenCalledWith(42, "national", undefined);
     expect(response.body).toMatchObject({ data: { base: 100, fuelSurcharge: 0, total: 100, currency: "DOP", serviceType: "national", tariffSource: "organization" } });
   });
 

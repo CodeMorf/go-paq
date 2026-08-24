@@ -26,7 +26,7 @@ No se encontraron indicios de que deban crearse tablas duplicadas. El esquema ac
 
 ## Esquema y migraciones
 
-El esquema fuente se encuentra en `drizzle/schema.ts`. La cadena de migraciones versionada está en `drizzle/0000_*.sql` hasta `drizzle/0013_*.sql`, con snapshots y journal en `drizzle/meta/`. El repositorio también conserva un script de verificación de schema limpio. No se aplica ninguna migración destructiva durante esta auditoría.
+El esquema fuente se encuentra en `drizzle/schema.ts`. La cadena de migraciones versionada está en `drizzle/0000_*.sql` hasta `drizzle/0014_*.sql`, con snapshots y journal en `drizzle/meta/`. El repositorio también conserva un script de verificación de schema limpio. No se aplica ninguna migración destructiva durante esta auditoría.
 
 La configuración documenta que una instalación limpia fue comprobada con 29 tablas. `PRODUCTION_READINESS.md` contenía una referencia histórica a 18 tablas; debe mantenerse alineada con la cifra actual de 29 para evitar evidencia contradictoria.
 
@@ -38,13 +38,13 @@ Las rutas React están registradas para `/`, `/admin`, `/sucursal`, `/driver`, `
 
 ## Pruebas ejecutadas durante la auditoría
 
-Se ejecutaron `pnpm exec tsc --noEmit`, `pnpm test -- --run` y `pnpm build`. El resultado observado fue TypeScript sin errores, **68 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
+Se ejecutaron `pnpm exec tsc --noEmit`, `pnpm test -- --run` y `pnpm build`. El resultado observado fue TypeScript sin errores, **73 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
 
 No se ejecutó una prueba E2E autenticada completa del flujo `Cliente → cotización → envío → pickup → sucursal → almacén → manifiesto → driver → entrega → POD → tracking → documento → cobro`, porque requiere una sesión OAuth y datos/credenciales de infraestructura apropiados. Por tanto, ese flujo permanece pendiente y no se declara aprobado.
 
 ## Prioridad de implementación
 
-La siguiente prioridad técnica debe ser cerrar permisos sensibles (`approve`, `refund`, `export`), crear la interfaz administrativa de memberships, completar recepción/separación/reempaque y terminar el ciclo financiero de devoluciones. Después deben cerrarse request IDs/idempotencia REST/webhooks, pruebas E2E autenticadas y la configuración de Redis TLS/OAuth/storage/mapas.
+La siguiente prioridad técnica debe ser completar la cobertura de permisos sensibles en todos los routers, cerrar recepción/separación/reempaque, terminar el ciclo financiero de devoluciones y validar visualmente con sesión autenticada las superficies de memberships y finanzas. Ya existen `approve` para servicios especiales, `refund` financiero y exportaciones protegidas para envíos/cobros/facturas. Después deben cerrarse request IDs/idempotencia REST/webhooks, pruebas E2E autenticadas y la configuración de Redis TLS/OAuth/storage/mapas.
 
 ## Dependencias externas
 

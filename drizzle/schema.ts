@@ -107,7 +107,7 @@ export const shipmentServices = mysqlTable("shipment_services", {
   requiresSpecialVehicle: boolean("requiresSpecialVehicle").notNull().default(false),
   crewSize: int("crewSize").notNull().default(1),
   vehicleType: varchar("vehicleType", { length: 100 }),
-  status: mysqlEnum("status", ["requested", "quoted", "approved", "scheduled", "in_progress", "completed", "cancelled"]).notNull().default("requested"),
+  status: mysqlEnum("status", ["requested", "quoted", "awaiting_approval", "approved", "purchasing", "purchased", "fulfillment", "scheduled", "in_progress", "completed", "cancelled", "rejected"]).notNull().default("requested"),
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -220,16 +220,34 @@ export const manifests = mysqlTable("manifests", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const tariffZones = mysqlTable("tariff_zones", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  code: varchar("code", { length: 40 }).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  originCountry: varchar("originCountry", { length: 80 }).notNull().default("DO"),
+  destinationCountry: varchar("destinationCountry", { length: 80 }).notNull().default("DO"),
+  originPostalPrefix: varchar("originPostalPrefix", { length: 20 }),
+  destinationPostalPrefix: varchar("destinationPostalPrefix", { length: 20 }),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const tariffs = mysqlTable("tariffs", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId").notNull(),
   name: varchar("name", { length: 160 }).notNull(),
   serviceType: varchar("serviceType", { length: 48 }).notNull(),
+  zoneId: int("zoneId"),
   currency: varchar("currency", { length: 8 }).notNull().default("DOP"),
   minAmount: decimal("minAmount", { precision: 12, scale: 2 }).notNull().default("0"),
   perKg: decimal("perKg", { precision: 12, scale: 2 }).notNull().default("0"),
   perKm: decimal("perKm", { precision: 12, scale: 2 }).notNull().default("0"),
+  fixedSurcharge: decimal("fixedSurcharge", { precision: 12, scale: 2 }).notNull().default("0"),
   fuelSurchargePct: decimal("fuelSurchargePct", { precision: 6, scale: 3 }).notNull().default("0"),
+  discountPct: decimal("discountPct", { precision: 6, scale: 3 }).notNull().default("0"),
+  taxPct: decimal("taxPct", { precision: 6, scale: 3 }).notNull().default("0"),
+  volumetricDivisor: decimal("volumetricDivisor", { precision: 10, scale: 2 }).notNull().default("5000"),
   version: int("version").notNull().default(1),
   validFrom: timestamp("validFrom").defaultNow().notNull(),
   validUntil: timestamp("validUntil"),
@@ -418,6 +436,7 @@ export type Pickup = typeof pickups.$inferSelect;
 export type Route = typeof routes.$inferSelect;
 export type RouteStop = typeof routeStops.$inferSelect;
 export type Manifest = typeof manifests.$inferSelect;
+export type TariffZone = typeof tariffZones.$inferSelect;
 export type Tariff = typeof tariffs.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type ShipmentDocument = typeof shipmentDocuments.$inferSelect;

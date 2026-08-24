@@ -23,3 +23,9 @@ La revisión no certifica `/admin`, `/sucursal`, `/driver` ni `/cliente` autenti
 ## Segunda pasada de tokens — 24 de agosto de 2026
 
 La captura pública actual de `/` y `/docs-api` en 1280 × 720 confirma que la jerarquía y el contraste se conservan tras sustituir tonos slate por tokens `gopaq-*`, `text-muted-*`, `border-border` y `bg-muted`. Los fondos oscuros, bloques de código y textos secundarios de la documentación permanecen legibles; los acentos naranja, verde y rojo se mantienen como señales semánticas deliberadas. Esta evidencia cubre superficies públicas; los cuatro portales autenticados siguen pendientes por falta de sesión OAuth de prueba.
+
+## Verificación pública del incremento tarifario — 24 de agosto de 2026
+
+Se capturaron `/` y `/docs-api` en viewport desktop 1280 × 720 y móvil 375 × 812. La landing conserva navegación y CTA visibles sin solapamientos; el hero mantiene contraste claro y el cotizador permanece dentro de la composición pública. `/docs-api` conserva la jerarquía de autenticación, endpoint de cotización y navegación responsive; el encabezado móvil se mantiene en varias filas sin desbordamiento visible.
+
+El cotizador público ahora requiere un slug de organización explícito mediante `?org=slug` para consultar una tarifa real. Sin ese contexto muestra un estado vacío honesto en vez de un importe por defecto. La verificación visual no demuestra una sesión autenticada ni dispositivos reales con cámara; `/admin`, `/sucursal`, `/driver` y `/cliente` autenticados continúan pendientes.

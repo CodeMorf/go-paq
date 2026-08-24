@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { dimensionUnits, weightUnits, type DimensionUnit, type WeightUnit } from "@/lib/units";
+import { ScanLine, X } from "lucide-react";
 
 const packageStatuses = ["expected", "received", "inspected", "stored", "dispatched", "delivered", "incident", "returned"] as const;
 const statusLabels: Record<(typeof packageStatuses)[number], string> = { expected: "Esperado", received: "Recibido", inspected: "Inspeccionado", stored: "Almacenado", dispatched: "Despachado", delivered: "Entregado", incident: "Incidencia", returned: "Devuelto" };
@@ -26,6 +27,10 @@ export default function PackageOpsPanel({ visible }: { visible: boolean }) {
   const [selectedStatus, setSelectedStatus] = useState<Record<number, string>>({});
   const [selectedLocation, setSelectedLocation] = useState<Record<number, string>>({});
   const [feedback, setFeedback] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerStatus, setScannerStatus] = useState("");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const packages = trpc.packages.list.useQuery(undefined, { enabled: visible });
   const utils = trpc.useUtils();
   const createPackage = trpc.packages.create.useMutation({
@@ -53,6 +58,29 @@ export default function PackageOpsPanel({ visible }: { visible: boolean }) {
     const next = selectedStatus[id]; const location = selectedLocation[id]?.trim();
     updatePackage.mutate({ id, status: next && next !== "keep" ? next as (typeof packageStatuses)[number] : undefined, locationCode: location || undefined });
   };
+  const stopScanner = () => { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; setScannerOpen(false); };
+  const startScanner = async () => {
+    const BarcodeDetectorCtor = (window as typeof window & { BarcodeDetector?: new (options?: { formats?: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+    if (!BarcodeDetectorCtor) { setScannerStatus("Este navegador no expone escaneo automático; introduce el código manualmente."); return; }
+    if (!navigator.mediaDevices?.getUserMedia) { setScannerStatus("Este dispositivo no permite acceso a cámara; introduce el código manualmente."); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      streamRef.current = stream; setScannerOpen(true); setScannerStatus("Apunta la cámara al QR o código de barras…");
+      requestAnimationFrame(async () => {
+        const video = videoRef.current;
+        if (!video || !streamRef.current) return;
+        video.srcObject = stream; await video.play();
+        const detector = new BarcodeDetectorCtor({ formats: ["qr_code", "code_128", "code_39", "ean_13", "ean_8", "upc_a"] });
+        const scan = async () => {
+          if (!streamRef.current || !videoRef.current) return;
+          try { const results = await detector.detect(video); const value = results.find((item) => item.rawValue)?.rawValue; if (value) { setBarcodeValue(value); setScannerStatus(`Código capturado: ${value}`); stopScanner(); return; } } catch { setScannerStatus("No se pudo leer el código; intenta de nuevo o introduce el valor manualmente."); }
+          requestAnimationFrame(() => void scan());
+        };
+        void scan();
+      });
+    } catch { setScannerStatus("No se obtuvo acceso a la cámara; verifica el permiso del navegador o introduce el valor manualmente."); }
+  };
+  useEffect(() => () => stopScanner(), []);
 
   return <Card className="mt-6 border-0 bg-white shadow-sm">
     <CardHeader><CardTitle>Recepción y almacén de paquetes</CardTitle><p className="text-sm text-slate-500">Registra medidas, escanea el código y mueve cada paquete por un estado auditable.</p></CardHeader>
@@ -63,7 +91,7 @@ export default function PackageOpsPanel({ visible }: { visible: boolean }) {
         <div><Label htmlFor="package-weight">Peso</Label><div className="mt-1 flex gap-2"><Input id="package-weight" type="number" min="0" step="0.001" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="0" className="bg-white" /><Select value={weightUnit} onValueChange={setWeightUnit}><SelectTrigger className="w-24 bg-white"><SelectValue /></SelectTrigger><SelectContent>{weightOptions.map((unit) => <SelectItem key={unit} value={unit}>{weightUnits[unit].label}</SelectItem>)}</SelectContent></Select></div></div>
         <div><Label>Dimensiones</Label><div className="mt-1 flex gap-1"><Input aria-label="Largo" type="number" min="0" step="0.01" value={length} onChange={(event) => setLength(event.target.value)} placeholder="L" className="bg-white" /><Input aria-label="Ancho" type="number" min="0" step="0.01" value={width} onChange={(event) => setWidth(event.target.value)} placeholder="A" className="bg-white" /><Input aria-label="Alto" type="number" min="0" step="0.01" value={height} onChange={(event) => setHeight(event.target.value)} placeholder="H" className="bg-white" /><Select value={dimensionUnit} onValueChange={setDimensionUnit}><SelectTrigger className="w-20 bg-white"><SelectValue /></SelectTrigger><SelectContent>{dimensionOptions.map((unit) => <SelectItem key={unit} value={unit}>{dimensionUnits[unit].label}</SelectItem>)}</SelectContent></Select></div></div>
         <div><Label htmlFor="package-location">Ubicación inicial</Label><Input id="package-location" value={locationCode} onChange={(event) => setLocationCode(event.target.value)} maxLength={80} placeholder="Ej. A-01-03" className="mt-1 bg-white" /></div>
-        <div><Label htmlFor="package-barcode">Código de barras</Label><Input id="package-barcode" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value)} maxLength={120} placeholder="Escaneo o referencia" className="mt-1 bg-white" /></div>
+        <div><Label htmlFor="package-barcode">QR / código de barras</Label><div className="mt-1 flex gap-2"><Input id="package-barcode" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value)} maxLength={120} placeholder="Escaneo o referencia" className="bg-white" /><Button type="button" variant="outline" size="icon" aria-label="Abrir escáner" onClick={() => void startScanner()}><ScanLine className="h-4 w-4" /></Button></div>{scannerStatus && <p role="status" className="mt-1 text-xs text-muted-foreground">{scannerStatus}</p>}{scannerOpen && <div className="mt-2 rounded-xl border border-border bg-slate-950 p-2"><video ref={videoRef} muted playsInline className="aspect-video w-full rounded-lg object-cover" /><Button type="button" variant="outline" className="mt-2 border-white/20 bg-transparent text-white hover:bg-white/10" onClick={stopScanner}><X className="mr-2 h-4 w-4" />Cerrar cámara</Button></div>}</div>
         <div className="flex items-end lg:col-span-2"><Button type="submit" disabled={createPackage.isPending} className="w-full">{createPackage.isPending ? "Guardando…" : "Registrar paquete"}</Button></div>
       </form>
       {feedback && <p className="text-sm text-slate-600" role="status">{feedback}</p>}
