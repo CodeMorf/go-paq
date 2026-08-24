@@ -6,7 +6,7 @@ GoPaq está preparado para ejecutarse en el hosting administrado de Manus con No
 
 ## Variables y secretos
 
-Los valores deben configurarse desde el gestor de secretos del proyecto. No se deben guardar valores reales en `.env`, en el repositorio ni en el cliente.
+Los valores deben configurarse desde el gestor de secretos del proyecto. No se deben guardar valores reales en `.env`, en el repositorio ni en el cliente. Antes de operar en producción, ejecutar `NODE_ENV=production pnpm preflight`; el comando solo informa nombres de variables faltantes o reglas incumplidas y nunca imprime valores de secretos.
 
 | Variable | Obligatoria | Uso |
 | --- | --- | --- |
