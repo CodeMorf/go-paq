@@ -348,3 +348,5 @@
 - [x] Añadir UI Cliente para perfil, direcciones, contactos autorizados y tickets con estados vacíos y errores reales.
 - [x] Añadir pruebas tRPC de autenticación y contratos de acceso para el área Cliente; la prueba cross-tenant con sesión real permanece separada del entorno sin OAuth.
 - [x] Añadir vista admin/sucursal para gestionar tickets de soporte con permisos `support_tickets:view/edit` y estados auditados.
+- [x] Añadir captura opcional de fotografía de recepción desde Sucursal con `capture="environment"`, límite server-side de 10 MB y carga a documentos `receipt` en storage seguro.
+- [x] Generar etiqueta imprimible con datos reales de envío, paquete, código QR/barra y organización.

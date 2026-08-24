@@ -58,4 +58,8 @@ El portal `/cliente` ahora incluye perfil individual/empresarial, teléfono, ide
 
 La validación más reciente observada ejecutó `pnpm check`, `pnpm test -- --run` y `pnpm build`: TypeScript sin errores, **94 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance, y build de producción correcto. La captura de `/cliente` sin sesión confirmó el acceso protegido; no se ha afirmado una prueba autenticada porque OAuth real y una sesión de prueba aún no están disponibles.
 
-El veredicto permanece **NO-GO para operación productiva** hasta configurar y verificar Redis TLS, OAuth, storage, mapas y secretos, completar el checkout limpio con usuario de base de datos autorizado y ejecutar la caminata E2E autenticada en los cuatro portales y dispositivos con cámara. El nuevo hito reduce el faltante funcional del Cliente, pero no sustituye esas verificaciones de infraestructura y seguridad.
+Se añadió además captura opcional de fotografía de recepción desde Sucursal con `capture="environment"`, límite de 10 MB y subida como documento `receipt` a storage seguro. El panel de etiquetas selecciona paquetes reales y genera QR y Code128 desde `packageCode`, con impresión del navegador; no muestra etiquetas cuando no existe un paquete registrado.
+
+La validación del hito de etiquetas observó `pnpm check`, 94 pruebas aprobadas y 2 omitidas por Shopify fuera de alcance, y build de producción correcto. La advertencia restante es el tamaño del bundle frontend, no un error de compilación.
+
+El veredicto permanece **NO-GO para operación productiva** hasta configurar y verificar Redis TLS, OAuth, storage, mapas y secretos, completar el checkout limpio con usuario de base de datos autorizado y ejecutar la caminata E2E autenticada en los cuatro portales y dispositivos con cámara. Los nuevos módulos reducen los faltantes funcionales, pero no sustituyen esas verificaciones de infraestructura y seguridad.

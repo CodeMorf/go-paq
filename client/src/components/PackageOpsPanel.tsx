@@ -26,6 +26,7 @@ export default function PackageOpsPanel({ visible }: { visible: boolean }) {
   const [dimensionUnit, setDimensionUnit] = useState<DimensionUnit>("cm");
   const [locationCode, setLocationCode] = useState("");
   const [barcodeValue, setBarcodeValue] = useState("");
+  const [receptionPhoto, setReceptionPhoto] = useState<File | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<Record<number, string>>({});
   const [selectedLocation, setSelectedLocation] = useState<Record<number, string>>({});
   const [splitTarget, setSplitTarget] = useState<number | null>(null);
@@ -43,10 +44,17 @@ export default function PackageOpsPanel({ visible }: { visible: boolean }) {
     onSuccess: async (created) => {
       setFeedback(`Paquete ${created.packageCode} registrado.`);
       setShipmentId(""); setDescription(""); setWeight(""); setLength(""); setWidth(""); setHeight(""); setLocationCode(""); setBarcodeValue("");
+      if (receptionPhoto) {
+        const reader = new FileReader();
+        reader.onload = () => { const dataUrl = String(reader.result ?? ""); const base64 = dataUrl.split(",")[1] ?? ""; const extension = receptionPhoto.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg"; uploadReceptionPhoto.mutate({ shipmentId: created.shipmentId, documentType: "receipt", fileName: `reception-${created.id}.${extension}`, mimeType: receptionPhoto.type || "image/jpeg", dataBase64: base64 }); };
+        reader.readAsDataURL(receptionPhoto);
+      }
+      setReceptionPhoto(null);
       await utils.packages.list.invalidate();
     },
     onError: (error) => setFeedback(error.message),
   });
+  const uploadReceptionPhoto = trpc.documents.upload.useMutation({ onSuccess: (document) => setFeedback(`Paquete registrado y fotografía de recepción guardada: ${document.url}`), onError: (error) => setFeedback(`Paquete registrado, pero no se guardó la fotografía: ${error.message}`) });
   const updatePackage = trpc.packages.update.useMutation({
     onSuccess: async (updated) => { setFeedback(`Paquete ${updated.packageCode} actualizado.`); await utils.packages.list.invalidate(); },
     onError: (error) => setFeedback(error.message),
@@ -116,8 +124,9 @@ export default function PackageOpsPanel({ visible }: { visible: boolean }) {
         <div><Label htmlFor="package-weight">Peso</Label><div className="mt-1 flex gap-2"><Input id="package-weight" type="number" min="0" step="0.001" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="0" className="bg-white" /><Select value={weightUnit} onValueChange={(value) => setWeightUnit(value as WeightUnit)}><SelectTrigger className="w-24 bg-white"><SelectValue /></SelectTrigger><SelectContent>{weightOptions.map((unit) => <SelectItem key={unit} value={unit}>{weightUnits[unit].label}</SelectItem>)}</SelectContent></Select></div></div>
         <div><Label>Dimensiones</Label><div className="mt-1 flex gap-1"><Input aria-label="Largo" type="number" min="0" step="0.01" value={length} onChange={(event) => setLength(event.target.value)} placeholder="L" className="bg-white" /><Input aria-label="Ancho" type="number" min="0" step="0.01" value={width} onChange={(event) => setWidth(event.target.value)} placeholder="A" className="bg-white" /><Input aria-label="Alto" type="number" min="0" step="0.01" value={height} onChange={(event) => setHeight(event.target.value)} placeholder="H" className="bg-white" /><Select value={dimensionUnit} onValueChange={(value) => setDimensionUnit(value as DimensionUnit)}><SelectTrigger className="w-20 bg-white"><SelectValue /></SelectTrigger><SelectContent>{dimensionOptions.map((unit) => <SelectItem key={unit} value={unit}>{dimensionUnits[unit].label}</SelectItem>)}</SelectContent></Select></div></div>
         <div><Label htmlFor="package-location">Ubicación inicial</Label><Input id="package-location" value={locationCode} onChange={(event) => setLocationCode(event.target.value)} maxLength={80} placeholder="Ej. A-01-03" className="mt-1 bg-white" /></div>
+        <div><Label htmlFor="package-photo">Fotografía de recepción</Label><Input id="package-photo" type="file" accept="image/*" capture="environment" onChange={(event) => setReceptionPhoto(event.target.files?.[0] ?? null)} className="mt-1 bg-white" /><p className="mt-1 text-xs text-muted-foreground">Opcional · máximo 10 MB · se guarda en storage seguro.</p></div>
         <div><Label htmlFor="package-barcode">QR / código de barras</Label><div className="mt-1 flex gap-2"><Input id="package-barcode" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value)} maxLength={120} placeholder="Escaneo o referencia" className="bg-white" /><Button type="button" variant="outline" size="icon" aria-label="Abrir escáner" onClick={() => void startScanner()}><ScanLine className="h-4 w-4" /></Button></div>{scannerStatus && <p role="status" className="mt-1 text-xs text-muted-foreground">{scannerStatus}</p>}{scannerOpen && <div className="mt-2 rounded-xl border border-border bg-slate-950 p-2"><video ref={videoRef} muted playsInline className="aspect-video w-full rounded-lg object-cover" /><Button type="button" variant="outline" className="mt-2 border-white/20 bg-transparent text-white hover:bg-white/10" onClick={stopScanner}><X className="mr-2 h-4 w-4" />Cerrar cámara</Button></div>}</div>
-        <div className="flex items-end lg:col-span-2"><Button type="submit" disabled={createPackage.isPending} className="w-full"><PackagePlus className="mr-2 h-4 w-4" />{createPackage.isPending ? "Guardando…" : "Registrar paquete"}</Button></div>
+        <div className="flex items-end lg:col-span-2"><Button type="submit" disabled={createPackage.isPending || uploadReceptionPhoto.isPending} className="w-full"><PackagePlus className="mr-2 h-4 w-4" />{createPackage.isPending ? "Guardando…" : "Registrar paquete"}</Button></div>
       </form>
       {feedback && <p className="text-sm text-slate-600" role="status">{feedback}</p>}
       {packages.isLoading && <p className="text-sm text-slate-500">Cargando paquetes…</p>}
