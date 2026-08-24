@@ -80,11 +80,13 @@ export const appRouter = router({
   }),
   documents: router({
     upload: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive(), documentType: z.enum(["label", "invoice", "customs", "pod", "incident", "receipt"]), fileName: z.string().min(1).max(180).regex(/^[a-zA-Z0-9._-]+$/), mimeType: z.string().min(3).max(120), dataBase64: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "documents", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso documenti non disponibile" });
       const result = await uploadShipmentDocumentForUser(ctx.user.id, input);
       if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
       return result;
     }),
-    list: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional() }).optional()).query(({ ctx, input }) => listShipmentDocumentsForUser(ctx.user.id, input?.shipmentId)),
+    list: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "documents", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso documenti non disponibile" }); return listShipmentDocumentsForUser(ctx.user.id, input?.shipmentId); }),
   }),
   apiKeys: router({
     list: protectedProcedure.query(({ ctx }) => listApiKeysForUser(ctx.user.id)),

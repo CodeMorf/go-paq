@@ -145,3 +145,5 @@
 - [x] Aggiungere nel portale cliente un flusso di richiesta pickup con contatto, indirizzo, note e conferma via tRPC.
 
 - [x] Aggiungere un pannello admin/cliente per elencare spedizioni reali isolate per organizzazione con codice, paesi, servizio e stato fisico.
+
+- [x] Applicare permessi organizzativi `documents:create` e `documents:view` alle procedure di upload e consultazione documenti.
