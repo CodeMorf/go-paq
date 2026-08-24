@@ -1,0 +1,16 @@
+import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+
+export default function WebhookEndpointPanel({ visible }: { visible: boolean }) {
+  const endpoints = trpc.webhooks.list.useQuery(undefined, { enabled: visible });
+  const utils = trpc.useUtils();
+  const [name, setName] = useState(""); const [url, setUrl] = useState(""); const [secret, setSecret] = useState(""); const [events, setEvents] = useState("shipment.cancelled"); const [feedback, setFeedback] = useState("");
+  const create = trpc.webhooks.create.useMutation({ onSuccess: async () => { setFeedback("Destino creado. El secreto no vuelve a mostrarse."); setSecret(""); await utils.webhooks.list.invalidate(); }, onError: (error) => setFeedback(error.message) });
+  const dispatch = trpc.webhooks.dispatch.useMutation({ onSuccess: (result) => setFeedback(`Entrega ${result.status}; intento registrado #${result.deliveryId}.`), onError: (error) => setFeedback(error.message) });
+  if (!visible) return null;
+  return <Card className="mt-6 border-0 bg-white shadow-sm"><CardHeader><CardTitle>Webhooks salientes</CardTitle><p className="text-sm text-slate-500">Destinos HTTPS por organización, secretos cifrados en reposo y firmas HMAC en cada entrega.</p></CardHeader><CardContent className="space-y-4"><form onSubmit={(event) => { event.preventDefault(); create.mutate({ name, url, secret, subscribedEvents: events.split(",").map((item) => item.trim()).filter(Boolean) }); }} className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 md:grid-cols-2"><div><Label htmlFor="webhook-name">Nombre</Label><Input id="webhook-name" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} /></div><div><Label htmlFor="webhook-url">URL HTTPS</Label><Input id="webhook-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." required /></div><div><Label htmlFor="webhook-secret">Secreto</Label><Input id="webhook-secret" type="password" value={secret} onChange={(event) => setSecret(event.target.value)} minLength={16} required /></div><div><Label htmlFor="webhook-events">Eventos separados por coma</Label><Input id="webhook-events" value={events} onChange={(event) => setEvents(event.target.value)} required /></div><Button type="submit" disabled={create.isPending}>{create.isPending ? "Guardando…" : "Registrar destino"}</Button></form>{endpoints.data?.map((endpoint) => <div key={endpoint.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div><strong className="block text-sm text-slate-900">{endpoint.name}</strong><span className="text-xs text-slate-500">{endpoint.url} · {Array.isArray(endpoint.subscribedEvents) ? endpoint.subscribedEvents.join(", ") : "eventos configurados"}</span></div><Button variant="outline" size="sm" disabled={dispatch.isPending} onClick={() => dispatch.mutate({ endpointId: endpoint.id, eventType: "webhook.test", data: { source: "gopaq", endpointId: endpoint.id } })}>Enviar prueba</Button></div>)}{feedback && <p role="status" className="text-sm text-slate-600">{feedback}</p>}</CardContent></Card>;
+}

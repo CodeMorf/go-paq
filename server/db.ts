@@ -2,12 +2,13 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
-import { InsertUser, apiIdempotencyKeys, apiKeys, apiRequestLogs, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, customerAddresses, customerContacts, customerProfiles, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, supportTickets, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
+import { InsertUser, apiIdempotencyKeys, apiKeys, apiRequestLogs, auditLogs, branches, webhookEndpoints, webhookDeliveries, cashMovements, cashSessions, consolidationItems, consolidations, customerAddresses, customerContacts, customerProfiles, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, supportTickets, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
 import { nextManifestStatus } from "./manifestState";
 import { transitionShipment } from "./shipmentState";
+import { decryptWebhookSecret, deliverWebhook, encryptWebhookSecret } from "./webhook";
 import { transitionPackage, type PackageState } from "./packageState";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -1242,4 +1243,46 @@ export async function updateOrganizationStatusForSuperAdmin(userId: number, orga
   await db.update(organizations).set({ status }).where(eq(organizations.id, organizationId));
   const updated = await db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1);
   return { before: current[0], after: updated[0] ?? null };
+}
+
+
+export async function listWebhookEndpointsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select({ id: webhookEndpoints.id, organizationId: webhookEndpoints.organizationId, name: webhookEndpoints.name, url: webhookEndpoints.url, subscribedEvents: webhookEndpoints.subscribedEvents, isActive: webhookEndpoints.isActive, createdBy: webhookEndpoints.createdBy, createdAt: webhookEndpoints.createdAt, updatedAt: webhookEndpoints.updatedAt }).from(webhookEndpoints).where(eq(webhookEndpoints.organizationId, scope.organization.id)).orderBy(desc(webhookEndpoints.createdAt)).limit(100);
+}
+
+export async function createWebhookEndpointForUser(userId: number, input: { name: string; url: string; secret: string; subscribedEvents: string[] }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !/^https:\/\//i.test(input.url) || input.secret.length < 16 || input.subscribedEvents.length < 1) return null;
+  const encrypted = encryptWebhookSecret(input.secret, process.env.JWT_SECRET ?? "");
+  const inserted = await db.insert(webhookEndpoints).values({ organizationId: scope.organization.id, name: input.name.trim(), url: input.url.trim(), secretCiphertext: encrypted, subscribedEvents: input.subscribedEvents, isActive: true, createdBy: userId });
+  const rows = await db.select({ id: webhookEndpoints.id, organizationId: webhookEndpoints.organizationId, name: webhookEndpoints.name, url: webhookEndpoints.url, subscribedEvents: webhookEndpoints.subscribedEvents, isActive: webhookEndpoints.isActive, createdBy: webhookEndpoints.createdBy, createdAt: webhookEndpoints.createdAt, updatedAt: webhookEndpoints.updatedAt }).from(webhookEndpoints).where(and(eq(webhookEndpoints.id, Number(inserted[0].insertId)), eq(webhookEndpoints.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function dispatchWebhookForUser(userId: number, input: { endpointId: number; eventType: string; data: unknown }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const rows = await db.select().from(webhookEndpoints).where(and(eq(webhookEndpoints.id, input.endpointId), eq(webhookEndpoints.organizationId, scope.organization.id), eq(webhookEndpoints.isActive, true))).limit(1);
+  const endpoint = rows[0];
+  const subscribed = endpoint?.subscribedEvents as unknown;
+  if (!endpoint || !Array.isArray(subscribed) || !subscribed.includes(input.eventType)) return null;
+  const payloadHash = createHash("sha256").update(JSON.stringify({ type: input.eventType, data: input.data })).digest("hex");
+  const inserted = await db.insert(webhookDeliveries).values({ organizationId: scope.organization.id, endpointId: endpoint.id, eventType: input.eventType, payloadHash, status: "pending", attempts: 0 });
+  const deliveryId = Number(inserted[0].insertId);
+  let result: { ok: boolean; status: number } | null = null;
+  let lastError: string | null = null;
+  let attemptCount = 0;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    attemptCount = attempt;
+    try {
+      result = await deliverWebhook(endpoint.url, decryptWebhookSecret(endpoint.secretCiphertext, process.env.JWT_SECRET ?? ""), input.eventType, input.data);
+      if (result.ok) break;
+      lastError = `HTTP ${result.status}`;
+    } catch (error) { lastError = error instanceof Error ? error.message.slice(0, 500) : "Webhook delivery failed"; }
+  }
+  const delivered = Boolean(result?.ok);
+  await db.update(webhookDeliveries).set({ status: delivered ? "delivered" : "exhausted", attempts: attemptCount, responseStatus: result?.status ?? null, lastError: delivered ? null : lastError, deliveredAt: delivered ? new Date() : null }).where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.organizationId, scope.organization.id)));
+  return { deliveryId, status: delivered ? "delivered" : "exhausted", responseStatus: result?.status ?? null } as const;
 }

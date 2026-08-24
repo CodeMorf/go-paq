@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const expectedTables = ["users", "customer_profiles", "customer_addresses", "customer_contacts", "support_tickets", "organizations", "branches", "memberships", "shipments", "packages", "shipment_services", "shipment_events", "api_keys", "shipment_documents", "tracking_points", "pickups", "routes", "route_stops", "route_expenses", "manifests", "tariff_zones", "tariffs", "warehouses", "role_permissions", "inventory_movements", "consolidations", "consolidation_items", "shipment_incidents", "delivery_attempts", "payments", "cash_sessions", "cash_movements", "invoices", "receipts", "api_idempotency_keys", "api_request_logs", "audit_logs"];
+const expectedTables = ["users", "customer_profiles", "customer_addresses", "customer_contacts", "support_tickets", "organizations", "branches", "memberships", "shipments", "packages", "shipment_services", "shipment_events", "api_keys", "shipment_documents", "tracking_points", "pickups", "routes", "route_stops", "route_expenses", "manifests", "tariff_zones", "tariffs", "warehouses", "role_permissions", "inventory_movements", "consolidations", "consolidation_items", "shipment_incidents", "delivery_attempts", "payments", "cash_sessions", "cash_movements", "invoices", "receipts", "api_idempotency_keys", "api_request_logs", "audit_logs", "webhook_endpoints", "webhook_deliveries"];
 const migrationDirectory = resolve(process.cwd(), "drizzle");
 
 function migrationSqlFiles() {
@@ -16,7 +16,7 @@ describe("migraciones de checkout limpio", () => {
     expect(sql.toUpperCase()).not.toMatch(/DROP\s+(TABLE|DATABASE)/);
   });
 
-  it("declara las 37 tablas del schema actual en el conjunto de migraciones", () => {
+  it("declara las 39 tablas del schema actual en el conjunto de migraciones", () => {
     const sql = migrationSqlFiles().map((file) => readFileSync(file, "utf8")).join("\n");
     for (const table of expectedTables) expect(sql).toContain(`CREATE TABLE \`${table}\``);
   });
@@ -36,7 +36,7 @@ describe("migraciones de checkout limpio", () => {
   });
 
   it("mantiene toda la cadena SQL incremental libre de DROP y TRUNCATE", () => {
-    expect(migrationSqlFiles().length).toBe(22);
+    expect(migrationSqlFiles().length).toBe(23);
     for (const file of migrationSqlFiles()) {
       const sql = readFileSync(file, "utf8").toUpperCase();
       expect(sql, file).not.toMatch(/DROP\s+(TABLE|DATABASE)/);

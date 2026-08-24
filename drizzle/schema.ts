@@ -532,6 +532,35 @@ export const auditLogs = mysqlTable("audit_logs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const webhookEndpoints = mysqlTable("webhook_endpoints", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  url: varchar("url", { length: 1000 }).notNull(),
+  secretCiphertext: text("secretCiphertext").notNull(),
+  subscribedEvents: json("subscribedEvents").notNull(),
+  isActive: boolean("isActive").notNull().default(true),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const webhookDeliveries = mysqlTable("webhook_deliveries", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  endpointId: int("endpointId").notNull(),
+  eventType: varchar("eventType", { length: 120 }).notNull(),
+  payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+  status: mysqlEnum("status", ["pending", "delivered", "failed", "exhausted"]).notNull().default("pending"),
+  attempts: int("attempts").notNull().default(0),
+  responseStatus: int("responseStatus"),
+  lastError: varchar("lastError", { length: 500 }),
+  nextAttemptAt: timestamp("nextAttemptAt"),
+  deliveredAt: timestamp("deliveredAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Organization = typeof organizations.$inferSelect;

@@ -18,7 +18,7 @@ No se encontraron indicios de que deban crearse tablas duplicadas. El esquema ac
 | Driver | Parcialmente funcional | Rutas asignadas, inicio/cierre de turno, paradas, escaneo protegido, GPS limitado a ruta `active`, entrega/POD, incidencias y cola offline cifrada | Faltan disponibilidad formal, gastos, conciliación visual autenticada y prueba real con cámara |
 | Sucursal | Parcialmente funcional | Pickups, recepción/escaneo con cámara y fallback manual, almacén, paquetes, separación, reempaque, inventario, rutas, manifiestos, incidencias, finanzas y servicios especiales | Faltan fotos/etiquetas imprimibles, transferencias E2E y flujo autenticado completo |
 | Super Admin | Parcialmente funcional | Perfil tenant, API keys, auditoría, rutas, paneles operativos y módulo global de organizaciones con cambio de estado protegido por rol `admin` | Faltan planes, límites, usuarios globales, vehículos, integraciones y validación autenticada |
-| API REST | Implementada parcialmente | Quotes, shipments, pickups y tracking con API key, scope, tenant isolation, rate limit, idempotencia, hash canónico, `X-Request-Id`, logs de requests y rechazo de tarifa ausente | Falta dispatch outbound de webhooks por organización y documentos REST |
+| API REST | Implementada parcialmente | Quotes, shipments, pickups y tracking con API key, scope, tenant isolation, rate limit, idempotencia, hash canónico, `X-Request-Id`, logs de requests, destinos HTTPS webhook por organización, firma HMAC, hasta tres intentos y rechazo de tarifa ausente | Falta emisión automática desde eventos de dominio, cola de reintentos fuera de request y documentos REST |
 | Tenancy | Parcialmente reforzado | Helpers derivan la organización del contexto; `memberships.list/updateScope` muestra y valida branch/warehouse; permisos y ownership de rutas aplican scope activo | Falta una batería completa cross-tenant sobre base limpia y pruebas autenticadas del panel |
 | Tarifas | Implementadas con límites | Catálogo server-side versionado con zonas, vigencia, divisor volumétrico, recargo, combustible, descuento, impuesto y moneda; REST y `quote.preview` rechazan tarifa ausente | Faltan pruebas de producción con catálogo real y validación visual admin autenticada |
 | Offline | Implementada | AES-GCM, idempotencia, recuperación, conflictos, rechazo y límite de capacidad | Falta E2E con servidor real y pruebas móviles autenticadas |
@@ -38,7 +38,7 @@ Las rutas React están registradas para `/`, `/admin`, `/sucursal`, `/driver`, `
 
 ## Pruebas ejecutadas durante la auditoría
 
-Se ejecutaron `pnpm check`, `pnpm test` y `pnpm build`. El resultado observado fue TypeScript sin errores, **106 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
+Se ejecutaron `pnpm check`, `pnpm test` y `pnpm build`. El resultado observado fue TypeScript sin errores, **107 pruebas aprobadas y 2 omitidas** por la integración Shopify fuera de alcance, además de build de producción correcto. El build emitió únicamente una advertencia no bloqueante sobre chunks mayores a 500 kB.
 
 No se ejecutó una prueba E2E autenticada completa del flujo `Cliente → cotización → envío → pickup → sucursal → almacén → manifiesto → driver → entrega → POD → tracking → documento → cobro`, porque requiere una sesión OAuth y datos/credenciales de infraestructura apropiados. Por tanto, ese flujo permanece pendiente y no se declara aprobado.
 

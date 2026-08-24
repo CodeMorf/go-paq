@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signWebhook, verifyWebhook } from "./webhook";
+import { deliverWebhook, signWebhook, verifyWebhook } from "./webhook";
 
 describe("webhook signatures", () => {
   it("verifies signed payloads and rejects tampering or replay", () => {
@@ -16,5 +16,15 @@ describe("webhook signatures", () => {
     const payload = JSON.stringify({ type: "shipment.updated", id: "shp_123" });
     expect(verifyWebhook(payload, "t=1700000000000,v1=not-hex", "test-secret", 1700000000000)).toBe(false);
     expect(verifyWebhook(payload, "v1=", "test-secret", 1700000000000)).toBe(false);
+  });
+
+  it("delivers an HTTPS JSON payload with an HMAC signature", async () => {
+    let request: RequestInit | undefined;
+    const response = await deliverWebhook("https://hooks.example.test/gopaq", "test-secret", "shipment.cancelled", { trackingCode: "GPQ-123" }, async (_url, init) => { request = init; return new Response(null, { status: 202 }); });
+    expect(response).toEqual({ ok: true, status: 202 });
+    expect(request?.method).toBe("POST");
+    expect(request?.headers).toMatchObject({ "x-gopaq-event": "shipment.cancelled", "content-type": "application/json" });
+    expect(String(request?.body)).toContain("shipment.cancelled");
+    await expect(deliverWebhook("http://hooks.example.test/gopaq", "test-secret", "shipment.cancelled", {})).rejects.toThrow("HTTPS");
   });
 });
