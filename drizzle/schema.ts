@@ -113,6 +113,18 @@ export const shipmentEvents = mysqlTable("shipment_events", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const apiKeys = mysqlTable("api_keys", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  keyPrefix: varchar("keyPrefix", { length: 24 }).notNull(),
+  secretHash: varchar("secretHash", { length: 128 }).notNull(),
+  scopes: text("scopes").notNull(),
+  revokedAt: timestamp("revokedAt"),
+  lastUsedAt: timestamp("lastUsedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const shipmentDocuments = mysqlTable("shipment_documents", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId").notNull(),
@@ -252,5 +264,6 @@ export type Route = typeof routes.$inferSelect;
 export type RouteStop = typeof routeStops.$inferSelect;
 export type Manifest = typeof manifests.$inferSelect;
 export type Tariff = typeof tariffs.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
 export type ShipmentDocument = typeof shipmentDocuments.$inferSelect;
 export type TrackingPoint = typeof trackingPoints.$inferSelect;
