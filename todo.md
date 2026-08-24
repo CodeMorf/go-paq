@@ -131,3 +131,5 @@
 
 - [x] Aggiungere al portale admin un pannello chiavi API con emissione scope-limitata, segreto one-time, elenco e revoca.
 - [x] Esporre un endpoint REST `/api/v1/quotes` autenticato con Bearer key, scope e versione.
+
+- [x] Aggiungere al portale sucursal un pannello pickup con lista organizzativa e registrazione validata di indirizzo, contatto e note via tRPC.
