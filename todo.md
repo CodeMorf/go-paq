@@ -264,11 +264,11 @@
 - [x] Completar asignación de paradas y conductores y escaneo de código de barras tenant-scoped; el lector físico depende del dispositivo que envía el valor leído.
 - [x] Implementar incidencias, intentos fallidos y devoluciones con auditoría, estados explícitos y rechazo cross-tenant.
 - [x] Implementar cobro contra entrega, caja de sucursal, facturación y recibos en DOP, con validación tenant y auditoría financiera.
-- [ ] Separar compra asistida, mudanzas y carga pesada con reglas y datos propios.
+- [x] Separar compra asistida, mudanzas y carga pesada con reglas y datos propios.
 - [ ] Endurecer offline cifrado con conflictos y rate limit distribuido con Redis en producción.
 - [ ] Completar REST de envíos, pickups y tracking, además de configuración real de OAuth, storage, mapas y secretos.
 - [ ] Añadir CI automático y conseguir pruebas visuales autenticadas de los cuatro portales.
-- [ ] Actualizar readiness, subir cambios a GitHub y emitir veredicto basado únicamente en pruebas ejecutadas.
+- [x] Actualizar readiness, subir cambios a GitHub y emitir veredicto basado únicamente en pruebas ejecutadas; la verificación visual autenticada sigue separada y pendiente.
 - [ ] Configurar `REDIS_URL` en el servidor de producción y validar conectividad TLS antes de activar rate limit distribuido.
 
 - [x] Implementar REST tenant-scoped para creación de envíos, solicitudes de pickup y tracking privado con API key, scopes, versionado, validación y rate limiting.
@@ -278,3 +278,4 @@
 - [x] Endurecer cola offline cifrada con metadatos de conflicto, reintento explícito, descarte seguro y protección contra doble sincronización.
 - [x] Actualizar panel admin de API keys con scopes REST explícitos y textos operativos en español.
 - [x] Exponer en `/driver` la bandeja de operaciones offline en conflicto con razón, reintento y descarte seguro.
+- [x] Añadir workflow GitHub Actions para `pnpm check`, `pnpm test` y `pnpm build`, corregir la resolución de pnpm y verificar el commit `b0d7758` en verde.
