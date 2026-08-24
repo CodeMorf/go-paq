@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
-import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
+import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
@@ -821,6 +821,38 @@ export async function assignRouteForUser(userId: number, routeId: number, driver
   await db.update(routes).set({ driverUserId, status: "assigned" }).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id)));
   const rows = await db.select().from(routes).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
   return rows[0] ?? null;
+}
+
+export async function listRouteExpensesForUser(userId: number, routeId?: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  const filters = [eq(routeExpenses.organizationId, scope.organization.id)];
+  if (routeId !== undefined) filters.push(eq(routeExpenses.routeId, routeId));
+  if (scope.membership?.role === "driver") filters.push(eq(routeExpenses.driverUserId, userId));
+  return db.select().from(routeExpenses).where(and(...filters)).orderBy(desc(routeExpenses.createdAt)).limit(100);
+}
+
+export async function createRouteExpenseForUser(userId: number, input: { routeId: number; expenseType: "fuel" | "toll" | "parking" | "meal" | "other"; amount: string; description: string; receiptUrl?: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !/^\d+(\.\d{1,2})?$/.test(input.amount) || Number(input.amount) <= 0 || Number(input.amount) > 100000) return null;
+  const routeRows = await db.select({ id: routes.id, driverUserId: routes.driverUserId, status: routes.status }).from(routes).where(and(eq(routes.id, input.routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
+  const route = routeRows[0];
+  if (!route || !route.driverUserId) return null;
+  if (scope.membership?.role === "driver" && (route.driverUserId !== userId || route.status !== "active")) return null;
+  await db.insert(routeExpenses).values({ organizationId: scope.organization.id, routeId: route.id, driverUserId: route.driverUserId, expenseType: input.expenseType, amount: input.amount, currency: "DOP", description: input.description.trim(), receiptUrl: input.receiptUrl?.trim() || null });
+  const rows = await db.select().from(routeExpenses).where(and(eq(routeExpenses.organizationId, scope.organization.id), eq(routeExpenses.routeId, route.id), eq(routeExpenses.driverUserId, route.driverUserId))).orderBy(desc(routeExpenses.id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function reviewRouteExpenseForUser(userId: number, expenseId: number, nextStatus: "approved" | "rejected" | "reimbursed") {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const rows = await db.select().from(routeExpenses).where(and(eq(routeExpenses.id, expenseId), eq(routeExpenses.organizationId, scope.organization.id))).limit(1);
+  const expense = rows[0];
+  if (!expense || (nextStatus === "reimbursed" ? expense.status !== "approved" : expense.status !== "submitted")) return null;
+  await db.update(routeExpenses).set({ status: nextStatus, reviewedBy: userId, reviewedAt: new Date() }).where(and(eq(routeExpenses.id, expenseId), eq(routeExpenses.organizationId, scope.organization.id)));
+  const updated = await db.select().from(routeExpenses).where(and(eq(routeExpenses.id, expenseId), eq(routeExpenses.organizationId, scope.organization.id))).limit(1);
+  return updated[0] ?? null;
 }
 
 export async function listRoutesForUser(userId: number) {

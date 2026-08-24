@@ -339,3 +339,5 @@
 - [x] Añadir PIN de entrega opcional: hash SHA-256 persistido, comparación timing-safe, sanitización de respuestas y migración 0017 nullable.
 - [x] Añadir foto POD desde el Driver con carga a storage seguro, URL de evidencia y coordenadas opcionales del dispositivo.
 - [x] Añadir captura de firma del receptor mediante canvas, cargarla como documento POD en storage seguro y mantener validación visual autenticada como pendiente separada.
+- [x] Añadir gastos de ruta del Driver con modelo `route_expenses`, migración 0018, registro DOP restringido a ruta activa, revisión administrativa y pruebas de autenticación.
+- [x] Añadir panel administrativo/sucursal para revisar y aprobar/rechazar/reembolsar gastos de ruta con filtros por estado y ruta.

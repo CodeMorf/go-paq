@@ -213,6 +213,23 @@ export const routeStops = mysqlTable("route_stops", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const routeExpenses = mysqlTable("route_expenses", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  routeId: int("routeId").notNull(),
+  driverUserId: int("driverUserId").notNull(),
+  expenseType: mysqlEnum("expenseType", ["fuel", "toll", "parking", "meal", "other"]).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 8 }).notNull().default("DOP"),
+  description: varchar("description", { length: 500 }).notNull(),
+  receiptUrl: text("receiptUrl"),
+  status: mysqlEnum("status", ["submitted", "approved", "rejected", "reimbursed"]).notNull().default("submitted"),
+  reviewedBy: int("reviewedBy"),
+  reviewedAt: timestamp("reviewedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const manifests = mysqlTable("manifests", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId").notNull(),

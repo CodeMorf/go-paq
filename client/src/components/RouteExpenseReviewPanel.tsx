@@ -1,0 +1,21 @@
+import { useMemo, useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const statusLabels = { submitted: "Pendiente", approved: "Aprobado", rejected: "Rechazado", reimbursed: "Reembolsado" } as const;
+const typeLabels = { fuel: "Combustible", toll: "Peaje", parking: "Parqueo", meal: "Alimentación", other: "Otro" } as const;
+
+type ExpenseStatus = keyof typeof statusLabels;
+
+export default function RouteExpenseReviewPanel({ visible }: { visible: boolean }) {
+  const [statusFilter, setStatusFilter] = useState<ExpenseStatus | "all">("submitted");
+  const [feedback, setFeedback] = useState("");
+  const expenses = trpc.routes.expenses.useQuery(undefined, { enabled: visible });
+  const utils = trpc.useUtils();
+  const review = trpc.routes.expenseReview.useMutation({ onSuccess: async (expense) => { setFeedback(`Gasto #${expense.id}: ${statusLabels[expense.status]}.`); await utils.routes.expenses.invalidate(); }, onError: (error) => setFeedback(error.message) });
+  const rows = useMemo(() => (expenses.data ?? []).filter((expense) => statusFilter === "all" || expense.status === statusFilter), [expenses.data, statusFilter]);
+  if (!visible) return null;
+  return <Card className="mt-6 border-0 bg-white shadow-sm"><CardHeader><CardTitle>Revisión de gastos de ruta</CardTitle><p className="text-sm text-gopaq-faint">Los importes se registran en DOP y cada decisión requiere permiso explícito de aprobación o reembolso.</p><Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ExpenseStatus | "all")}><SelectTrigger className="mt-3 max-w-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="submitted">Pendientes</SelectItem><SelectItem value="approved">Aprobados</SelectItem><SelectItem value="rejected">Rechazados</SelectItem><SelectItem value="reimbursed">Reembolsados</SelectItem><SelectItem value="all">Todos</SelectItem></SelectContent></Select></CardHeader><CardContent>{expenses.isLoading && <p className="text-sm text-gopaq-faint">Cargando gastos…</p>}{expenses.error && <p role="alert" className="text-sm text-gopaq-danger">No se pudieron cargar los gastos: {expenses.error.message}</p>}{!expenses.isLoading && !expenses.error && !rows.length && <p className="rounded-xl border border-dashed border-gopaq-line p-4 text-sm text-gopaq-faint">No hay gastos para este filtro.</p>}<div className="space-y-3">{rows.map((expense) => <div key={expense.id} className="rounded-2xl border border-gopaq-line bg-muted p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-semibold text-foreground">#{expense.id} · {typeLabels[expense.expenseType]}</p><p className="mt-1 text-sm text-gopaq-faint">Ruta #{expense.routeId} · Driver #{expense.driverUserId} · {expense.description}</p>{expense.receiptUrl && <a href={expense.receiptUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-gopaq-accent hover:underline">Abrir recibo</a>}</div><div className="text-left sm:text-right"><p className="text-lg font-black text-foreground">RD$ {expense.amount}</p><p className="text-xs font-semibold text-gopaq-accent">{statusLabels[expense.status]}</p></div></div>{expense.status === "submitted" && <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" onClick={() => review.mutate({ expenseId: expense.id, status: "approved" })} disabled={review.isPending}>Aprobar</Button><Button size="sm" variant="outline" onClick={() => review.mutate({ expenseId: expense.id, status: "rejected" })} disabled={review.isPending}>Rechazar</Button></div>}{expense.status === "approved" && <Button size="sm" className="mt-3 bg-gopaq-accent text-white hover:bg-gopaq-accent-hover" onClick={() => review.mutate({ expenseId: expense.id, status: "reimbursed" })} disabled={review.isPending}>Marcar reembolsado</Button>}</div>)}</div>{feedback && <p role="status" className="mt-4 text-sm text-gopaq-faint">{feedback}</p>}</CardContent></Card>;
+}
