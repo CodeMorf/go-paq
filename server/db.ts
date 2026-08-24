@@ -465,6 +465,28 @@ export async function collectPaymentForUser(userId: number, input: { shipmentId:
   return paymentRows[0] && receiptRows[0] ? { payment: paymentRows[0], receipt: receiptRows[0] } : null;
 }
 
+export async function refundPaymentForUser(userId: number, input: { paymentId: number; reason: string; cashSessionId?: number }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const paymentRows = await db.select().from(payments).where(and(eq(payments.id, input.paymentId), eq(payments.organizationId, scope.organization.id))).limit(1);
+  const payment = paymentRows[0];
+  if (!payment || payment.status !== "collected") return null;
+  if (payment.method === "cash") {
+    if (!input.cashSessionId) return null;
+    const session = await db.select({ id: cashSessions.id }).from(cashSessions).where(and(eq(cashSessions.id, input.cashSessionId), eq(cashSessions.organizationId, scope.organization.id), eq(cashSessions.status, "open"))).limit(1);
+    if (!session[0]) return null;
+  } else if (input.cashSessionId) {
+    return null;
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(payments).set({ status: "refunded", reference: `${payment.reference ?? ""}${payment.reference ? " | " : ""}REFUND: ${input.reason}`.slice(0, 160) }).where(and(eq(payments.id, payment.id), eq(payments.organizationId, scope.organization.id), eq(payments.status, "collected")));
+    if (payment.method === "cash" && input.cashSessionId) await tx.insert(cashMovements).values({ organizationId: scope.organization.id, cashSessionId: input.cashSessionId, paymentId: payment.id, movementType: "refund", amount: payment.amount, note: input.reason, actorUserId: userId });
+    await tx.update(shipments).set({ financialStatus: "unpaid" }).where(and(eq(shipments.id, payment.shipmentId), eq(shipments.organizationId, scope.organization.id), eq(shipments.financialStatus, "paid")));
+  });
+  const updated = await db.select().from(payments).where(and(eq(payments.id, payment.id), eq(payments.organizationId, scope.organization.id))).limit(1);
+  return updated[0] ?? null;
+}
+
 export async function listCashSessionsForUser(userId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];
@@ -538,6 +560,46 @@ export async function appendShipmentEvent(input: typeof shipmentEvents.$inferIns
   if (!(await branchBelongsToOrganization(db, input.organizationId, input.branchId ?? undefined))) return false;
   await db.insert(shipmentEvents).values(input);
   return true;
+}
+
+type RolePermissionAction = "view" | "create" | "edit" | "approve" | "assign" | "collect" | "refund" | "export" | "configure";
+
+export async function listRolePermissionsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(rolePermissions).where(eq(rolePermissions.organizationId, scope.organization.id)).orderBy(rolePermissions.role, rolePermissions.resource, rolePermissions.action).limit(1000);
+}
+
+export async function grantRolePermissionForUser(userId: number, input: { role: string; resource: string; action: RolePermissionAction }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const existing = await db.select().from(rolePermissions).where(and(eq(rolePermissions.organizationId, scope.organization.id), eq(rolePermissions.role, input.role), eq(rolePermissions.resource, input.resource), eq(rolePermissions.action, input.action))).limit(1);
+  if (existing[0]) return existing[0];
+  await db.insert(rolePermissions).values({ organizationId: scope.organization.id, role: input.role, resource: input.resource, action: input.action });
+  const rows = await db.select().from(rolePermissions).where(and(eq(rolePermissions.organizationId, scope.organization.id), eq(rolePermissions.role, input.role), eq(rolePermissions.resource, input.resource), eq(rolePermissions.action, input.action))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function revokeRolePermissionForUser(userId: number, permissionId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const rows = await db.select().from(rolePermissions).where(and(eq(rolePermissions.id, permissionId), eq(rolePermissions.organizationId, scope.organization.id))).limit(1);
+  if (!rows[0]) return null;
+  await db.delete(rolePermissions).where(and(eq(rolePermissions.id, permissionId), eq(rolePermissions.organizationId, scope.organization.id)));
+  return rows[0];
+}
+
+export async function listMembershipsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select({ membership: memberships, user: { id: users.id, name: users.name, email: users.email }, branch: { id: branches.id, name: branches.name, code: branches.code }, warehouse: { id: warehouses.id, name: warehouses.name, code: warehouses.code } })
+    .from(memberships)
+    .innerJoin(users, eq(memberships.userId, users.id))
+    .leftJoin(branches, eq(memberships.branchId, branches.id))
+    .leftJoin(warehouses, eq(memberships.warehouseId, warehouses.id))
+    .where(eq(memberships.organizationId, scope.organization.id))
+    .orderBy(users.name)
+    .limit(250);
 }
 
 export async function updateMembershipScopeForUser(userId: number, input: { membershipId: number; branchId?: number | null; warehouseId?: number | null }) {

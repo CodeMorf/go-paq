@@ -66,6 +66,14 @@ describe("REST API pública", () => {
     expect(response.body).toMatchObject({ data: { base: 100, fuelSurcharge: 0, total: 100, currency: "DOP", serviceType: "national", tariffSource: "organization" } });
   });
 
+  it("rechaza una cotización si no existe una tarifa vigente", async () => {
+    tariffMock.mockResolvedValueOnce(null);
+    const response = makeResponse();
+    await makeHandler("post", "/api/v1/quotes")(request({ actualWeightKg: 2, lengthCm: 10, widthCm: 10, heightCm: 10, distanceKm: 5, serviceType: "national" }), response);
+    expect(response.statusCode).toBe(409);
+    expect(response.body).toMatchObject({ error: { code: "tariff_unavailable" } });
+  });
+
   it("crea un envío con la organización de la API key", async () => {
     const response = makeResponse();
     await makeHandler("post", "/api/v1/shipments")(request({ organizationId: 999, serviceType: "moving", senderName: "Ana Pérez", recipientName: "Luis Díaz", originAddress: "Santo Domingo", destinationAddress: "Santiago", originCountry: "DO", destinationCountry: "DO" }), response);

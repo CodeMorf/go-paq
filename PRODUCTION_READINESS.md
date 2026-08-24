@@ -8,7 +8,7 @@ La revisión crítica fue incorporada al plan de trabajo y se corrigieron varios
 
 | Área | Estado | Evidencia |
 |---|---|---|
-| Schema Drizzle | Verificado | `drizzle/schema.ts`, journal y SQL están versionados; `scripts/verify-clean-schema.mjs` aplicó el journal completo sobre MariaDB vacío y verificó 18 tablas y default `language=es`. |
+| Schema Drizzle | Verificado | `drizzle/schema.ts`, journal y SQL están versionados; `scripts/verify-clean-schema.mjs` aplicó el journal completo sobre MariaDB vacío y verificó 29 tablas y default `language=es`. |
 | Datos simulados públicos | Corregido | Se retiraron métricas numéricas, envíos, GPS, manifiestos, QR, fechas y códigos de rastreo de ejemplo; los portales muestran consultas reales, placeholders neutrales o estados vacíos. |
 | Documentación API | Corregida | `/docs-api` refleja los endpoints REST verificados: `POST /api/v1/quotes`, `POST /api/v1/shipments`, `POST /api/v1/pickups` y `GET /api/v1/tracking/:trackingCode`, todos con API key, versionado y scopes. |
 | Tarifas | Endurecidas y localizadas | El cliente solo envía peso, dimensiones y distancia; mínimos, precio por kg/km y recargo se aplican server-side en DOP. El formateador visible usa `es-DO` y `RD$`. |

@@ -112,7 +112,7 @@
 - [ ] Estendere i pacchi con restrizioni e stato del pacco.
 - [ ] Introdurre stati separati per acquisto assistito e incidenti con transizioni validate lato backend.
 - [x] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
-- [ ] Collegare utenti organizzativi a magazzini o sedi operative in modo esplicito.
+- [x] Collegare utenti organizzativi a magazzini o sedi operative in modo esplicito mediante `memberships.list` y `memberships.updateScope`, con validación tenant-scoped y auditoría.
 
 - [x] Implementare logica Google Maps reale con `onMapReady`: geocoding, DirectionsService/DirectionsRenderer, fermate e rotta visualizzata.
 - [x] Vincolare lato backend l’agente a restituire sempre `requiresApproval: true` per azioni sensibili e bloccare suggerimenti non conformi.
@@ -308,3 +308,19 @@
 - [x] Añadir al formulario de pickup del cliente ventana horaria opcional desde/hasta, validación de orden y serialización UTC compatible con el esquema real.
 - [x] Exponer mutation protegida para actualizar sucursal y almacén de una membership, validando pertenencia a la organización activa y generando auditoría de seguridad.
 - [x] Preparar README de GoPaq con atribución By CodeMorf.tech y subir cambios verificados al repositorio CodeMorf/go-paq sin secretos.
+
+## Roadmap de completitud solicitado en PROMPT_COMPLETAR_GOPAQ.md
+
+- [x] Fase 0 — Auditoría y estabilización: revisar arquitectura, esquema, migraciones, funciones existentes, secretos y dependencias; evidencia: `AUDIT_COMPLETAR_GOPAQ.md`; riesgo: gaps no implementados.
+- [ ] Fase 1 — Base de datos, tenancy y seguridad: completar relaciones usuario-sede-almacén, permisos action-level, aislamiento cross-tenant y auditoría; evidencia: migraciones y pruebas; dependencia: base de datos limpia.
+- [ ] Fase 2 — Área Super Admin: completar organizaciones, planes, límites, usuarios, roles, sucursales, almacenes, zonas, tarifas e integraciones con datos reales; evidencia: rutas autenticadas; riesgo: falta de OAuth/integraciones reales.
+- [ ] Fase 3 — Área Sucursal: completar recepción, inspección, pesaje, ubicación, inventario, separación, reempaque, transferencias, manifiestos, caja, etiquetas y documentos; evidencia: flujo E2E tenant-scoped.
+- [ ] Fase 4 — Área Driver: completar turno, disponibilidad, vehículo, ruta, escaneo, pickup, entrega, POD, incidencias, cobros, gastos, cierre y offline; evidencia: pruebas de idempotencia y servidor.
+- [ ] Fase 5 — Área Cliente: completar perfil, direcciones, contactos, cotización server-side, envío, pickup, pago/saldo, tracking, documentos, tickets, devoluciones y servicios especiales; evidencia: flujo E2E real.
+- [ ] Fase 6 — Tarifas, pagos y facturación: completar tarifas versionadas, zonas, descuentos, combustible, impuestos, monedas, cobros, reembolsos, recibos y facturas; evidencia: pruebas financieras y auditoría.
+- [ ] Fase 7 — API e integraciones: completar REST implementado, idempotencia, request ID, errores uniformes, webhooks firmados, Redis, OAuth, storage, mapas, WhatsApp y notificaciones cuando existan credenciales; evidencia: contratos y pruebas.
+- [ ] Fase 8 — Offline y PWA: verificar instalación, cache esencial, cola cifrada, conflictos, reintentos, estados rejected y prohibición de confirmar localmente pagos/entregas; evidencia: pruebas offline y visuales.
+- [ ] Fase 9 — QA, seguridad y producción: ejecutar TypeScript, build, Vitest, migraciones limpias, pruebas E2E autenticadas, preflight, CORS, retención y revisión visual; evidencia: logs y checklist; veredicto GO/NO-GO.
+- [x] Aplicar `approve` explícito a la transición `approved` de servicios especiales, dejando `edit` para las demás transiciones.
+- [x] Añadir `payments.refund` tenant-scoped con motivo obligatorio, caja abierta para efectivo, transición financiera y auditoría.
+- [x] Añadir exportaciones tenant-scoped de envíos, cobros y facturas con permiso `export` y auditoría de cada extracción.

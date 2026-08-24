@@ -32,8 +32,6 @@ const pickupInput = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
-const DEFAULT_TARIFF = { minAmount: 10, perKg: 4.5, perKm: 0.8, fuelSurchargePct: 8, currency: "DOP" } as const;
-
 function requestId() {
   return `req_${Date.now().toString(36)}`;
 }
@@ -57,9 +55,10 @@ export function registerPublicApi(app: Application) {
     const parsed = quoteInput.safeParse(req.body);
     if (!parsed.success) return res.status(422).json({ error: { code: "validation_error", message: "Datos de cotización no válidos" }, requestId: id });
     const tariff = await getActiveTariffForOrganization(auth.key.organizationId, parsed.data.serviceType);
-    const resolvedTariff = tariff ? { minAmount: Number(tariff.minAmount), perKg: Number(tariff.perKg), perKm: Number(tariff.perKm), fuelSurchargePct: Number(tariff.fuelSurchargePct), currency: tariff.currency } : DEFAULT_TARIFF;
+    if (!tariff) return res.status(409).json({ error: { code: "tariff_unavailable", message: "No existe una tarifa vigente para este servicio en la organización" }, requestId: id });
+    const resolvedTariff = { minAmount: Number(tariff.minAmount), perKg: Number(tariff.perKg), perKm: Number(tariff.perKm), fuelSurchargePct: Number(tariff.fuelSurchargePct), currency: tariff.currency };
     const { serviceType, ...measurements } = parsed.data;
-    return res.status(200).json({ data: { ...calculateQuote({ ...measurements, ...resolvedTariff }), currency: resolvedTariff.currency, serviceType, tariffSource: tariff ? "organization" : "default" }, requestId: id });
+    return res.status(200).json({ data: { ...calculateQuote({ ...measurements, ...resolvedTariff }), currency: resolvedTariff.currency, serviceType, tariffSource: "organization" }, requestId: id });
   });
 
   app.post("/api/v1/shipments", async (req: Request, res: Response) => {
