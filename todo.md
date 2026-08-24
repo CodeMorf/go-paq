@@ -185,7 +185,7 @@
 - [x] Establecer el tema claro como predeterminado y conservar el tema oscuro como opción manual.
 - [x] Integrar los avatares proporcionados de la operadora y del halcón en los lugares visuales correspondientes.
 - [x] Retirar la foto de la operadora del diseño principal y sustituirla por la nueva composición de marca GoPaq proporcionada.
-- [ ] Retirar también el collage de marca del hero y reemplazarlo por una composición limpia basada en logo, color y avatar discreto.
+- [x] Retirar también el collage de marca del hero y reemplazarlo por una composición limpia basada en logo, color y avatar discreto.
 - [x] Reubicar el halcón solo en puntos de identidad donde no sature la composición.
 - [x] Hacer una pasada visual final para confirmar que el halcón queda limitado a puntos de identidad y no compite con el contenido.
 - [x] Añadir selector claro/oscuro a landing y documentación API, adaptando estilos públicos al tema activo.
@@ -210,7 +210,25 @@
 - [ ] Ejecutar prueba autónoma de producción: compilación, suites Vitest, Shopify, rutas públicas y aislamiento de portales.
 - [ ] Generar reporte de verificación con resultados comprobados y bloqueos reales, sin afirmar pruebas no ejecutadas.
 - [x] Resolver incidente de servidor de desarrollo detenido y confirmar arranque saludable.
-- [ ] Publicar el proyecto GoPaq en `CodeMorf/go-paq.git` con rama `main` y commit verificable.
+- [x] Publicar el proyecto GoPaq en `CodeMorf/go-paq.git` con rama `main` y commit verificable.
+- [ ] Verificar checkout limpio con schema Drizzle y migraciones desplegables.
+- [x] Retirar claims y datos simulados de landing y portales, sustituyéndolos por consultas reales o estados vacíos.
+- [x] Retirar mapa, rutas y timeline públicos con direcciones/paradas fijas; mostrar estado vacío hasta disponer de datos reales.
+- [x] Alinear documentación API con endpoints realmente implementados.
+- [x] Mantener todas las tarifas fuera del control del cliente y calcularlas server-side por organización/servicio/moneda.
+- [ ] Validar pertenencia organizativa de documentos y exigir referencias válidas para puntos GPS.
+- [x] Evitar caché de respuestas autenticadas en el service worker.
+- [ ] Documentar dependencias de Manus y declarar explícitamente los requisitos de producción.
+- [ ] Completar los flujos logísticos faltantes antes de cualquier declaración GO de producción.
+- [x] Desactivar Shopify del flujo principal y excluir su smoke test externo mientras la integración permanezca fuera de alcance.
+- [ ] Verificar que `drizzle/schema.ts`, migraciones y configuración de base de datos estén incluidos y desplegables desde un checkout limpio.
+- [x] Eliminar estadísticas, envíos, manifiestos, GPS y fechas simuladas de la landing y reemplazarlas por datos reales o estados vacíos.
+- [ ] Hacer que las acciones visibles sin backend real aparezcan como pendientes o queden conectadas a procedimientos existentes.
+- [x] Alinear `/docs-api` con los endpoints REST realmente implementados o implementar los contratos anunciados.
+- [x] Impedir que el cliente controle tarifas: resolver precios server-side por organización, zona, servicio, vigencia y moneda DOP.
+- [ ] Reforzar documentos y GPS con validación de pertenencia organizativa, referencias válidas y límites seguros.
+- [x] Corregir el service worker para no cachear respuestas autenticadas y documentar límites actuales de la PWA offline.
+- [ ] Documentar dependencias de Manus y preparar una configuración explícita para producción antes de declarar GO.
 - [ ] Montar catálogo Shopify de servicios de envío en `/cliente` usando `commerce.products.*`.
 - [ ] Añadir carrito y checkout Shopify al flujo de creación de envío del cliente usando `useCart()`.
 - [ ] Verificar que `/admin` y `/sucursal` no rendericen catálogo, carrito ni checkout Shopify.

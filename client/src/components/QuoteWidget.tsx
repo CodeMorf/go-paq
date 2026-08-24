@@ -11,7 +11,7 @@ export default function QuoteWidget() {
   const [weightUnit, setWeightUnit] = useState<WeightUnit>("kg");
   const [dimensionUnit, setDimensionUnit] = useState<DimensionUnit>("cm");
   const quoteInput = useMemo(() => ({ actualWeightKg: toKg(form.weight, weightUnit), lengthCm: toCm(form.length, dimensionUnit), widthCm: toCm(form.width, dimensionUnit), heightCm: toCm(form.height, dimensionUnit), distanceKm: form.distanceKm }), [form, weightUnit, dimensionUnit]);
-  const quote = trpc.quote.preview.useQuery({ minAmount: 10, perKg: 4.5, perKm: 0.8, fuelSurchargePct: 8, ...quoteInput }, { enabled: true });
+  const quote = trpc.quote.preview.useQuery(quoteInput, { enabled: true });
   const update = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => setForm((current) => ({ ...current, [key]: Number(event.target.value) }));
   const dimensionFields: Array<[keyof typeof form, string]> = [["length", "Largo"], ["width", "Ancho"], ["height", "Alto"]];
   return (

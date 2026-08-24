@@ -10,6 +10,7 @@ import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
 import { buildTrackingAuditMetadata, trackingResourceId } from "./trackingAudit";
 import { commerceRouter } from "./routers/commerce";
+import { buildDopTariffInput } from "./tariffCatalog";
 
 export const appRouter = router({
   organization: router({
@@ -130,7 +131,7 @@ export const appRouter = router({
     }),
   }),
   quote: router({
-    preview: publicProcedure.input(z.object({ minAmount: z.number().nonnegative(), perKg: z.number().nonnegative(), perKm: z.number().nonnegative(), fuelSurchargePct: z.number().nonnegative().max(100), actualWeightKg: z.number().positive(), lengthCm: z.number().positive(), widthCm: z.number().positive(), heightCm: z.number().positive(), distanceKm: z.number().nonnegative() })).query(({ input }) => calculateQuote(input)),
+    preview: publicProcedure.input(z.object({ actualWeightKg: z.number().positive(), lengthCm: z.number().positive(), widthCm: z.number().positive(), heightCm: z.number().positive(), distanceKm: z.number().nonnegative() })).query(({ input }) => { const tariffInput = buildDopTariffInput(input); return { ...calculateQuote(tariffInput), currency: tariffInput.currency }; }),
   }),
   routes: router({
     list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "routes", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso rotte non disponibile" }); return listRoutesForUser(ctx.user.id); }),
