@@ -6,7 +6,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { advanceManifestForUser, appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createManifestForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { enforceAgentApproval } from "./agentPolicy";
+import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
 
 export const appRouter = router({
@@ -60,10 +60,10 @@ export const appRouter = router({
           { role: "system", content: "Sei l'agente operativo GoPaq. Analizza il contesto logistico in italiano. Non confermare consegne, pagamenti o modifiche di stato: restituisci sempre una proposta che richiede approvazione umana." },
           { role: "user", content: `Contesto: ${input.context}${input.requestedAction ? `\nAzione richiesta: ${input.requestedAction}` : ""}` },
         ],
-        response_format: { type: "json_schema", json_schema: { name: "gopaq_agent_suggestion", strict: true, schema: { type: "object", properties: { summary: { type: "string" }, priority: { type: "string", enum: ["low", "medium", "high"] }, proposedAction: { type: "string" }, requiresApproval: { type: "boolean" }, rationale: { type: "string" } }, required: ["summary", "priority", "proposedAction", "requiresApproval", "rationale"], additionalProperties: false } } },
+        response_format: { type: "json_schema", json_schema: { name: "gopaq_agent_suggestion", strict: true, schema: { type: "object", properties: { summary: { type: "string" }, priority: { type: "string", enum: ["low", "medium", "high"] }, proposedAction: { type: "string" }, actionType: { type: "string", enum: [...AGENT_ACTION_TYPES] }, requiresApproval: { type: "boolean" }, rationale: { type: "string" } }, required: ["summary", "priority", "proposedAction", "actionType", "requiresApproval", "rationale"], additionalProperties: false } } },
       });
       const content = response.choices?.[0]?.message?.content;
-      const rawSuggestion = typeof content === "string" ? JSON.parse(content) : { summary: "Nessun suggerimento disponibile", priority: "low", proposedAction: "Nessuna azione", requiresApproval: true, rationale: "Risposta agente non disponibile" };
+      const rawSuggestion = typeof content === "string" ? JSON.parse(content) : { summary: "Nessun suggerimento disponibile", priority: "low", proposedAction: "Nessuna azione", actionType: "detect_anomaly" as const, requiresApproval: true, rationale: "Risposta agente non disponibile" };
       let suggestion: ReturnType<typeof enforceAgentApproval>;
       try {
         suggestion = enforceAgentApproval(rawSuggestion, input.requestedAction);

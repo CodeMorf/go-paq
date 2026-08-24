@@ -157,3 +157,4 @@
 - [x] Applicare il permesso `api_keys:view` alla lista chiavi API del portale admin, mantenendo `create/configure` per emissione e revoca.
 - [x] Aggiungere ciclo manifest sucursal: apertura, elenco, sigillo, transito, ricezione e riconciliazione con isolamento organizzativo e audit.
 - [x] Aggiungere test Vitest per transizioni manifest valide, salti di stato e stato terminale.
+- [x] Rafforzare l’enforcement agente con tipi di azione ammessi, rifiuto dei tipi sconosciuti e test Vitest dedicato.
