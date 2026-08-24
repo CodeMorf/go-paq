@@ -1,12 +1,14 @@
 {
-  "name": "GoPaq — Logistica porta a porta",
+  "name": "GoPaq — Logística puerta a puerta",
   "short_name": "GoPaq",
-  "description": "Gestione di spedizioni, rotte, filiali e consegne.",
+  "description": "Operación de envíos, rutas, sucursales y entregas para República Dominicana.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#06111f",
-  "theme_color": "#06111f",
-  "lang": "it",
+  "background_color": "#f8fafc",
+  "theme_color": "#071a2e",
+  "lang": "es-DO",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/manus-storage/gopaq-logo_a8552d65.jpeg",

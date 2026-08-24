@@ -296,3 +296,5 @@
 - [x] Sustituir clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema, conservando el contraste claro/oscuro.
 - [ ] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
 - [x] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
+- [ ] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
+- [x] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
