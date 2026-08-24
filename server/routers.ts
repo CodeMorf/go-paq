@@ -162,11 +162,13 @@ export const appRouter = router({
     overview: protectedProcedure.query(async ({ ctx }) => {
       const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de KPI de envíos no disponible" });
       const shipments = await listShipmentsForUser(ctx.user.id);
+      const packages = await listPackagesForUser(ctx.user.id);
       return {
         active: shipments.filter((item) => !["delivered", "returned", "cancelled"].includes(item.physicalStatus)).length,
         inDelivery: shipments.filter((item) => item.physicalStatus === "out_for_delivery").length,
         incidents: shipments.filter((item) => item.physicalStatus === "incident").length,
         total: shipments.length,
+        packages: packages.length,
       };
     }),
     audit: protectedProcedure.input(z.object({ category: z.enum(["operational", "financial", "security", "llm"]), action: z.string().min(2), resourceType: z.string().optional(), resourceId: z.string().optional(), metadata: z.unknown().optional() })).mutation(async ({ ctx, input }) => {

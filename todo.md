@@ -366,3 +366,6 @@
 - [x] Capturar `/admin`, `/sucursal`, `/driver` y `/cliente` en desktop y móvil sin sesión para verificar redirección al acceso seguro y responsive del login; la validación autenticada por rol sigue pendiente.
 - [x] Verificar en `offlineQueue` persistencia cifrada del estado `rejected`, descarte explícito tras conflicto y exclusión de la bandeja pendiente; queda separado el trabajo de documentación tarifaria completa.
 - [x] Ampliar pruebas del motor tarifario para mínimo configurable y divisor volumétrico, manteniendo descuentos, combustible, impuestos y redondeo DOP; suite en 101 aprobadas y 2 Shopify omitidas.
+- [x] Ampliar la verificación HMAC de webhooks con tampering, replay temporal y firmas malformadas; suite en 102 pruebas aprobadas y 2 Shopify omitidas.
+- [ ] Implementar dispatch outbound de webhooks firmados con endpoints por organización, reintentos y entrega auditable; la firma/verificación criptográfica aislada ya está cubierta.
+- [x] Ampliar `logistics.overview` con conteo real de paquetes tenant-scoped y mostrarlo como KPI `Paquetes controlados` en el shell de portales; no se añaden ingresos ni integraciones ficticias.

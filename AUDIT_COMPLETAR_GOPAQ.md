@@ -90,3 +90,11 @@ El portal `/admin` incorpora `ApiRequestLogPanel`, que consulta `apiLogs.list` c
 ## Cobertura adicional del motor tarifario
 
 Se amplió `tariffEngine.test.ts` para comprobar divisor volumétrico configurable, peso facturable, mínimo tarifario y el orden de recargo de combustible, descuento e impuesto, con redondeo monetario a dos decimales. La suite alcanza **101 pruebas aprobadas y 2 omitidas** por Shopify. Esta cobertura es determinista y no sustituye tarifas reales completas por organización ni una validación financiera E2E autenticada.
+
+## Verificación adicional de webhooks
+
+La firma HMAC de `webhook.ts` ahora queda cubierta por casos de payload alterado, replay fuera de tolerancia y formato malformado, usando comparación temporal segura. Esto valida la primitiva criptográfica existente, pero no se presenta como dispatch outbound: todavía falta configurar endpoints por organización, reintentos y entrega auditable sin un servicio de cola real.
+
+## KPI operativo adicional
+
+`logistics.overview` ahora obtiene también el conteo real de paquetes mediante `listPackagesForUser`, manteniendo scope por organización y permiso `shipments:view`; el shell muestra `Paquetes controlados` junto a envíos activos, entregas e incidentes. No se han añadido ingresos, retrasos ni estado de integraciones con valores ficticios: esos indicadores requieren fuentes financieras y conectores reales.
