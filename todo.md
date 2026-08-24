@@ -153,3 +153,5 @@
 - [x] Applicare rate limit per chiave API all’endpoint REST quote con risposta 429 e header `Retry-After`.
 
 - [x] Aggiungere procedura `tracking.privateByShipment` per timeline privata autenticata, con isolamento tramite `listEventsForUser`.
+
+- [x] Applicare il permesso `api_keys:view` alla lista chiavi API del portale admin, mantenendo `create/configure` per emissione e revoca.

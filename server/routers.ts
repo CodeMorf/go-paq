@@ -89,7 +89,7 @@ export const appRouter = router({
     list: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "documents", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso documenti non disponibile" }); return listShipmentDocumentsForUser(ctx.user.id, input?.shipmentId); }),
   }),
   apiKeys: router({
-    list: protectedProcedure.query(({ ctx }) => listApiKeysForUser(ctx.user.id)),
+    list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "api_keys", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso chiavi API non disponibile" }); return listApiKeysForUser(ctx.user.id); }),
     issue: protectedProcedure.input(z.object({ name: z.string().min(2).max(160), scopes: z.array(z.enum(["quotes:read", "shipments:read", "shipments:write", "tracking:read", "pickups:write", "webhooks:read"])).min(1).max(10) })).mutation(async ({ ctx, input }) => {
       const scope = await getOrganizationForUser(ctx.user.id);
       if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "api_keys", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso API non disponibile" });
