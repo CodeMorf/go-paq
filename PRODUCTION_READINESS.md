@@ -23,7 +23,7 @@ La revisión crítica fue incorporada al plan de trabajo y se corrigieron varios
 
 Todavía faltan rate limit distribuido con Redis configurado, políticas de retención/privacidad, configuración real de OAuth, storage y mapas, además de completar y validar operaciones pendientes como devoluciones y pruebas visuales autenticadas. Ya existe creación/edición básica de envíos, creación REST tenant-scoped de envíos y pickups, tracking REST privado, almacenes, rutas, manifest, GPS con referencia y POD idempotente; la operación real de paquetes y cobros continúa sujeta a configuración y validación de producción.
 
-La prueba real de checkout limpio ya se ejecutó contra MariaDB local vacío usando la secuencia del journal, sin tocar la base administrada activa. Los requisitos de autenticación, storage, mapas, LLM y secretos quedaron documentados en `PRODUCTION_CONFIGURATION.md`; aún deben configurarse y probarse en el entorno real de producción.
+La prueba real de checkout limpio se ejecutó previamente contra MariaDB local vacío usando la secuencia del journal, sin tocar la base administrada activa. Una repetición posterior en el entorno administrado fue bloqueada antes de modificar datos por `ER_DBACCESS_DENIED_ERROR`: el usuario no tiene permisos `DROP/CREATE DATABASE`; debe repetirse con un usuario de bootstrap aislado. Los requisitos de autenticación, storage, mapas, LLM y secretos quedaron documentados en `PRODUCTION_CONFIGURATION.md`; aún deben configurarse y probarse en el entorno real de producción.
 
 ## Conclusión
 

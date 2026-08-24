@@ -285,3 +285,4 @@
 - [x] Integrar puntos GPS del driver con la cola offline cifrada, limitando la captura a referencia de envío/ruta y sincronizando al recuperar red.
 - [ ] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
 - [x] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
+- [ ] Repetir verificación de checkout limpio con un usuario de base de datos con permisos CREATE/DROP aislados; la ejecución actual fue bloqueada por ER_DBACCESS_DENIED_ERROR sin tocar datos activos.
