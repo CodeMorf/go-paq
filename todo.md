@@ -397,3 +397,4 @@
 - [x] Crear panel admin para verificar intentos, estado final, `responseStatus`, errores, hash y timestamps de entregas webhook sin exponer secretos.
 - [x] Agregar prueba Vitest de rechazo sin autenticación para la consulta de entregas webhook; el helper aplica filtro por organización activa.
 - [x] Implementar actualización de estado de pickup tenant-scoped con transición válida, actor, timestamp, evidencia opcional y auditoría; migración 0023 aplicada y máquina cubierta por pruebas Vitest (111 aprobadas, 2 Shopify omitidas).
+- [x] Integrar `pickups.updateStatus` en `SucursalPickupPanel` con botones de transición, URL de evidencia, motivo de fallo, feedback y refresh; `pnpm check`, 111 pruebas y build aprobados.
