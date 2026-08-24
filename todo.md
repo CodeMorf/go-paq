@@ -404,3 +404,4 @@
 - [ ] Sincronizar el checkpoint `ddc4b8e1` con `CodeMorf/go-paq`: `git push github main` falló el 24-08-2026 con credencial/token GitHub inválido; requiere reautenticación del conector GitHub. El remoto WebDev sí quedó publicado.
 - [x] Verificar `PRODUCTION_READINESS.md` contra el commit reportado: `275a0f90` documenta 111 pruebas aprobadas, 2 Shopify omitidas, build y TypeScript correctos; el repositorio actual avanzó posteriormente y el documento vigente refleja 115 pruebas aprobadas.
 - [x] Confirmar que el SHA reportado `275a0f90` corresponde exactamente a `275a0f9012351b6cfb59b53c705491fca1afa5cf`; la divergencia es que el HEAD local actual es posterior (`ddc4b8e1`/checkpoint `97c844a8`) y contiene pruebas/documentación adicionales.
+- [ ] Sincronizar los cambios más recientes solicitados por el usuario con `CodeMorf/go-paq` en `main`, confirmar SHA remoto y estado de GitHub Actions.
