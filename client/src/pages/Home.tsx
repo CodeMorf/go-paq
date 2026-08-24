@@ -1,33 +1,94 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
+import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ArrowRight, BarChart3, Box, CheckCircle2, ChevronRight, CircleDot, Clock3, Code2, Globe2, MapPin, PackageCheck, Route as RouteIcon, ScanLine, ShieldCheck, Sparkles, Truck, UserRound, Warehouse, Zap } from "lucide-react";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
-export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
+const brandLogo = "/manus-storage/gopaq-logo_a8552d65.jpeg";
+const brandBoard = "/manus-storage/gopaq-brand-board_26f60c48.png";
 
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+const stats = [
+  { label: "Spedizioni attive", value: "1.284", delta: "+12,8%", icon: PackageCheck, tone: "orange" },
+  { label: "In consegna oggi", value: "326", delta: "94% puntuali", icon: Truck, tone: "blue" },
+  { label: "Filiali operative", value: "18", delta: "3 paesi", icon: Warehouse, tone: "green" },
+  { label: "Alert operativi", value: "07", delta: "2 urgenti", icon: ShieldCheck, tone: "red" },
+];
 
+const shipments = [
+  { id: "GPQ-240823-0184", route: "Santo Domingo → Santiago", status: "In transito", eta: "Oggi, 16:40", tone: "blue" },
+  { id: "GPQ-240823-0177", route: "Miami → Santo Domingo", status: "In revisione doganale", eta: "Domani", tone: "orange" },
+  { id: "GPQ-240823-0163", route: "La Vega → Santo Domingo", status: "In consegna", eta: "12:15", tone: "green" },
+  { id: "GPQ-240823-0159", route: "Santiago → Puerto Plata", status: "Incidenza aperta", eta: "Richiede azione", tone: "red" },
+];
+
+function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
+    <div className="flex items-center gap-3">
+      <img src={brandLogo} alt="GoPaq" className={compact ? "h-10 w-10 rounded-xl object-cover" : "h-12 w-12 rounded-2xl object-cover"} />
+      {!compact && <div><div className="text-xl font-black tracking-tight text-white">Go<span className="text-orange-400">Paq</span></div><div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-400">Logística puerta a puerta</div></div>}
     </div>
   );
+}
+
+function PublicHome() {
+  const [, setLocation] = useLocation();
+  return (
+    <div className="min-h-screen overflow-hidden bg-[#06111f] text-white">
+      <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-6 py-6 lg:px-8">
+        <Logo />
+        <nav className="hidden items-center gap-8 text-sm font-medium text-slate-300 md:flex">
+          <a href="#servicios" className="transition hover:text-white">Servicios</a>
+          <a href="#operacion" className="transition hover:text-white">Operación</a>
+          <button onClick={() => setLocation("/docs-api")} className="transition hover:text-white">API</button>
+        </nav>
+        <div className="flex items-center gap-3"><Button variant="ghost" className="hidden text-slate-300 hover:bg-white/10 hover:text-white sm:inline-flex" onClick={() => startLogin()}>Accedi</Button><Button className="bg-orange-500 text-white shadow-lg shadow-orange-500/20 hover:bg-orange-400" onClick={() => setLocation("/cliente")}>Inizia una spedizione <ArrowRight className="ml-2 h-4 w-4" /></Button></div>
+      </header>
+
+      <main>
+        <section className="relative mx-auto grid max-w-7xl items-center gap-16 px-6 pb-24 pt-14 lg:grid-cols-[1.04fr_.96fr] lg:px-8 lg:pb-32 lg:pt-20">
+          <div className="pointer-events-none absolute -left-28 top-8 h-96 w-96 rounded-full bg-orange-500/10 blur-3xl" />
+          <div className="relative z-10">
+            <Badge className="mb-7 border border-orange-400/25 bg-orange-400/10 px-4 py-2 text-orange-300 hover:bg-orange-400/10"><Sparkles className="mr-2 h-3.5 w-3.5" /> Il tuo pacco. La nostra rotta.</Badge>
+            <h1 className="max-w-3xl text-5xl font-black leading-[.98] tracking-[-.055em] sm:text-6xl lg:text-7xl">La logistica che <span className="text-orange-400">accelera</span> il tuo mondo.</h1>
+            <p className="mt-7 max-w-xl text-lg leading-8 text-slate-300">Un unico centro operativo per spedizioni locali, nazionali e internazionali. Più controllo per il team, più trasparenza per chi spedisce.</p>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row"><Button size="lg" className="h-13 bg-orange-500 px-6 text-base font-bold text-white shadow-xl shadow-orange-500/20 hover:bg-orange-400" onClick={() => setLocation("/cliente")}>Calcola un preventivo <ArrowRight className="ml-2 h-5 w-5" /></Button><Button size="lg" variant="outline" className="h-13 border-white/15 bg-white/[.04] px-6 text-base text-white hover:bg-white/10" onClick={() => setLocation("/cliente")}>Traccia una spedizione <MapPin className="ml-2 h-5 w-5" /></Button></div>
+            <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm text-slate-400"><span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> Tracking in tempo reale</span><span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> Prova di consegna digitale</span><span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> Operatività offline</span></div>
+          </div>
+          <div className="relative mx-auto w-full max-w-xl lg:ml-auto"><div className="absolute -inset-8 rounded-[3rem] bg-orange-500/10 blur-3xl" /><div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0b1c31] p-3 shadow-2xl shadow-black/30"><img src={brandBoard} alt="Operazione GoPaq" className="h-[340px] w-full rounded-[1.4rem] object-cover object-center opacity-90 sm:h-[420px]" /><div className="absolute bottom-7 left-7 right-7 rounded-2xl border border-white/10 bg-[#071321]/90 p-4 backdrop-blur-xl"><div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-[.2em] text-slate-400">Rotta monitorata</p><p className="mt-1 font-bold">Miami → Santo Domingo</p></div><div className="rounded-xl bg-emerald-400/15 px-3 py-2 text-right"><p className="text-xs text-emerald-300">Stato</p><p className="text-sm font-bold text-emerald-200">In transito</p></div></div><div className="mt-4 h-1.5 rounded-full bg-white/10"><div className="h-full w-[72%] rounded-full bg-gradient-to-r from-orange-500 to-amber-300" /></div><div className="mt-2 flex justify-between text-[11px] text-slate-500"><span>Partenza</span><span>72% completato</span><span>Arrivo stimato</span></div></div></div></div>
+        </section>
+
+        <section id="servicios" className="border-y border-white/[.07] bg-[#091827] py-20"><div className="mx-auto max-w-7xl px-6 lg:px-8"><div className="max-w-2xl"><p className="text-sm font-bold uppercase tracking-[.25em] text-orange-400">Un solo ecosistema</p><h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Dalla prima scansione all’ultima firma.</h2><p className="mt-4 leading-7 text-slate-400">GoPaq unisce filiali, autisti, clienti e amministrazione in un flusso continuo, auditabile e pronto a crescere.</p></div><div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[{icon: Globe2,title:"Internazionale",text:"Casella, consolidamento e documenti doganali."},{icon: Truck,title:"Nazionale",text:"Pickup, line haul e consegne tra province."},{icon: Zap,title:"Ultimo miglio",text:"Rotte ottimizzate, GPS e prova di consegna."},{icon: BarChart3,title:"Fulfillment",text:"Inventario, preparazione ordini e liquidazioni."}].map((item) => <Card key={item.title} className="border-white/10 bg-white/[.035] text-white transition hover:-translate-y-1 hover:bg-white/[.06]"><CardHeader><item.icon className="h-7 w-7 text-orange-400" /><CardTitle className="mt-3 text-lg">{item.title}</CardTitle></CardHeader><CardContent className="pt-0 text-sm leading-6 text-slate-400">{item.text}</CardContent></Card>)}</div></div></section>
+
+        <section id="operacion" className="mx-auto max-w-7xl px-6 py-20 lg:px-8"><div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]"><div><p className="text-sm font-bold uppercase tracking-[.25em] text-orange-400">Centro operativo</p><h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Tutto ciò che succede, in un’unica vista.</h2><p className="mt-5 leading-7 text-slate-400">Un cruscotto pensato per agire: priorità, eccezioni, performance e posizione delle rotte senza perdere il contesto.</p><Button variant="outline" className="mt-8 border-white/15 text-white hover:bg-white/10" onClick={() => setLocation("/admin")}>Esplora la console <ChevronRight className="ml-1 h-4 w-4" /></Button></div><Card className="border-white/10 bg-[#0b1c31] text-white shadow-2xl shadow-black/20"><CardHeader className="flex-row items-center justify-between"><div><p className="text-sm text-slate-400">Panoramica operativa</p><CardTitle className="mt-1 text-xl">Oggi, 23 agosto</CardTitle></div><Badge className="border-emerald-400/20 bg-emerald-400/10 text-emerald-300">Live · sincronizzato</Badge></CardHeader><CardContent><div className="grid gap-3 sm:grid-cols-2">{stats.map((stat) => <div key={stat.label} className="rounded-2xl border border-white/[.07] bg-white/[.03] p-4"><div className="flex items-center justify-between"><div className="rounded-xl bg-white/[.06] p-2"><stat.icon className="h-4 w-4 text-orange-300" /></div><span className={`text-xs ${stat.tone === "red" ? "text-red-300" : "text-emerald-300"}`}>{stat.delta}</span></div><p className="mt-5 text-2xl font-bold">{stat.value}</p><p className="mt-1 text-xs text-slate-500">{stat.label}</p></div>)}</div><div className="mt-6 divide-y divide-white/[.07]">{shipments.map((shipment) => <div key={shipment.id} className="flex items-center gap-3 py-3"><div className={`h-2 w-2 rounded-full ${shipment.tone === "red" ? "bg-red-400" : shipment.tone === "orange" ? "bg-orange-400" : shipment.tone === "green" ? "bg-emerald-400" : "bg-sky-400"}`} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{shipment.id}</p><p className="truncate text-xs text-slate-500">{shipment.route}</p></div><div className="hidden text-right sm:block"><p className="text-xs font-medium text-slate-300">{shipment.status}</p><p className="text-[11px] text-slate-500">{shipment.eta}</p></div><ChevronRight className="h-4 w-4 text-slate-600" /></div>)}</div></CardContent></Card></div></section>
+      </main>
+      <footer className="border-t border-white/[.07] px-6 py-8 lg:px-8"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 text-sm text-slate-500 sm:flex-row"><Logo compact /><span>© 2026 GoPaq. Logística rápida, segura y confiable.</span><button onClick={() => setLocation("/docs-api")} className="flex items-center gap-2 hover:text-white"><Code2 className="h-4 w-4" /> Documentación API</button></div></footer>
+    </div>
+  );
+}
+
+function PortalView({ portal }: { portal: string }) {
+  const [, setLocation] = useLocation();
+  const configs: Record<string, { title: string; subtitle: string; icon: typeof Truck; color: string; actions: string[] }> = {
+    admin: { title: "Control Tower", subtitle: "Visión global de empresas, filiales y rendimiento logístico.", icon: BarChart3, color: "orange", actions: ["Crear organización", "Configurar tarifas", "Revisar alertas", "Gestionar usuarios"] },
+    sucursal: { title: "Operaciones de sucursal", subtitle: "Recibe, clasifica, almacena y despacha con trazabilidad completa.", icon: Warehouse, color: "blue", actions: ["Ricezione pacco", "Scansione manifest", "Gestisci inventario", "Trasferisci filiale"] },
+    driver: { title: "La mia giornata", subtitle: "Rotte, fermate e prove di consegna sempre a portata di mano.", icon: Truck, color: "green", actions: ["Avvia turno", "Scansiona carico", "Apri rotta", "Sincronizza offline"] },
+    cliente: { title: "Il mio spazio GoPaq", subtitle: "Crea, paga e traccia le tue spedizioni da un unico luogo.", icon: UserRound, color: "orange", actions: ["Calcola preventivo", "Nuova spedizione", "Traccia pacco", "Scarica documenti"] },
+    "docs-api": { title: "API GoPaq", subtitle: "Contratti chiari per collegare ecommerce, sistemi e partner.", icon: Code2, color: "blue", actions: ["Autenticazione", "Spedizioni", "Tracking", "Webhooks"] },
+  };
+  const config = configs[portal] ?? configs.admin;
+  const Icon = config.icon;
+  return <DashboardLayout><div className="min-h-[calc(100vh-2rem)] rounded-3xl bg-[#f6f8fb] p-5 text-slate-900 sm:p-8"><div className="flex flex-wrap items-start justify-between gap-5"><div><div className="flex items-center gap-3"><div className="rounded-2xl bg-[#071a2e] p-3 text-orange-400"><Icon className="h-6 w-6" /></div><div><p className="text-xs font-bold uppercase tracking-[.2em] text-orange-600">GoPaq / {portal}</p><h1 className="mt-1 text-3xl font-black tracking-tight">{config.title}</h1></div></div><p className="mt-4 max-w-xl text-slate-500">{config.subtitle}</p></div><div className="flex gap-2"><Button variant="outline" className="border-slate-200 bg-white" onClick={() => setLocation("/")}>Sito pubblico</Button><Button className="bg-[#071a2e] text-white hover:bg-[#0c2a49]">+ Nuova operazione</Button></div></div><div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map((stat) => <Card key={stat.label} className="border-0 bg-white shadow-sm"><CardContent className="p-5"><div className="flex items-center justify-between"><p className="text-sm text-slate-500">{stat.label}</p><stat.icon className="h-4 w-4 text-orange-500" /></div><p className="mt-4 text-3xl font-black text-slate-900">{stat.value}</p><p className="mt-1 text-xs font-medium text-emerald-600">{stat.delta}</p></CardContent></Card>)}</div><div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_.8fr]"><Card className="border-0 bg-white shadow-sm"><CardHeader className="flex-row items-center justify-between"><div><CardTitle>Azioni rapide</CardTitle><p className="mt-1 text-sm text-slate-500">Strumenti principali per il tuo ruolo</p></div><CircleDot className="h-5 w-5 text-orange-500" /></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2">{config.actions.map((action, index) => <button key={action} className="group flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition hover:border-orange-200 hover:bg-orange-50"><span className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-xs font-bold text-orange-600 shadow-sm">0{index + 1}</span><span className="text-sm font-semibold">{action}</span></span><ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-1 group-hover:text-orange-500" /></button>)}</CardContent></Card><Card className="border-0 bg-[#071a2e] text-white shadow-sm"><CardHeader><CardTitle>Live operations</CardTitle><p className="text-sm text-slate-400">Ultimi eventi sincronizzati</p></CardHeader><CardContent className="space-y-4">{["GPQ-240823-0184 · Scansione completata", "Route SDQ-04 · GPS attivo", "Manifest M-0088 · Pronto al trasferimento", "POD GPQ-240823-0163 · Firmato"].map((event, i) => <div key={event} className="flex gap-3"><div className="mt-1.5 h-2 w-2 rounded-full bg-orange-400" /><div><p className="text-sm font-medium text-slate-200">{event}</p><p className="mt-1 text-xs text-slate-500">{i + 2} min fa · audit registrato</p></div></div>)}</CardContent></Card></div><div className="mt-6 grid gap-4 md:grid-cols-3">{[[MapPin,"Mappa operativa","Rotte e posizione GPS in tempo reale"],[ScanLine,"Scansione intelligente","QR, barcode e verifica rapida"],[Clock3,"Timeline auditabile","Ogni passaggio con attore e timestamp"]].map(([Item, title, text]) => <div key={title as string} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-4"><Item className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" /><div><p className="font-semibold">{title as string}</p><p className="mt-1 text-sm text-slate-500">{text as string}</p></div></div>)}</div></div></DashboardLayout>;
+}
+
+export default function Home() {
+  const [location] = useLocation();
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  }, []);
+  return location === "/" ? <PublicHome /> : <PortalView portal={location.replace("/", "")} />;
 }

@@ -58,23 +58,16 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <div className="flex flex-col items-center gap-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-center">
-              Sign in to continue
-            </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
-            </p>
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#06111f] px-6 text-white">
+        <div className="absolute -left-24 top-1/4 h-80 w-80 rounded-full bg-orange-500/10 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl" />
+        <div className="relative grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/10 bg-[#0b1c31] shadow-2xl shadow-black/40 lg:grid-cols-[1.05fr_.95fr]">
+          <div className="hidden flex-col justify-between border-r border-white/10 bg-[linear-gradient(145deg,#0c2742,#071321)] p-10 lg:flex">
+            <div className="flex items-center gap-3"><div className="h-11 w-11 overflow-hidden rounded-2xl"><img src="/manus-storage/gopaq-logo_a8552d65.jpeg" alt="GoPaq" className="h-full w-full object-cover" /></div><div><p className="text-lg font-black tracking-tight">Go<span className="text-orange-400">Paq</span></p><p className="text-[9px] uppercase tracking-[.22em] text-slate-400">Logística puerta a puerta</p></div></div>
+            <div><p className="text-xs font-bold uppercase tracking-[.24em] text-orange-400">Accesso operativo</p><h1 className="mt-4 max-w-sm text-4xl font-black leading-tight tracking-tight">Ogni rotta sotto controllo.</h1><p className="mt-5 max-w-sm text-sm leading-6 text-slate-400">Accedi al centro GoPaq per gestire spedizioni, filiali, consegne e clienti con una traccia verificabile.</p></div>
+            <div className="flex items-center gap-2 text-xs text-slate-500"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Sistema operativo · accesso protetto</div>
           </div>
-          <Button
-            onClick={() => startLogin()}
-            size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
-          >
-            Sign in
-          </Button>
+          <div className="flex flex-col items-center justify-center p-8 sm:p-12"><div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400 lg:hidden"><img src="/manus-storage/gopaq-logo_a8552d65.jpeg" alt="GoPaq" className="h-full w-full rounded-2xl object-cover" /></div><div className="w-full max-w-sm"><p className="text-xs font-bold uppercase tracking-[.22em] text-orange-400">Portale riservato</p><h2 className="mt-3 text-3xl font-black tracking-tight">Accedi a GoPaq</h2><p className="mt-3 text-sm leading-6 text-slate-400">Usa il tuo accesso autorizzato per continuare. Ruoli e permessi vengono applicati automaticamente.</p><Button onClick={() => startLogin()} size="lg" className="mt-8 h-12 w-full bg-orange-500 font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-400">Continua con accesso sicuro <span className="ml-2">→</span></Button><p className="mt-5 text-center text-xs text-slate-500">Accesso con autenticazione GoPaq · sessione auditabile</p></div></div>
         </div>
       </div>
     );
