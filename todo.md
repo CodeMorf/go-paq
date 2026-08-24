@@ -124,3 +124,5 @@
 - [x] Correggere l’header mobile di `/docs-api` per evitare sovrapposizione tra logo, navigazione e CTA di accesso.
 
 - [x] Inserire nella landing pubblica un quotatore live collegato a `quote.preview`, con peso volumetrico, distanza, carburante e totale trasparente.
+
+- [x] Aggiungere al portale driver un pannello GPS con consenso esplicito, watchPosition e invio tRPC di coordinate/accuratezza/timestamp.
