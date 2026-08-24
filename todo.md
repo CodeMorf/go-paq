@@ -279,3 +279,4 @@
 - [x] Actualizar panel admin de API keys con scopes REST explícitos y textos operativos en español.
 - [x] Exponer en `/driver` la bandeja de operaciones offline en conflicto con razón, reintento y descarte seguro.
 - [x] Añadir workflow GitHub Actions para `pnpm check`, `pnpm test` y `pnpm build`, corregir la resolución de pnpm y verificar el commit `b0d7758` en verde.
+- [x] Conectar el formulario POD del driver con la cola offline cifrada y sincronización al recuperar conexión, con clasificación de conflictos y pruebas técnicas verdes.
