@@ -10,8 +10,9 @@ const listAuditLogsForUser = vi.fn();
 const listShipmentsForUser = vi.fn();
 const listEventsForUser = vi.fn();
 const appendShipmentEvent = vi.fn();
+const uploadShipmentDocumentForUser = vi.fn();
 
-vi.mock("./db", async (importOriginal) => ({ ...(await importOriginal<typeof import("./db")>()), getOrganizationForUser, canUser, listTrackingPointsForUser, recordTrackingPoint, appendAuditLog, listAuditLogsForUser, listShipmentsForUser, listEventsForUser, appendShipmentEvent }));
+vi.mock("./db", async (importOriginal) => ({ ...(await importOriginal<typeof import("./db")>()), getOrganizationForUser, canUser, listTrackingPointsForUser, recordTrackingPoint, appendAuditLog, listAuditLogsForUser, listShipmentsForUser, listEventsForUser, appendShipmentEvent, uploadShipmentDocumentForUser }));
 const { appRouter } = await import("./routers");
 
 function context(): TrpcContext { return { user: { id: 9, openId: "gps-user", email: "gps@example.com", name: "GPS User", loginMethod: "manus", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: {} as TrpcContext["req"], res: {} as TrpcContext["res"] }; }
@@ -61,4 +62,16 @@ describe("router authorization and audit", () => {
   });
 
   it("rejects private tracking without tracking:view", async () => { getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(false); await expect(appRouter.createCaller(context()).tracking.privateByShipment({ shipmentId: 12 })).rejects.toMatchObject({ code: "FORBIDDEN" }); });
+
+  it("rejects GPS when the persistence layer reports an out-of-tenant reference", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); recordTrackingPoint.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).gps.record({ shipmentId: 999, latitude: 18.4, longitude: -69.9, capturedAt: new Date(), source: "driver" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects document upload when the shipment is outside the active organization", async () => {
+    getOrganizationForUser.mockResolvedValue({ organization: { id: 3 } }); canUser.mockResolvedValue(true); uploadShipmentDocumentForUser.mockResolvedValue(null); appendAuditLog.mockClear();
+    await expect(appRouter.createCaller(context()).documents.upload({ shipmentId: 999, documentType: "label", fileName: "label.pdf", mimeType: "application/pdf", dataBase64: "ZmFrZQ==" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(appendAuditLog).not.toHaveBeenCalled();
+  });
 });

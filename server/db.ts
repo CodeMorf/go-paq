@@ -68,6 +68,20 @@ export async function getPublicTrackingByCode(code: string) {
   return { ...shipment, message: shipment.physicalStatus === "delivered" ? "Spedizione consegnata" : "Spedizione monitorata da GoPaq" };
 }
 
+export async function shipmentBelongsToUser(userId: number, shipmentId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return false;
+  const rows = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  return Boolean(rows[0]);
+}
+
+export async function routeBelongsToUser(userId: number, routeId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return false;
+  const rows = await db.select({ id: routes.id }).from(routes).where(and(eq(routes.id, routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
+  return Boolean(rows[0]);
+}
+
 export async function updateOrganizationProfileForUser(userId: number, input: { country: string; language: string; currency: string; timezone: string; activeServices: string[] }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
@@ -168,6 +182,8 @@ export async function listShipmentDocumentsForUser(userId: number, shipmentId?: 
 export async function uploadShipmentDocumentForUser(userId: number, input: { shipmentId: number; documentType: "label" | "invoice" | "customs" | "pod" | "incident" | "receipt"; fileName: string; mimeType: string; dataBase64: string }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
+  const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  if (!shipment[0]) return null;
   const bytes = Buffer.from(input.dataBase64, "base64");
   if (bytes.length > 10 * 1024 * 1024) throw new Error("Documento oltre il limite di 10 MB");
   const stored = await storagePut(`organizations/${scope.organization.id}/shipments/${input.shipmentId}/${input.fileName}`, bytes, input.mimeType);
@@ -209,6 +225,15 @@ export async function listApiKeysForUser(userId: number) {
 export async function recordTrackingPoint(userId: number, input: Omit<typeof trackingPoints.$inferInsert, "organizationId" | "driverUserId">) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;
+  if (!input.shipmentId && !input.routeId) return null;
+  if (input.shipmentId) {
+    const shipment = await db.select({ id: shipments.id }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+    if (!shipment[0]) return null;
+  }
+  if (input.routeId) {
+    const route = await db.select({ id: routes.id }).from(routes).where(and(eq(routes.id, input.routeId), eq(routes.organizationId, scope.organization.id))).limit(1);
+    if (!route[0]) return null;
+  }
   await db.insert(trackingPoints).values({ ...input, organizationId: scope.organization.id, driverUserId: userId });
   return { success: true } as const;
 }

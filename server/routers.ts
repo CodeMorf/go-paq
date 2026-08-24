@@ -9,7 +9,6 @@ import { invokeLLM } from "./_core/llm";
 import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
 import { buildTrackingAuditMetadata, trackingResourceId } from "./trackingAudit";
-import { commerceRouter } from "./routers/commerce";
 import { buildDopTariffInput } from "./tariffCatalog";
 
 export const appRouter = router({
@@ -24,7 +23,6 @@ export const appRouter = router({
     }),
   }),
   system: systemRouter,
-  commerce: commerceRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -97,7 +95,8 @@ export const appRouter = router({
       const scope = await getOrganizationForUser(ctx.user.id);
       if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "documents", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso documenti non disponibile" });
       const result = await uploadShipmentDocumentForUser(ctx.user.id, input);
-      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Spedizione non appartenente all'organizzazione attiva" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.document.uploaded", resourceType: "shipment_document", resourceId: String(input.shipmentId), metadata: { documentType: input.documentType, mimeType: input.mimeType } });
       return result;
     }),
     list: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "documents", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso documenti non disponibile" }); return listShipmentDocumentsForUser(ctx.user.id, input?.shipmentId); }),
@@ -125,7 +124,7 @@ export const appRouter = router({
     record: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), routeId: z.number().int().positive().optional(), latitude: z.number().gte(-90).lte(90), longitude: z.number().gte(-180).lte(180), accuracyMeters: z.number().nonnegative().optional(), capturedAt: z.date(), source: z.enum(["driver", "branch", "system"]).default("driver") })).mutation(async ({ ctx, input }) => {
       const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso registrazione tracking non disponibile" });
       const result = await recordTrackingPoint(ctx.user.id, { ...input, latitude: String(input.latitude), longitude: String(input.longitude), accuracyMeters: input.accuracyMeters === undefined ? undefined : String(input.accuracyMeters) });
-      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Punto GPS senza envío o ruta válida de la organización" });
       await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "tracking.point.recorded", resourceType: "tracking_point", resourceId: String(input.shipmentId ?? input.routeId ?? "unassigned"), metadata: { shipmentId: input.shipmentId, routeId: input.routeId, source: input.source } });
       return result;
     }),

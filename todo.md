@@ -232,3 +232,8 @@
 - [ ] Montar catálogo Shopify de servicios de envío en `/cliente` usando `commerce.products.*`.
 - [ ] Añadir carrito y checkout Shopify al flujo de creación de envío del cliente usando `useCart()`.
 - [ ] Verificar que `/admin` y `/sucursal` no rendericen catálogo, carrito ni checkout Shopify.
+
+- [ ] Hardening: cubrir con pruebas negativas la pertenencia tenant de documentos y puntos GPS
+- [x] Retirar el router y contexto cliente de Shopify del flujo funcional
+- [x] Añadir migración SQL inicial reproducible para el esquema actual
+- [x] Formatear importes en español dominicano con DOP como valor predeterminado
