@@ -363,3 +363,4 @@
 - [x] Validar el logger REST con TypeScript, 100 pruebas aprobadas, 2 Shopify omitidas y build de producción correcta; persiste el warning no bloqueante del bundle grande.
 - [x] Añadir consulta y panel admin de `api_request_logs` con filtros básicos por status/ruta y permiso `audit:view`, sin exponer cuerpos ni secretos.
 - [x] Revalidar el panel admin de logs REST con TypeScript, suite completa de 100 pruebas aprobadas, 2 Shopify omitidas y build de producción correcta.
+- [x] Capturar `/admin`, `/sucursal`, `/driver` y `/cliente` en desktop y móvil sin sesión para verificar redirección al acceso seguro y responsive del login; la validación autenticada por rol sigue pendiente.
