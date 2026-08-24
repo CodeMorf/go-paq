@@ -149,3 +149,5 @@
 - [x] Applicare permessi organizzativi `documents:create` e `documents:view` alle procedure di upload e consultazione documenti.
 
 - [x] Applicare permessi organizzativi `routes:view`, `pickups:view` e `pickups:create` alle procedure operative di rotte e pickup.
+
+- [x] Applicare rate limit per chiave API all’endpoint REST quote con risposta 429 e header `Retry-After`.
