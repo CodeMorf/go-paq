@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, appendShipmentEvent, canUser, createPickupForUser, getOrganizationForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint } from "./db";
+import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, listApiKeysForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -73,6 +73,16 @@ export const appRouter = router({
       }
       await appendAuditLog({ organizationId: scope?.organization.id, actorUserId: ctx.user.id, category: "llm", action: "agent.suggestion.created", resourceType: "agent", metadata: { ...suggestion, sensitive: suggestion.sensitive, approved: false } });
       return suggestion;
+    }),
+  }),
+  apiKeys: router({
+    list: protectedProcedure.query(({ ctx }) => listApiKeysForUser(ctx.user.id)),
+    issue: protectedProcedure.input(z.object({ name: z.string().min(2).max(160), scopes: z.array(z.enum(["quotes:read", "shipments:read", "shipments:write", "tracking:read", "pickups:write", "webhooks:read"])).min(1).max(10) })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "api_keys", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso API non disponibile" });
+      const key = await createApiKeyForUser(ctx.user.id, input.name, input.scopes);
+      if (!key) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      return key;
     }),
   }),
   gps: router({

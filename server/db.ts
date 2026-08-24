@@ -1,7 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
+import { InsertUser, apiKeys, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { issueApiKey } from "./apiKeys";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -104,6 +105,20 @@ export async function listRouteStopsForUser(userId: number, routeId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];
   return db.select().from(routeStops).where(and(eq(routeStops.organizationId, scope.organization.id), eq(routeStops.routeId, routeId))).orderBy(routeStops.sequence);
+}
+
+export async function createApiKeyForUser(userId: number, name: string, scopes: string[]) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const issued = issueApiKey();
+  await db.insert(apiKeys).values({ organizationId: scope.organization.id, name, keyPrefix: issued.keyPrefix, secretHash: issued.secretHash, scopes: JSON.stringify(scopes) });
+  return { secret: issued.secret, keyPrefix: issued.keyPrefix, scopes };
+}
+
+export async function listApiKeysForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select({ id: apiKeys.id, name: apiKeys.name, keyPrefix: apiKeys.keyPrefix, scopes: apiKeys.scopes, revokedAt: apiKeys.revokedAt, lastUsedAt: apiKeys.lastUsedAt, createdAt: apiKeys.createdAt }).from(apiKeys).where(eq(apiKeys.organizationId, scope.organization.id)).orderBy(desc(apiKeys.createdAt));
 }
 
 export async function recordTrackingPoint(userId: number, input: Omit<typeof trackingPoints.$inferInsert, "organizationId" | "driverUserId">) {
