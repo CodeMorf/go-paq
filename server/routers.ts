@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listShipmentDocumentsForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
+import { advanceManifestForUser, appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createManifestForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -120,6 +120,22 @@ export const appRouter = router({
   routes: router({
     list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "routes", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso rotte non disponibile" }); return listRoutesForUser(ctx.user.id); }),
     stops: protectedProcedure.input(z.object({ routeId: z.number().int().positive() })).query(({ ctx, input }) => listRouteStopsForUser(ctx.user.id, input.routeId)),
+  }),
+  manifests: router({
+    list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "manifests", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso manifest non disponibile" }); return listManifestsForUser(ctx.user.id); }),
+    create: protectedProcedure.input(z.object({ branchId: z.number().int().positive().optional(), direction: z.enum(["outbound", "inbound", "transfer"]) })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "manifests", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso creazione manifest non disponibile" });
+      const result = await createManifestForUser(ctx.user.id, input);
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "manifest.created", resourceType: "manifest", resourceId: result.code, metadata: input });
+      return result;
+    }),
+    advance: protectedProcedure.input(z.object({ manifestId: z.number().int().positive(), nextStatus: z.enum(["sealed", "in_transit", "received", "reconciled"]) })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "manifests", "edit"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso avanzamento manifest non disponibile" });
+      try { const result = await advanceManifestForUser(ctx.user.id, input.manifestId, input.nextStatus); if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Manifest non trovato" }); await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "manifest.advanced", resourceType: "manifest", resourceId: String(input.manifestId), metadata: { nextStatus: input.nextStatus } }); return result; } catch (error) { if (error instanceof TRPCError) throw error; throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Transizione manifest non valida" }); }
+    }),
   }),
   pickups: router({
     list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "pickups", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso pickup non disponibile" }); return listPickupsForUser(ctx.user.id); }),

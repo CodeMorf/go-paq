@@ -1,9 +1,10 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, apiKeys, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
+import { InsertUser, apiKeys, auditLogs, manifests, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
+import { nextManifestStatus } from "./manifestState";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -110,6 +111,31 @@ export async function createPickupForUser(userId: number, input: Omit<typeof pic
   if (!db || !scope) return null;
   await db.insert(pickups).values({ ...input, organizationId: scope.organization.id });
   return { success: true } as const;
+}
+
+export async function listManifestsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(manifests).where(eq(manifests.organizationId, scope.organization.id)).orderBy(desc(manifests.createdAt)).limit(100);
+}
+
+export async function createManifestForUser(userId: number, input: { branchId?: number; direction: "outbound" | "inbound" | "transfer" }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const code = `MAN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+  await db.insert(manifests).values({ organizationId: scope.organization.id, branchId: input.branchId, code, direction: input.direction, createdBy: userId });
+  return { code, direction: input.direction, status: "open" as const };
+}
+
+export async function advanceManifestForUser(userId: number, manifestId: number, nextStatus: "sealed" | "in_transit" | "received" | "reconciled") {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const rows = await db.select().from(manifests).where(and(eq(manifests.id, manifestId), eq(manifests.organizationId, scope.organization.id))).limit(1);
+  const current = rows[0];
+  if (!current) return null;
+  nextManifestStatus(current.status, nextStatus);
+  await db.update(manifests).set({ status: nextStatus }).where(and(eq(manifests.id, manifestId), eq(manifests.organizationId, scope.organization.id)));
+  return { success: true, status: nextStatus } as const;
 }
 
 export async function listRoutesForUser(userId: number) {
