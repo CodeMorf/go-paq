@@ -193,7 +193,7 @@
 - [x] Completar avatares en landing, docs, login y cabeceras compartidas con verificación responsive.
 - [x] Verificar responsive del login y de cabeceras internas con el halcón, y documentar el resultado visual.
 - [x] Completar la localización al español en portales internos, login y componentes compartidos, revisando cadenas residuales.
-- [ ] Reemplazar clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema.
+- [x] Reemplazar clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema.
 - [x] Capturar y documentar landing, docs, login y cabeceras internas en desktop/móvil antes del checkpoint visual.
 - [x] Corregir el encabezado móvil de `/docs-api` para evitar desbordamiento horizontal y mantener CTA accesible.
 - [x] Añadir unidades configurables de peso: libra, onza, kilogramo y gramo.
@@ -290,11 +290,13 @@
 - [x] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
 - [x] Añadir preflight server-side de producción que valide presencia de secretos críticos y exija REDIS_URL con TLS sin imprimir valores sensibles.
 - [x] Añadir preflight server-side de producción que valide presencia de secretos críticos y exija REDIS_URL con TLS sin imprimir valores sensibles.
-- [ ] Hacer obligatorio el preflight antes del arranque production para fallar rápido ante configuración incompleta o REDIS_URL insegura.
 - [x] Hacer obligatorio el preflight antes del arranque production para fallar rápido ante configuración incompleta o REDIS_URL insegura.
-- [ ] Sustituir clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema, conservando el contraste claro/oscuro.
+- [x] Hacer obligatorio el preflight antes del arranque production para fallar rápido ante configuración incompleta o REDIS_URL insegura.
 - [x] Sustituir clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema, conservando el contraste claro/oscuro.
-- [ ] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
+- [x] Sustituir clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema, conservando el contraste claro/oscuro.
+- [x] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
 - [x] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
 - [ ] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
 - [x] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
+- [x] Reemplazar las clases de color restantes de Home/docs (`text-slate-*`, `bg-orange-*`, `bg-slate-*` y bordes) por tokens semánticos o clases de marca basadas en variables CSS.
+- [x] Ejecutar una pasada final de contraste claro/oscuro en landing/docs y documentar que no quedan colores hardcodeados fuera de acentos deliberados de marca.

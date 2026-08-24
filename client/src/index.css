@@ -26,6 +26,21 @@
   --gopaq-navy: oklch(0.2 0.05 250);
   --gopaq-surface: oklch(0.25 0.06 250);
   --gopaq-blue: oklch(0.3 0.08 250);
+  --gopaq-muted: oklch(0.48 0.03 250);
+  --gopaq-faint: oklch(0.58 0.025 250);
+  --gopaq-subtle: oklch(0.38 0.03 250);
+  --gopaq-soft: oklch(0.72 0.02 250);
+  --gopaq-dark-muted: oklch(0.72 0.025 250);
+  --gopaq-dark-faint: oklch(0.62 0.025 250);
+  --gopaq-dark-soft: oklch(0.82 0.02 250);
+  --gopaq-line: oklch(0.86 0.02 240);
+  --gopaq-accent: oklch(0.72 0.18 55);
+  --gopaq-accent-hover: oklch(0.78 0.17 55);
+  --gopaq-accent-soft: oklch(0.78 0.12 55);
+  --gopaq-success: oklch(0.65 0.16 155);
+  --gopaq-danger: oklch(0.63 0.18 25);
+  --gopaq-info: oklch(0.68 0.13 230);
+  --gopaq-inverse: oklch(0.98 0.005 240);
 }
 
 .dark {
@@ -39,6 +54,27 @@
 .bg-gopaq-navy { background-color: var(--gopaq-navy); }
 .bg-gopaq-surface { background-color: var(--gopaq-surface); }
 .bg-gopaq-blue { background-color: var(--gopaq-blue); }
+.text-gopaq-muted { color: var(--gopaq-muted); }
+.text-gopaq-faint { color: var(--gopaq-faint); }
+.text-gopaq-subtle { color: var(--gopaq-subtle); }
+.text-gopaq-soft { color: var(--gopaq-soft); }
+.border-gopaq-line { border-color: var(--gopaq-line); }
+.text-gopaq-accent { color: var(--gopaq-accent); }
+.text-gopaq-accent-soft { color: var(--gopaq-accent-soft); }
+.text-gopaq-success { color: var(--gopaq-success); }
+.text-gopaq-danger { color: var(--gopaq-danger); }
+.text-gopaq-info { color: var(--gopaq-info); }
+.bg-gopaq-accent { background-color: var(--gopaq-accent); }
+.bg-gopaq-accent-hover:hover { background-color: var(--gopaq-accent-hover); }
+.bg-gopaq-accent-soft { background-color: color-mix(in oklab, var(--gopaq-accent) 12%, transparent); }
+.bg-gopaq-success { background-color: var(--gopaq-success); }
+.bg-gopaq-inverse { background-color: var(--gopaq-inverse); }
+.text-gopaq-inverse { color: var(--gopaq-inverse); }
+.border-gopaq-accent-line { border-color: color-mix(in oklab, var(--gopaq-accent) 32%, transparent); }
+.border-gopaq-success-line { border-color: color-mix(in oklab, var(--gopaq-success) 32%, transparent); }
+.public-shell [class*="bg-gopaq-"] .text-gopaq-muted { color: var(--gopaq-dark-muted); }
+.public-shell [class*="bg-gopaq-"] .text-gopaq-faint { color: var(--gopaq-dark-faint); }
+.public-shell [class*="bg-gopaq-"] .text-gopaq-soft { color: var(--gopaq-dark-soft); }
 
 * { border-color: var(--border); }
 html { scroll-behavior: smooth; }
