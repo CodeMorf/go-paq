@@ -200,7 +200,7 @@
 - [x] Añadir unidades configurables de dimensión: centímetro y pulgada, con conversiones consistentes.
 - [x] Extraer conversiones de peso y dimensión a un helper compartido y probar lb/oz/kg/g y cm/pulgada.
 - [x] Asegurar que las pruebas de conversiones de unidades sean detectadas explícitamente por Vitest y verificar su ejecución.
-- [ ] Reutilizar las unidades en las superficies operativas de paquetes, sucursal y manifiestos donde se capturen medidas.
+- [x] Reutilizar las unidades en las superficies operativas de paquetes, sucursal y manifiestos donde se capturen medidas.
 - [x] Establecer DOP/RD$ como moneda predeterminada de GoPaq para República Dominicana en cotización, tarifas y paneles.
 - [x] Mantener Shopify fuera de alcance por decisión del producto; no se integra en `/cliente`, `/admin` ni `/sucursal`.
 - [x] Mantener fuera de alcance el catálogo Shopify; GoPaq calcula cotizaciones server-side en DOP.
