@@ -784,6 +784,7 @@ export async function appendShipmentEvent(input: typeof shipmentEvents.$inferIns
   if (!shipment[0]) return false;
   if (!(await branchBelongsToOrganization(db, input.organizationId, input.branchId ?? undefined))) return false;
   await db.insert(shipmentEvents).values(input);
+  await dispatchWebhooksForEvent(input.organizationId, input.eventType, { shipmentId: input.shipmentId, eventId: input.idempotencyKey, origin: input.origin }).catch(() => undefined);
   return true;
 }
 
@@ -1259,6 +1260,23 @@ export async function createWebhookEndpointForUser(userId: number, input: { name
   const inserted = await db.insert(webhookEndpoints).values({ organizationId: scope.organization.id, name: input.name.trim(), url: input.url.trim(), secretCiphertext: encrypted, subscribedEvents: input.subscribedEvents, isActive: true, createdBy: userId });
   const rows = await db.select({ id: webhookEndpoints.id, organizationId: webhookEndpoints.organizationId, name: webhookEndpoints.name, url: webhookEndpoints.url, subscribedEvents: webhookEndpoints.subscribedEvents, isActive: webhookEndpoints.isActive, createdBy: webhookEndpoints.createdBy, createdAt: webhookEndpoints.createdAt, updatedAt: webhookEndpoints.updatedAt }).from(webhookEndpoints).where(and(eq(webhookEndpoints.id, Number(inserted[0].insertId)), eq(webhookEndpoints.organizationId, scope.organization.id))).limit(1);
   return rows[0] ?? null;
+}
+
+export async function dispatchWebhooksForEvent(organizationId: number, eventType: string, data: unknown) {
+  const db = await getDb();
+  if (!db) return;
+  const endpoints = await db.select().from(webhookEndpoints).where(and(eq(webhookEndpoints.organizationId, organizationId), eq(webhookEndpoints.isActive, true))).limit(100);
+  for (const endpoint of endpoints) {
+    const events = endpoint.subscribedEvents as unknown;
+    if (!Array.isArray(events) || !events.includes(eventType)) continue;
+    const payloadHash = createHash("sha256").update(JSON.stringify({ type: eventType, data })).digest("hex");
+    const inserted = await db.insert(webhookDeliveries).values({ organizationId, endpointId: endpoint.id, eventType, payloadHash, status: "pending", attempts: 0 });
+    const deliveryId = Number(inserted[0].insertId);
+    let result: { ok: boolean; status: number } | null = null; let lastError: string | null = null; let attempts = 0;
+    for (let attempt = 1; attempt <= 3; attempt += 1) { attempts = attempt; try { result = await deliverWebhook(endpoint.url, decryptWebhookSecret(endpoint.secretCiphertext, process.env.JWT_SECRET ?? ""), eventType, data); if (result.ok) break; lastError = `HTTP ${result.status}`; } catch (error) { lastError = error instanceof Error ? error.message.slice(0, 500) : "Webhook delivery failed"; } }
+    const delivered = Boolean(result?.ok);
+    await db.update(webhookDeliveries).set({ status: delivered ? "delivered" : "exhausted", attempts, responseStatus: result?.status ?? null, lastError: delivered ? null : lastError, deliveredAt: delivered ? new Date() : null }).where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.organizationId, organizationId)));
+  }
 }
 
 export async function dispatchWebhookForUser(userId: number, input: { endpointId: number; eventType: string; data: unknown }) {
