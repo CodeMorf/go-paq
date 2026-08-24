@@ -237,3 +237,11 @@
 - [x] Retirar el router y contexto cliente de Shopify del flujo funcional
 - [x] Añadir migración SQL inicial reproducible para el esquema actual
 - [x] Formatear importes en español dominicano con DOP como valor predeterminado
+
+- [x] Añadir creación real de envíos con código de rastreo generado en servidor, estados iniciales y auditoría.
+- [x] Añadir edición protegida de envíos únicamente en estado borrador o cotizado, con aislamiento organizativo.
+- [x] Añadir consulta de sucursales activas aislada por organización para operar con ubicaciones reales.
+- [x] Añadir gestión real de almacenes: listado, creación, edición de estado y auditoría.
+- [x] Añadir confirmación POD con receptor, evidencia opcional, transición a entregado, evento e idempotencia.
+- [x] Añadir paneles de envíos, almacenes y POD a los portales correspondientes.
+- [x] Añadir pruebas tRPC de autorización, auditoría y rechazo tenant para documentos, GPS y POD.

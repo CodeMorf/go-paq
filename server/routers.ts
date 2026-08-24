@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { advanceManifestForUser, appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createManifestForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, updateOrganizationProfileForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
+import { advanceManifestForUser, appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createManifestForUser, createPickupForUser, createShipmentForUser, createWarehouseForUser, confirmShipmentDeliveryForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listBranchesForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, listWarehousesForUser, recordTrackingPoint, revokeApiKeyForUser, updateShipmentForUser, updateWarehouseForUser, updateOrganizationProfileForUser, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -37,7 +37,26 @@ export const appRouter = router({
       if (!scope) return null;
       return { organization: scope.organization, role: scope.membership.role, branchId: scope.membership.branchId };
     }),
-    shipments: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso spedizioni non disponibile" }); return listShipmentsForUser(ctx.user.id); }),
+    shipments: router({
+      list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de envíos no disponible" }); return listShipmentsForUser(ctx.user.id); }),
+      create: protectedProcedure.input(z.object({ branchId: z.number().int().positive().optional(), serviceType: z.enum(["local", "national", "international", "assisted_purchase", "heavy_cargo"]), senderName: z.string().min(2).max(180), recipientName: z.string().min(2).max(180), originAddress: z.string().min(5).max(1000), destinationAddress: z.string().min(5).max(1000), originCountry: z.string().min(2).max(80).default("DO"), destinationCountry: z.string().min(2).max(80).default("DO"), estimatedAmount: z.string().regex(/^\\d+(\\.\\d{1,2})?$/).optional() })).mutation(async ({ ctx, input }) => {
+        const scope = await getOrganizationForUser(ctx.user.id);
+        if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de creación de envíos no disponible" });
+        const result = await createShipmentForUser(ctx.user.id, input);
+        if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "La sucursal no pertenece a la organización activa" });
+        await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.created", resourceType: "shipment", resourceId: String(result.id), metadata: { trackingCode: result.trackingCode, serviceType: result.serviceType } });
+        return result;
+      }),
+      update: protectedProcedure.input(z.object({ id: z.number().int().positive(), branchId: z.number().int().positive().optional(), serviceType: z.enum(["local", "national", "international", "assisted_purchase", "heavy_cargo"]).optional(), senderName: z.string().min(2).max(180).optional(), recipientName: z.string().min(2).max(180).optional(), originAddress: z.string().min(5).max(1000).optional(), destinationAddress: z.string().min(5).max(1000).optional(), originCountry: z.string().min(2).max(80).optional(), destinationCountry: z.string().min(2).max(80).optional(), estimatedAmount: z.string().regex(/^\\d+(\\.\\d{1,2})?$/).optional() })).mutation(async ({ ctx, input }) => {
+        const scope = await getOrganizationForUser(ctx.user.id);
+        if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "edit"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de edición de envíos no disponible" });
+        const { id, ...changes } = input;
+        const result = await updateShipmentForUser(ctx.user.id, id, changes);
+        if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Envío no encontrado o ya no está editable" });
+        await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.updated", resourceType: "shipment", resourceId: String(id), metadata: changes });
+        return result;
+      }),
+    }),
     timeline: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive() })).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso timeline non disponibile" }); return listEventsForUser(ctx.user.id, input.shipmentId); }),
     appendEvent: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive(), eventType: z.string().min(2), nextStatus: z.string().optional(), note: z.string().optional(), evidenceUrl: z.string().url().optional(), latitude: z.number().optional(), longitude: z.number().optional(), idempotencyKey: z.string().min(8), origin: z.string().min(2).default("operator") })).mutation(async ({ ctx, input }) => {
       const scope = await getOrganizationForUser(ctx.user.id);
@@ -45,6 +64,19 @@ export const appRouter = router({
       await appendShipmentEvent({ ...input, latitude: input.latitude === undefined ? undefined : String(input.latitude), longitude: input.longitude === undefined ? undefined : String(input.longitude), organizationId: scope.organization.id, actorUserId: ctx.user.id });
       await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.event.appended", resourceType: "shipment", resourceId: String(input.shipmentId), metadata: input });
       return { success: true } as const;
+    }),
+    confirmDelivery: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive(), recipientName: z.string().min(2).max(180), note: z.string().max(1000).optional(), evidenceUrl: z.string().url().optional(), latitude: z.number().gte(-90).lte(90).optional(), longitude: z.number().gte(-180).lte(180).optional(), idempotencyKey: z.string().min(8).max(120) })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de confirmación de entrega no disponible" });
+      try {
+        const result = await confirmShipmentDeliveryForUser(ctx.user.id, { ...input, latitude: input.latitude === undefined ? undefined : String(input.latitude), longitude: input.longitude === undefined ? undefined : String(input.longitude) });
+        if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Envío no encontrado en la organización activa" });
+        await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.delivery.confirmed", resourceType: "shipment", resourceId: String(input.shipmentId), metadata: { recipientName: input.recipientName, evidenceProvided: Boolean(input.evidenceUrl), idempotencyKey: input.idempotencyKey } });
+        return result;
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Entrega no confirmada" });
+      }
     }),
     overview: protectedProcedure.query(async ({ ctx }) => {
       const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso KPI spedizioni non disponibile" });
@@ -150,6 +182,29 @@ export const appRouter = router({
       const scope = await getOrganizationForUser(ctx.user.id);
       if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "manifests", "edit"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso avanzamento manifest non disponibile" });
       try { const result = await advanceManifestForUser(ctx.user.id, input.manifestId, input.nextStatus); if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Manifest non trovato" }); await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "manifest.advanced", resourceType: "manifest", resourceId: String(input.manifestId), metadata: { nextStatus: input.nextStatus } }); return result; } catch (error) { if (error instanceof TRPCError) throw error; throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Transizione manifest non valida" }); }
+    }),
+  }),
+  branches: router({
+    list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "branches", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de sucursales no disponible" }); return listBranchesForUser(ctx.user.id); }),
+  }),
+  warehouses: router({
+    list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "warehouses", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de almacenes no disponible" }); return listWarehousesForUser(ctx.user.id); }),
+    create: protectedProcedure.input(z.object({ branchId: z.number().int().positive(), name: z.string().min(2).max(160), code: z.string().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/), address: z.string().max(1000).optional() })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "warehouses", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de creación de almacenes no disponible" });
+      const result = await createWarehouseForUser(ctx.user.id, input);
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "La sucursal no pertenece a la organización activa" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "warehouse.created", resourceType: "warehouse", resourceId: String(result.id), metadata: { code: result.code, branchId: result.branchId } });
+      return result;
+    }),
+    update: protectedProcedure.input(z.object({ id: z.number().int().positive(), branchId: z.number().int().positive().optional(), name: z.string().min(2).max(160).optional(), code: z.string().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/).optional(), address: z.string().max(1000).optional(), isActive: z.boolean().optional() })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "warehouses", "edit"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permiso de edición de almacenes no disponible" });
+      const { id, ...changes } = input;
+      const result = await updateWarehouseForUser(ctx.user.id, id, changes);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "Almacén no encontrado" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "warehouse.updated", resourceType: "warehouse", resourceId: String(id), metadata: changes });
+      return result;
     }),
   }),
   pickups: router({

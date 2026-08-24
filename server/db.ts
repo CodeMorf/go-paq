@@ -1,10 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, apiKeys, auditLogs, manifests, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
+import { InsertUser, apiKeys, auditLogs, branches, manifests, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
 import { nextManifestStatus } from "./manifestState";
+import { transitionShipment } from "./shipmentState";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -89,6 +91,64 @@ export async function updateOrganizationProfileForUser(userId: number, input: { 
   return { success: true } as const;
 }
 
+type ShipmentInput = {
+  branchId?: number;
+  serviceType: "local" | "national" | "international" | "assisted_purchase" | "heavy_cargo";
+  senderName: string;
+  recipientName: string;
+  originAddress: string;
+  destinationAddress: string;
+  originCountry: string;
+  destinationCountry: string;
+  estimatedAmount?: string;
+};
+
+async function branchBelongsToOrganization(db: Awaited<ReturnType<typeof getDb>>, organizationId: number, branchId?: number) {
+  if (!db || branchId === undefined) return branchId === undefined;
+  const rows = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.id, branchId), eq(branches.organizationId, organizationId), eq(branches.isActive, true))).limit(1);
+  return Boolean(rows[0]);
+}
+
+function newTrackingCode() {
+  return `GPQ-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+export async function createShipmentForUser(userId: number, input: ShipmentInput) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !(await branchBelongsToOrganization(db, scope.organization.id, input.branchId))) return null;
+  const trackingCode = newTrackingCode();
+  await db.insert(shipments).values({ ...input, trackingCode, organizationId: scope.organization.id, createdBy: userId, currency: "DOP", estimatedAmount: input.estimatedAmount });
+  const rows = await db.select().from(shipments).where(and(eq(shipments.organizationId, scope.organization.id), eq(shipments.trackingCode, trackingCode))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateShipmentForUser(userId: number, shipmentId: number, input: Partial<Omit<ShipmentInput, "serviceType">> & { serviceType?: ShipmentInput["serviceType"] }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !(await branchBelongsToOrganization(db, scope.organization.id, input.branchId))) return null;
+  const current = await db.select({ id: shipments.id, commercialStatus: shipments.commercialStatus }).from(shipments).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  if (!current[0] || !["draft", "quoted"].includes(current[0].commercialStatus)) return null;
+  await db.update(shipments).set(input).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id)));
+  const rows = await db.select().from(shipments).where(and(eq(shipments.id, shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function confirmShipmentDeliveryForUser(userId: number, input: { shipmentId: number; recipientName: string; note?: string; evidenceUrl?: string; latitude?: string; longitude?: string; idempotencyKey: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const current = await db.select().from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  if (!current[0]) return null;
+  const existingEvent = await db.select({ id: shipmentEvents.id }).from(shipmentEvents).where(and(eq(shipmentEvents.organizationId, scope.organization.id), eq(shipmentEvents.idempotencyKey, input.idempotencyKey))).limit(1);
+  if (existingEvent[0]) return current[0];
+  transitionShipment("transport", current[0].physicalStatus, "delivered");
+  const eventNote = [input.recipientName ? `Recibido por: ${input.recipientName}` : "", input.note ?? ""].filter(Boolean).join(" · ");
+  await db.transaction(async (tx) => {
+    await tx.update(shipments).set({ physicalStatus: "delivered", transportStatus: "completed" }).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id)));
+    await tx.insert(shipmentEvents).values({ organizationId: scope.organization.id, shipmentId: input.shipmentId, actorUserId: userId, eventType: "delivery_confirmed", previousStatus: current[0].physicalStatus, nextStatus: "delivered", note: eventNote, evidenceUrl: input.evidenceUrl, latitude: input.latitude, longitude: input.longitude, idempotencyKey: input.idempotencyKey, origin: "driver" });
+  });
+  const rows = await db.select().from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
+}
+
 export async function listShipmentsForUser(userId: number) {
   const scope = await getOrganizationForUser(userId);
   const db = await getDb();
@@ -119,6 +179,36 @@ export async function appendShipmentEvent(input: typeof shipmentEvents.$inferIns
   const db = await getDb();
   if (!db) return;
   await db.insert(shipmentEvents).values(input);
+}
+
+export async function listBranchesForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(branches).where(and(eq(branches.organizationId, scope.organization.id), eq(branches.isActive, true))).orderBy(branches.name).limit(100);
+}
+
+export async function listWarehousesForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(warehouses).where(eq(warehouses.organizationId, scope.organization.id)).orderBy(desc(warehouses.createdAt)).limit(100);
+}
+
+export async function createWarehouseForUser(userId: number, input: { branchId: number; name: string; code: string; address?: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !(await branchBelongsToOrganization(db, scope.organization.id, input.branchId))) return null;
+  await db.insert(warehouses).values({ ...input, organizationId: scope.organization.id, address: input.address ?? null });
+  const rows = await db.select().from(warehouses).where(and(eq(warehouses.organizationId, scope.organization.id), eq(warehouses.code, input.code))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateWarehouseForUser(userId: number, warehouseId: number, input: { branchId?: number; name?: string; code?: string; address?: string; isActive?: boolean }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope || !(await branchBelongsToOrganization(db, scope.organization.id, input.branchId))) return null;
+  const current = await db.select({ id: warehouses.id }).from(warehouses).where(and(eq(warehouses.id, warehouseId), eq(warehouses.organizationId, scope.organization.id))).limit(1);
+  if (!current[0]) return null;
+  await db.update(warehouses).set(input).where(and(eq(warehouses.id, warehouseId), eq(warehouses.organizationId, scope.organization.id)));
+  const rows = await db.select().from(warehouses).where(and(eq(warehouses.id, warehouseId), eq(warehouses.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function listPickupsForUser(userId: number) {
