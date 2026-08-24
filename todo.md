@@ -307,4 +307,4 @@
 - [x] Validar `branchId` de appendEvent contra la organización activa y conservar actor, posición, evidencia, motivo, origen e idempotencia.
 - [x] Añadir al formulario de pickup del cliente ventana horaria opcional desde/hasta, validación de orden y serialización UTC compatible con el esquema real.
 - [x] Exponer mutation protegida para actualizar sucursal y almacén de una membership, validando pertenencia a la organización activa y generando auditoría de seguridad.
-- [ ] Preparar README de GoPaq con atribución By CodeMorf.tech y subir cambios verificados al repositorio CodeMorf/go-paq sin secretos.
+- [x] Preparar README de GoPaq con atribución By CodeMorf.tech y subir cambios verificados al repositorio CodeMorf/go-paq sin secretos.
