@@ -158,3 +158,4 @@
 - [x] Aggiungere ciclo manifest sucursal: apertura, elenco, sigillo, transito, ricezione e riconciliazione con isolamento organizzativo e audit.
 - [x] Aggiungere test Vitest per transizioni manifest valide, salti di stato e stato terminale.
 - [x] Rafforzare l’enforcement agente con tipi di azione ammessi, rifiuto dei tipi sconosciuti e test Vitest dedicato.
+- [x] Mostrare nel portale driver l’ultima posizione GPS sincronizzata, timestamp UTC e accuratezza con refresh periodico.
