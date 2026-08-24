@@ -133,3 +133,5 @@
 - [x] Esporre un endpoint REST `/api/v1/quotes` autenticato con Bearer key, scope e versione.
 
 - [x] Aggiungere al portale sucursal un pannello pickup con lista organizzativa e registrazione validata di indirizzo, contatto e note via tRPC.
+
+- [x] Collegare `tracking.publicByCode` al database con codice guida, stato logistico, paesi e messaggio pubblico minimizzato.

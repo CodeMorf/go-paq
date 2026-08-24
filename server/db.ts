@@ -57,6 +57,16 @@ export async function canUser(userId: number, organizationId: number, resource: 
   return Boolean(permissions[0]);
 }
 
+export async function getPublicTrackingByCode(code: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const query = db.select({ trackingCode: shipments.trackingCode, serviceType: shipments.serviceType, physicalStatus: shipments.physicalStatus, transportStatus: shipments.transportStatus, originCountry: shipments.originCountry, destinationCountry: shipments.destinationCountry, updatedAt: shipments.updatedAt }).from(shipments).where(eq(shipments.trackingCode, code)).limit(1);
+  const result = await Promise.race([query, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("tracking_timeout")), 750))]).catch(() => []);
+  const shipment = result[0];
+  if (!shipment) return null;
+  return { ...shipment, message: shipment.physicalStatus === "delivered" ? "Spedizione consegnata" : "Spedizione monitorata da GoPaq" };
+}
+
 export async function listShipmentsForUser(userId: number) {
   const scope = await getOrganizationForUser(userId);
   const db = await getDb();
