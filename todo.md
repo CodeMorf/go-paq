@@ -364,3 +364,5 @@
 - [x] Añadir consulta y panel admin de `api_request_logs` con filtros básicos por status/ruta y permiso `audit:view`, sin exponer cuerpos ni secretos.
 - [x] Revalidar el panel admin de logs REST con TypeScript, suite completa de 100 pruebas aprobadas, 2 Shopify omitidas y build de producción correcta.
 - [x] Capturar `/admin`, `/sucursal`, `/driver` y `/cliente` en desktop y móvil sin sesión para verificar redirección al acceso seguro y responsive del login; la validación autenticada por rol sigue pendiente.
+- [x] Verificar en `offlineQueue` persistencia cifrada del estado `rejected`, descarte explícito tras conflicto y exclusión de la bandeja pendiente; queda separado el trabajo de documentación tarifaria completa.
+- [x] Ampliar pruebas del motor tarifario para mínimo configurable y divisor volumétrico, manteniendo descuentos, combustible, impuestos y redondeo DOP; suite en 101 aprobadas y 2 Shopify omitidas.

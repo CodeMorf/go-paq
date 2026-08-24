@@ -86,3 +86,7 @@ El portal `/admin` incorpora `ApiRequestLogPanel`, que consulta `apiLogs.list` c
 ## Panel administrativo de trazabilidad REST
 
 `/admin` ahora incluye un panel para consultar `api_request_logs` con filtros por código HTTP y ruta. La procedure `apiLogs.list` exige `audit:view`, deriva la organización desde la sesión autenticada, limita la consulta a 200 registros y no expone cuerpos, tokens ni secretos. La validación posterior a la integración mantiene TypeScript correcto, **100 pruebas aprobadas y 2 omitidas** por Shopify, además de build de producción correcta con el warning no bloqueante del bundle grande.
+
+## Cobertura adicional del motor tarifario
+
+Se amplió `tariffEngine.test.ts` para comprobar divisor volumétrico configurable, peso facturable, mínimo tarifario y el orden de recargo de combustible, descuento e impuesto, con redondeo monetario a dos decimales. La suite alcanza **101 pruebas aprobadas y 2 omitidas** por Shopify. Esta cobertura es determinista y no sustituye tarifas reales completas por organización ni una validación financiera E2E autenticada.

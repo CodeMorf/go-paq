@@ -9,6 +9,14 @@ describe("calculateQuote", () => {
     expect(quote.total).toBe(88);
   });
 
+  it("respects the configured volumetric divisor and minimum amount", () => {
+    const quote = calculateQuote({ minAmount: 50, perKg: 2, perKm: 0, fuelSurchargePct: 0, volumetricDivisor: 4000, actualWeightKg: 1, lengthCm: 40, widthCm: 20, heightCm: 20, distanceKm: 0 });
+    expect(quote.volumetricWeightKg).toBe(4);
+    expect(quote.billableWeightKg).toBe(4);
+    expect(quote.base).toBe(50);
+    expect(quote.total).toBe(50);
+  });
+
   it("applies fixed surcharge, discount and tax in the declared order", () => {
     const quote = calculateQuote({ minAmount: 100, perKg: 10, perKm: 0, fixedSurcharge: 20, fuelSurchargePct: 10, discountPct: 10, taxPct: 18, actualWeightKg: 5, lengthCm: 10, widthCm: 10, heightCm: 10, distanceKm: 0 });
     expect(quote.base).toBe(120);
