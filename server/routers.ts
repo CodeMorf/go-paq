@@ -118,12 +118,14 @@ export const appRouter = router({
     preview: publicProcedure.input(z.object({ minAmount: z.number().nonnegative(), perKg: z.number().nonnegative(), perKm: z.number().nonnegative(), fuelSurchargePct: z.number().nonnegative().max(100), actualWeightKg: z.number().positive(), lengthCm: z.number().positive(), widthCm: z.number().positive(), heightCm: z.number().positive(), distanceKm: z.number().nonnegative() })).query(({ input }) => calculateQuote(input)),
   }),
   routes: router({
-    list: protectedProcedure.query(({ ctx }) => listRoutesForUser(ctx.user.id)),
+    list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "routes", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso rotte non disponibile" }); return listRoutesForUser(ctx.user.id); }),
     stops: protectedProcedure.input(z.object({ routeId: z.number().int().positive() })).query(({ ctx, input }) => listRouteStopsForUser(ctx.user.id, input.routeId)),
   }),
   pickups: router({
-    list: protectedProcedure.query(({ ctx }) => listPickupsForUser(ctx.user.id)),
+    list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "pickups", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso pickup non disponibile" }); return listPickupsForUser(ctx.user.id); }),
     create: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), address: z.string().min(5).max(500), contactName: z.string().min(2).max(160), windowStart: z.date().optional(), windowEnd: z.date().optional(), notes: z.string().max(1000).optional() })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "pickups", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso creazione pickup non disponibile" });
       const result = await createPickupForUser(ctx.user.id, input);
       if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
       return result;

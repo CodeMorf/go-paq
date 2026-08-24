@@ -147,3 +147,5 @@
 - [x] Aggiungere un pannello admin/cliente per elencare spedizioni reali isolate per organizzazione con codice, paesi, servizio e stato fisico.
 
 - [x] Applicare permessi organizzativi `documents:create` e `documents:view` alle procedure di upload e consultazione documenti.
+
+- [x] Applicare permessi organizzativi `routes:view`, `pickups:view` e `pickups:create` alle procedure operative di rotte e pickup.
