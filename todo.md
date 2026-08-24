@@ -63,7 +63,7 @@
 
 ## Mappe, GPS, tracking e documenti
 
-- [ ] Integrare componente mappa preconfigurato con geocoding, indicazioni, fermate e rotte.
+- [x] Integrare componente mappa preconfigurato con geocoding, indicazioni, fermate e rotte.
 - [ ] Implementare posizione corrente autista, ultima posizione nota, stato tracking e timeline operativa.
 - [ ] Implementare vista mappa amministrativa con filtri per rotta, stato, filiale e ritardo.
 - [ ] Implementare etichette con barcode/QR e template configurabili per organizzazione.
@@ -74,17 +74,17 @@
 
 - [ ] Definire autenticazione API con chiavi revocabili, scope, rate limit e isolamento organizzativo.
 - [ ] Definire endpoint documentati per quotazioni, spedizioni, pacchi, tracking, pickup, webhooks e documenti.
-- [ ] Costruire `/docs-api` con contratti, esempi request/response, errori, autenticazione e versionamento.
+- [x] Costruire `/docs-api` con contratti, esempi request/response, errori, autenticazione e versionamento.
 - [ ] Implementare webhook firmati per eventi di spedizione, tracking, consegna e incidenti.
 - [ ] Implementare log API, tentativi, risposte, revoche e strumenti di verifica.
 
 ## Agente LLM operativo
 
-- [ ] Integrare agente LLM tramite proxy/infrastruttura configurata, senza esporre credenziali al client.
+- [x] Integrare agente LLM tramite proxy/infrastruttura configurata, senza esporre credenziali al client.
 - [ ] Costruire configurazione per organizzazione: prompt, moduli, lingue, soglie e modalità assistita.
 - [ ] Implementare supporto contestuale per operatori, clienti e amministratori.
 - [ ] Implementare classificazione/estrazione da documenti con output strutturato e validazione.
-- [ ] Implementare suggerimenti di tariffa, stato, anomalia o risposta senza autorizzare automaticamente azioni sensibili.
+- [x] Implementare suggerimenti di tariffa, stato, anomalia o risposta senza autorizzare automaticamente azioni sensibili.
 - [ ] Implementare approvazione umana per azioni che modificano dati, finanze, stato di consegna o comunicazioni esterne.
 - [ ] Salvare input rilevante, output, azione proposta, approvatore, esito e audit trail.
 
@@ -113,3 +113,10 @@
 - [ ] Introdurre stati separati per acquisto assistito e incidenti con transizioni validate lato backend.
 - [ ] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
 - [ ] Collegare utenti organizzativi a magazzini o sedi operative in modo esplicito.
+
+- [x] Implementare logica Google Maps reale con `onMapReady`: geocoding, DirectionsService/DirectionsRenderer, fermate e rotta visualizzata.
+- [x] Vincolare lato backend l’agente a restituire sempre `requiresApproval: true` per azioni sensibili e bloccare suggerimenti non conformi.
+- [ ] Aggiungere procedure/UI specifiche per suggerimenti di tariffa, stato e anomalie con test dedicati.
+
+- [x] Completare `/docs-api` con errori, response examples, policy di versioning e contratti dettagliati per quotes, shipments, tracking, pickups e webhooks.
+- [ ] Aggiungere enforcement backend forte per l’agente: tipi di azione sensibile validati, suggerimenti non conformi rifiutati e test Vitest dedicati.
