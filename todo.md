@@ -47,19 +47,19 @@
 
 - [ ] Costruire dashboard mobile-first per turno, disponibilità, veicolo, incarichi e rotta.
 - [ ] Costruire scansione carico, elenco fermate, priorità, navigazione e contatto protetto.
-- [ ] Costruire aggiornamenti di stato pickup/consegna con PIN, firma, nome, foto, coordinate e timestamp.
-- [ ] Costruire gestione tentativo fallito, motivo, evidenze, incassi, spese e chiusura rotta.
+- [ ] Construir actualizaciones de estado de pickup y entrega con PIN, firma, nombre, foto, coordenadas y timestamp; pickup ahora tiene transición/evidencia, pero firma/PIN/foto equivalentes aplican a entrega/POD y el walkthrough completo sigue pendiente.
+- [ ] Construir gestión completa de intento fallido, motivo, evidencias, cobros contra entrega, gastos y cierre de ruta; intentos, gastos y cierre existen parcialmente, evidencias/COD y walkthrough completo pendientes.
 - [x] Implementare coda offline locale cifrata con idempotenza, stati sincronizado/en espera/conflicto/rechazado.
 - [x] Limitare la raccolta GPS alla sessione di turno/rotta attiva e rendere visibile il consenso/policy; `DriverGpsCard` solo activa `watchPosition` para rutas asignadas en estado `active`.
 
 ## Portale `/cliente` e sito pubblico
 
 - [ ] Costruire sito pubblico GoPaq con servizi, copertura, filiali, FAQ, politiche e CTA.
-- [ ] Costruire autenticazione cliente, profilo individuale/aziendale, indirizzi e contatti autorizzati.
-- [ ] Costruire quotatore con origine, destinazione, peso, dimensioni, servizio e stima trasparente.
+- [x] Costruire autenticación cliente, perfil individual/empresarial, direcciones y contactos autorizados; aislamiento tenant-scoped y tickets conectados.
+- [x] Construir cotizador con origen, destino, peso, dimensiones, servicio y estimación transparente mediante tarifa server-side.
 - [ ] Costruire creazione richiesta di spedizione, pickup, acquisto assistito, carico pesante e fulfillment.
 - [ ] Costruire dashboard invii, saldi, fatture, notifiche, ticket e documenti.
-- [ ] Costruire tracking pubblico protetto per numero di guida e tracking privato autenticato.
+- [x] Construir tracking público protegido por número de guía y tracking privado autenticado con eventos tenant-scoped.
 
 ## Mappe, GPS, tracking e documenti
 
@@ -76,7 +76,7 @@
 - [ ] Definire endpoint documentati per quotazioni, spedizioni, pacchi, tracking, pickup, webhooks e documenti.
 - [x] Costruire `/docs-api` con contratti, esempi request/response, errori, autenticazione e versionamento.
 - [x] Implementar webhooks firmados para eventos de envío, tracking, entrega e incidentes; cada mutación persiste intentos y no bloquea el evento si el destino falla. La cola externa y el contrato REST siguen pendientes.
-- [x] Implementar logs API, intentos/respuestas de entrega, revocaciones y herramientas de consulta protegidas; cuerpos sensibles y secretos no se registran.
+- [x] Implementar logs API, intentos/respuestas de entrega webhook, revocaciones y herramienta protegida de consulta de entregas; cuerpos sensibles y secretos no se registran.
 
 ## Agente LLM operativo
 
@@ -103,13 +103,13 @@
 
 - [x] Implementare service worker reale e registrazione client per completare la base PWA installabile/offline.
 - [x] Aggiungere documentazione dedicata in `ARCHITECTURE.md` con scope della prima release e integrazioni configurabili.
-- [ ] Estendere lo schema con magazzini/sedi operative esplicite e relazioni agli utenti organizzativi.
-- [ ] Implementare autorizzazione granulare per azione con enforcement backend e test.
+- [x] Extender el esquema con almacenes/sedes operativas explícitas y relaciones a usuarios organizativos; migraciones y scope verificados.
+- [x] Implementar autorización granular por acción con enforcement backend y pruebas de permisos en routers operativos.
 - [ ] Aggiungere query/mutation del dominio con filtro obbligatorio per `organizationId` dal contesto autenticato.
 - [ ] Implementare audit log centralizzato append-only per eventi operativi, finanziari, sicurezza e LLM con procedure e test.
 
 - [ ] Aggiungere lingua e servizi attivi dell’organizzazione con query e UI di profilo.
-- [ ] Estendere i pacchi con restrizioni e stato del pacco.
+- [x] Extender paquetes con restricciones, estado, peso, volumen y dimensiones persistidos; cobertura de estados en Vitest.
 - [x] Introdurre stati separati per acquisto assistito e incidenti con transiciones validadas lato backend; estados de compra asistida ampliados en migración 0014 y cubiertos con Vitest.
 - [x] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
 - [x] Collegare utenti organizzativi a magazzini o sedi operative in modo esplicito mediante `memberships.list` y `memberships.updateScope`, con validación tenant-scoped y auditoría.
@@ -119,7 +119,7 @@
 - [ ] Aggiungere procedure/UI specifiche per suggerimenti di tariffa, stato e anomalie con test dedicati.
 
 - [x] Completare `/docs-api` con errori, response examples, policy di versioning e contratti dettagliati per quotes, shipments, tracking, pickups e webhooks.
-- [ ] Aggiungere enforcement backend forte per l’agente: tipi di azione sensibile validati, suggerimenti non conformi rifiutati e test Vitest dedicati.
+- [x] Añadir enforcement backend fuerte para el agente: acciones sensibles exigen aprobación, sugerencias no conformes se rechazan y existen pruebas Vitest dedicadas.
 
 - [x] Correggere l’header mobile di `/docs-api` per evitare sovrapposizione tra logo, navigazione e CTA di accesso.
 
@@ -396,3 +396,4 @@
 - [x] Añadir helper/query tRPC protegida para listar `webhook_deliveries` por organización con filtros básicos de endpoint, evento y estado.
 - [x] Crear panel admin para verificar intentos, estado final, `responseStatus`, errores, hash y timestamps de entregas webhook sin exponer secretos.
 - [x] Agregar prueba Vitest de rechazo sin autenticación para la consulta de entregas webhook; el helper aplica filtro por organización activa.
+- [x] Implementar actualización de estado de pickup tenant-scoped con transición válida, actor, timestamp, evidencia opcional y auditoría; migración 0023 aplicada y máquina cubierta por pruebas Vitest (111 aprobadas, 2 Shopify omitidas).

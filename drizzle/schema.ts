@@ -248,6 +248,10 @@ export const pickups = mysqlTable("pickups", {
   windowEnd: timestamp("windowEnd"),
   status: mysqlEnum("status", ["requested", "assigned", "en_route", "collected", "failed", "cancelled"]).notNull().default("requested"),
   notes: text("notes"),
+  evidenceUrl: varchar("evidenceUrl", { length: 1000 }),
+  failureReason: varchar("failureReason", { length: 500 }),
+  statusChangedAt: timestamp("statusChangedAt"),
+  statusChangedBy: int("statusChangedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

@@ -36,7 +36,7 @@ describe("migraciones de checkout limpio", () => {
   });
 
   it("mantiene toda la cadena SQL incremental libre de DROP y TRUNCATE", () => {
-    expect(migrationSqlFiles().length).toBe(23);
+    expect(migrationSqlFiles().length).toBe(24);
     for (const file of migrationSqlFiles()) {
       const sql = readFileSync(file, "utf8").toUpperCase();
       expect(sql, file).not.toMatch(/DROP\s+(TABLE|DATABASE)/);

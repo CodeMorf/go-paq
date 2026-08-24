@@ -1319,3 +1319,23 @@ export async function listWebhookDeliveriesForUser(userId: number, filters?: { e
   if (filters?.status) conditions.push(eq(webhookDeliveries.status, filters.status));
   return db.select({ id: webhookDeliveries.id, organizationId: webhookDeliveries.organizationId, endpointId: webhookDeliveries.endpointId, eventType: webhookDeliveries.eventType, payloadHash: webhookDeliveries.payloadHash, status: webhookDeliveries.status, attempts: webhookDeliveries.attempts, responseStatus: webhookDeliveries.responseStatus, lastError: webhookDeliveries.lastError, nextAttemptAt: webhookDeliveries.nextAttemptAt, deliveredAt: webhookDeliveries.deliveredAt, createdAt: webhookDeliveries.createdAt, updatedAt: webhookDeliveries.updatedAt }).from(webhookDeliveries).where(and(...conditions)).orderBy(desc(webhookDeliveries.createdAt)).limit(200);
 }
+
+
+const pickupTransitions: Record<string, string[]> = { requested: ["assigned", "cancelled"], assigned: ["en_route", "cancelled"], en_route: ["collected", "failed", "cancelled"], collected: [], failed: [], cancelled: [] };
+
+export function isAllowedPickupTransition(currentStatus: string, nextStatus: string) {
+  return pickupTransitions[currentStatus]?.includes(nextStatus) ?? false;
+}
+
+export async function updatePickupStatusForUser(userId: number, input: { pickupId: number; status: "assigned" | "en_route" | "collected" | "failed" | "cancelled"; evidenceUrl?: string; failureReason?: string; notes?: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const current = await db.select().from(pickups).where(and(eq(pickups.id, input.pickupId), eq(pickups.organizationId, scope.organization.id))).limit(1);
+  if (!current[0] || !pickupTransitions[current[0].status]?.includes(input.status)) return null;
+  if (input.status === "failed" && !input.failureReason?.trim()) return null;
+  await db.update(pickups).set({ status: input.status, evidenceUrl: input.evidenceUrl ?? current[0].evidenceUrl, failureReason: input.failureReason ?? null, notes: input.notes ?? current[0].notes, statusChangedAt: new Date(), statusChangedBy: userId }).where(and(eq(pickups.id, input.pickupId), eq(pickups.organizationId, scope.organization.id), eq(pickups.status, current[0].status)));
+  const updated = await db.select().from(pickups).where(and(eq(pickups.id, input.pickupId), eq(pickups.organizationId, scope.organization.id))).limit(1);
+  if (!updated[0]) return null;
+  await dispatchWebhooksForEvent(scope.organization.id, "pickup_status_changed", { pickupId: input.pickupId, shipmentId: updated[0].shipmentId, status: input.status, failureReason: input.failureReason }).catch(() => undefined);
+  return { previousStatus: current[0].status, pickup: updated[0] };
+}
