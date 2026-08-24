@@ -99,7 +99,7 @@ La cola offline del conductor no autoriza localmente pagos ni confirmaciones sen
 
 ## Pruebas y calidad
 
-La suite Vitest cubre autenticación, API keys, rate limiting, permisos, aislamiento, GPS, estados de paquetes y envíos, cancelación comercial, manifiestos, agente LLM, autorización Super Admin, firma HMAC de webhooks, migraciones, logs REST y cola offline: 107 pruebas aprobadas y 2 Shopify omitidas en la validación actual. Antes de cada cambio relevante se recomienda ejecutar TypeScript, tests y build; antes de un release se debe realizar además una validación autenticada de los portales en desktop y móvil.
+La suite Vitest cubre autenticación, API keys, rate limiting, permisos, aislamiento, GPS, estados de paquetes y envíos, cancelación comercial, manifiestos, agente LLM, autorización Super Admin, firma HMAC de webhooks, migraciones, logs REST, consulta REST de entregas y cola offline: 113 pruebas aprobadas y 2 Shopify omitidas en la validación actual. Antes de cada cambio relevante se recomienda ejecutar TypeScript, tests y build; antes de un release se debe realizar además una validación autenticada de los portales en desktop y móvil.
 
 El proyecto documenta de forma explícita los elementos que todavía dependen de infraestructura o de una sesión autenticada. Esta transparencia es intencional: una prueba de staging o una interfaz sin sesión no debe presentarse como evidencia de producción con datos reales.
 

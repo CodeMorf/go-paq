@@ -108,7 +108,7 @@
 - [ ] Aggiungere query/mutation del dominio con filtro obbligatorio per `organizationId` dal contesto autenticato.
 - [ ] Implementare audit log centralizzato append-only per eventi operativi, finanziari, sicurezza e LLM con procedure e test.
 
-- [ ] Aggiungere lingua e servizi attivi dell’organizzazione con query e UI di profilo.
+- [x] Verificar idioma y servicios activos de la organización con query/UI y mutation tenant-scoped; `organization.updateProfile` exige `organization:configure`, persiste los campos y registra `organization.profile.updated`.
 - [x] Extender paquetes con restricciones, estado, peso, volumen y dimensiones persistidos; cobertura de estados en Vitest.
 - [x] Introdurre stati separati per acquisto assistito e incidenti con transiciones validadas lato backend; estados de compra asistida ampliados en migración 0014 y cubiertos con Vitest.
 - [x] Aggiungere origine agli eventi spedizione e implementare mutation/query per append/list della timeline.
@@ -372,7 +372,7 @@
 
 ## Auditoría integral solicitada — 24-08-2026
 
-- [ ] Revisar `PRODUCTION_READINESS.md`, `PRODUCTION_CONFIGURATION.md`, `README.md` y `docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md` contra el estado real.
+- [x] Revisar `PRODUCTION_READINESS.md`, `PRODUCTION_CONFIGURATION.md`, `README.md`, `AUDIT_COMPLETAR_GOPAQ.md`, `ARCHITECTURE.md` y `docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md` contra el estado real; se mantienen pendientes y NO-GO donde falta evidencia.
 - [ ] Auditar todas las migraciones Drizzle en una instalación limpia y verificar orden, no destructividad y compatibilidad TiDB.
 - [ ] Auditar cada portal y procedimiento contra backend, permisos, auditoría e aislamiento tenant-scoped.
 - [ ] Ejecutar pruebas negativas cross-tenant, permisos, idempotencia, REST, migraciones, `pnpm check`, `pnpm test` y `pnpm build`.
@@ -381,12 +381,12 @@
 - [x] Publicar únicamente cambios verificados en `main`: SHA `275a0f9012351b6cfb59b53c705491fca1afa5cf`; GoPaq CI `32772083839` terminó exitosamente.
 - [ ] Emitir veredicto final GO/NO-GO sin marcar tareas sin evidencia.
 - [x] Auditar documentación productiva existente y crear `docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md` con precondiciones, instalación limpia, backups, rollback, evidencia y criterio GO/NO-GO.
-- [x] Auditar el árbol Drizzle: 39 tablas en schema, 23 migraciones oficiales en journal; retirar `0000_open_micromax.sql` duplicada y alinear script/test de instalación limpia.
+- [x] Auditar el árbol Drizzle: 39 tablas en schema, 24 migraciones oficiales en journal; retirar `0000_open_micromax.sql` duplicada y alinear script/test de instalación limpia.
 - [x] Ejecutar `pnpm check`, `pnpm test -- --run` y `pnpm build`: TypeScript/build correctos, 113 tests aprobados y 2 Shopify omitidas; warning de chunk grande no bloqueante.
 - [x] Actualizar `README.md`, `PRODUCTION_READINESS.md`, `PRODUCTION_CONFIGURATION.md` y auditoría técnica con el estado real y los límites de producción.
 - [x] Crear `docs/PRIVACY_AND_RETENTION.md` con minimización, GPS, POD, documentos, logs, backup, derechos, retención propuesta y checklist de aprobación legal.
 - [x] Enlazar privacidad/retención y migración/despliegue desde README y configuración productiva, manteniendo NO-GO hasta aprobación y evidencia.
-- [x] Corregir la verificación de instalación limpia para usar las 23 migraciones del journal oficial; retirar el SQL 0000 duplicado no referenciado y verificar las 39 tablas del schema.
+- [x] Corregir la verificación de instalación limpia para usar las 24 migraciones del journal oficial; retirar el SQL 0000 duplicado no referenciado y verificar las 39 tablas del schema.
 - [ ] Configurar y validar `REDIS_URL` real con `rediss://` en el entorno productivo; `NODE_ENV=production pnpm preflight` falló de forma segura indicando únicamente `REDIS_URL` ausente y no reveló valores.
 - [x] Implementar cancelación de envíos tenant-scoped con permiso `shipments:edit`, transición de estado permitida y auditoría; la idempotencia no aplica a esta mutation tRPC no repetible en la versión actual.
 
