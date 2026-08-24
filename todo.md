@@ -296,7 +296,7 @@
 - [x] Sustituir clases de color hardcodeadas de landing/docs por tokens semánticos reales del tema, conservando el contraste claro/oscuro.
 - [x] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
 - [x] Ejecutar el preflight de producción en CI con valores sintéticos, verificando el camino exitoso sin exponer secretos reales.
-- [ ] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
+- [x] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
 - [x] Corregir manifest PWA a español, descripción operativa de GoPaq y colores semánticos compatibles con el tema actual.
 - [x] Reemplazar las clases de color restantes de Home/docs (`text-slate-*`, `bg-orange-*`, `bg-slate-*` y bordes) por tokens semánticos o clases de marca basadas en variables CSS.
 - [x] Ejecutar una pasada final de contraste claro/oscuro en landing/docs y documentar que no quedan colores hardcodeados fuera de acentos deliberados de marca.
@@ -350,3 +350,4 @@
 - [x] Añadir vista admin/sucursal para gestionar tickets de soporte con permisos `support_tickets:view/edit` y estados auditados.
 - [x] Añadir captura opcional de fotografía de recepción desde Sucursal con `capture="environment"`, límite server-side de 10 MB y carga a documentos `receipt` en storage seguro.
 - [x] Generar etiqueta imprimible con datos reales de envío, paquete, código QR/barra y organización.
+- [x] Verificar workflow CI automático en `.github/workflows/ci.yml`: `pnpm install --frozen-lockfile`, check, Vitest, build y preflight productivo sintético sin secretos reales.
