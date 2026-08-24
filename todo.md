@@ -377,8 +377,8 @@
 - [ ] Auditar cada portal y procedimiento contra backend, permisos, auditoría e aislamiento tenant-scoped.
 - [ ] Ejecutar pruebas negativas cross-tenant, permisos, idempotencia, REST, migraciones, `pnpm check`, `pnpm test` y `pnpm build`.
 - [ ] Ejecutar validación E2E autenticada si existe una sesión válida; si no, documentar el bloqueo sin simularla.
-- [ ] Actualizar documentación de producción, API, privacidad y retención con evidencia actual.
-- [ ] Publicar únicamente cambios verificados en `main` y registrar SHA exacto y estado CI.
+- [x] Actualizar documentación de producción, API, privacidad y retención con evidencia actual; README, `/docs-api`, `PRODUCTION_READINESS.md`, `PRODUCTION_CONFIGURATION.md`, auditoría y privacidad mantienen el alcance y bloqueos reales.
+- [x] Publicar únicamente cambios verificados en `main`: SHA `410c8ab501eb20776f71f9acafd90f5ace287f39`; GoPaq CI `32770287497` terminó exitosamente.
 - [ ] Emitir veredicto final GO/NO-GO sin marcar tareas sin evidencia.
 - [x] Auditar documentación productiva existente y crear `docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md` con precondiciones, instalación limpia, backups, rollback, evidencia y criterio GO/NO-GO.
 - [x] Auditar el árbol Drizzle: 39 tablas en schema, 23 migraciones oficiales en journal; retirar `0000_open_micromax.sql` duplicada y alinear script/test de instalación limpia.
