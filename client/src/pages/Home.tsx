@@ -1,6 +1,7 @@
 import { startLogin } from "@/const";
 import DashboardLayout from "@/components/DashboardLayout";
 import { MapView } from "@/components/Map";
+import QuoteWidget from "@/components/QuoteWidget";
 import { trpc } from "@/lib/trpc";
 import { listPendingDriverOperations } from "@/lib/offlineQueue";
 import QRCode from "qrcode";
@@ -63,6 +64,8 @@ function PublicHome() {
           </div>
           <div className="relative mx-auto w-full max-w-xl lg:ml-auto"><div className="absolute -inset-8 rounded-[3rem] bg-orange-500/10 blur-3xl" /><div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0b1c31] p-3 shadow-2xl shadow-black/30"><img src={brandBoard} alt="Operazione GoPaq" className="h-[340px] w-full rounded-[1.4rem] object-cover object-center opacity-90 sm:h-[420px]" /><div className="absolute bottom-7 left-7 right-7 rounded-2xl border border-white/10 bg-[#071321]/90 p-4 backdrop-blur-xl"><div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-[.2em] text-slate-400">Rotta monitorata</p><p className="mt-1 font-bold">Miami → Santo Domingo</p></div><div className="rounded-xl bg-emerald-400/15 px-3 py-2 text-right"><p className="text-xs text-emerald-300">Stato</p><p className="text-sm font-bold text-emerald-200">In transito</p></div></div><div className="mt-4 h-1.5 rounded-full bg-white/10"><div className="h-full w-[72%] rounded-full bg-gradient-to-r from-orange-500 to-amber-300" /></div><div className="mt-2 flex justify-between text-[11px] text-slate-500"><span>Partenza</span><span>72% completato</span><span>Arrivo stimato</span></div></div></div></div>
         </section>
+
+        <section className="mx-auto max-w-7xl px-6 py-12 lg:px-8"><QuoteWidget /></section>
 
         <section id="servicios" className="border-y border-white/[.07] bg-[#091827] py-20"><div className="mx-auto max-w-7xl px-6 lg:px-8"><div className="max-w-2xl"><p className="text-sm font-bold uppercase tracking-[.25em] text-orange-400">Un solo ecosistema</p><h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Dalla prima scansione all’ultima firma.</h2><p className="mt-4 leading-7 text-slate-400">GoPaq unisce filiali, autisti, clienti e amministrazione in un flusso continuo, auditabile e pronto a crescere.</p></div><div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[{icon: Globe2,title:"Internazionale",text:"Casella, consolidamento e documenti doganali."},{icon: Truck,title:"Nazionale",text:"Pickup, line haul e consegne tra province."},{icon: Zap,title:"Ultimo miglio",text:"Rotte ottimizzate, GPS e prova di consegna."},{icon: BarChart3,title:"Fulfillment",text:"Inventario, preparazione ordini e liquidazioni."}].map((item) => <Card key={item.title} className="border-white/10 bg-white/[.035] text-white transition hover:-translate-y-1 hover:bg-white/[.06]"><CardHeader><item.icon className="h-7 w-7 text-orange-400" /><CardTitle className="mt-3 text-lg">{item.title}</CardTitle></CardHeader><CardContent className="pt-0 text-sm leading-6 text-slate-400">{item.text}</CardContent></Card>)}</div></div></section>
 
