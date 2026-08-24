@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { enqueueDriverOperation, listPendingDriverOperations, resolveDriverConflict, syncDriverOperations } from "./offlineQueue";
+import { enqueueDriverOperation, listPendingDriverOperations, recoverInterruptedOperation, resolveDriverConflict, syncDriverOperations } from "./offlineQueue";
 
 const store = new Map<string, string>();
 const localStorageStub = { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value), removeItem: (key: string) => store.delete(key) };
@@ -24,6 +24,11 @@ describe("driver offline queue", () => {
     expect((await listPendingDriverOperations())[0]?.state).toBe("pending");
     await syncDriverOperations(async () => "synced");
     expect(await listPendingDriverOperations()).toHaveLength(0);
+  });
+
+  it("recupera operaciones que quedaron en sincronización al cerrar la PWA", () => {
+    const operation = { idempotencyKey: "pod-interrupted", kind: "pod" as const, payload: {}, createdAt: 1, attempts: 2, state: "syncing" as const };
+    expect(recoverInterruptedOperation(operation)).toMatchObject({ state: "pending", attempts: 2, lastError: "La sincronización anterior se interrumpió; requiere reintento" });
   });
 
   it("impide dos sincronizaciones concurrentes del mismo dispositivo", async () => {

@@ -37,6 +37,10 @@ function normalizeOperation(operation: Omit<OfflineOperation, "attempts"> & { at
   return { ...operation, attempts: operation.attempts ?? 0 };
 }
 
+export function recoverInterruptedOperation(operation: OfflineOperation): OfflineOperation {
+  return operation.state === "syncing" ? { ...operation, state: "pending", lastError: "La sincronización anterior se interrumpió; requiere reintento" } : operation;
+}
+
 async function readQueue(): Promise<OfflineOperation[]> {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return [];
@@ -46,7 +50,7 @@ async function readQueue(): Promise<OfflineOperation[]> {
     const plain = await globalThis.crypto.subtle.decrypt({ name: "AES-GCM", iv: base64ToBytes(encrypted.iv) }, await getEncryptionKey(), base64ToBytes(encrypted.ciphertext));
     const parsed = JSON.parse(new TextDecoder().decode(plain));
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((operation): operation is OfflineOperation => Boolean(operation && typeof operation.idempotencyKey === "string" && typeof operation.kind === "string" && typeof operation.payload === "object")).map(normalizeOperation);
+    return parsed.filter((operation): operation is OfflineOperation => Boolean(operation && typeof operation.idempotencyKey === "string" && typeof operation.kind === "string" && typeof operation.payload === "object")).map(normalizeOperation).map(recoverInterruptedOperation);
   } catch {
     return [];
   }
