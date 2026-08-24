@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, listApiKeysForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, uploadShipmentDocumentForUser } from "./db";
+import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, listApiKeysForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -90,6 +90,14 @@ export const appRouter = router({
       const key = await createApiKeyForUser(ctx.user.id, input.name, input.scopes);
       if (!key) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
       return key;
+    }),
+    revoke: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "api_keys", "configure"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso API non disponibile" });
+      const revoked = await revokeApiKeyForUser(ctx.user.id, input.id);
+      if (!revoked) throw new TRPCError({ code: "NOT_FOUND", message: "Chiave API non trovata" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "security", action: "api_key.revoked", resourceType: "api_key", resourceId: String(input.id), metadata: { revoked: true } });
+      return { success: true } as const;
     }),
   }),
   gps: router({

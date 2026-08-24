@@ -126,6 +126,13 @@ export async function createApiKeyForUser(userId: number, name: string, scopes: 
   return { secret: issued.secret, keyPrefix: issued.keyPrefix, scopes };
 }
 
+export async function revokeApiKeyForUser(userId: number, apiKeyId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return false;
+  const result = await db.update(apiKeys).set({ revokedAt: new Date() }).where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.organizationId, scope.organization.id)));
+  return result[0].affectedRows > 0;
+}
+
 export async function listApiKeysForUser(userId: number) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return [];
