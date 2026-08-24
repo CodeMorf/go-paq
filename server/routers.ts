@@ -4,9 +4,10 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, appendShipmentEvent, canUser, getOrganizationForUser, listEventsForUser, listShipmentsForUser } from "./db";
+import { appendAuditLog, appendShipmentEvent, canUser, createPickupForUser, getOrganizationForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
+import { calculateQuote } from "./tariffEngine";
 
 export const appRouter = router({
   system: systemRouter,
@@ -72,6 +73,21 @@ export const appRouter = router({
       }
       await appendAuditLog({ organizationId: scope?.organization.id, actorUserId: ctx.user.id, category: "llm", action: "agent.suggestion.created", resourceType: "agent", metadata: { ...suggestion, sensitive: suggestion.sensitive, approved: false } });
       return suggestion;
+    }),
+  }),
+  quote: router({
+    preview: publicProcedure.input(z.object({ minAmount: z.number().nonnegative(), perKg: z.number().nonnegative(), perKm: z.number().nonnegative(), fuelSurchargePct: z.number().nonnegative().max(100), actualWeightKg: z.number().positive(), lengthCm: z.number().positive(), widthCm: z.number().positive(), heightCm: z.number().positive(), distanceKm: z.number().nonnegative() })).query(({ input }) => calculateQuote(input)),
+  }),
+  routes: router({
+    list: protectedProcedure.query(({ ctx }) => listRoutesForUser(ctx.user.id)),
+    stops: protectedProcedure.input(z.object({ routeId: z.number().int().positive() })).query(({ ctx, input }) => listRouteStopsForUser(ctx.user.id, input.routeId)),
+  }),
+  pickups: router({
+    list: protectedProcedure.query(({ ctx }) => listPickupsForUser(ctx.user.id)),
+    create: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), address: z.string().min(5).max(500), contactName: z.string().min(2).max(160), windowStart: z.date().optional(), windowEnd: z.date().optional(), notes: z.string().max(1000).optional() })).mutation(async ({ ctx, input }) => {
+      const result = await createPickupForUser(ctx.user.id, input);
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      return result;
     }),
   }),
   tracking: router({

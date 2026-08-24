@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, auditLogs, memberships, organizations, rolePermissions, shipmentEvents, shipments, users } from "../drizzle/schema";
+import { InsertUser, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentEvents, shipments, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -79,4 +79,29 @@ export async function appendShipmentEvent(input: typeof shipmentEvents.$inferIns
   const db = await getDb();
   if (!db) return;
   await db.insert(shipmentEvents).values(input);
+}
+
+export async function listPickupsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(pickups).where(eq(pickups.organizationId, scope.organization.id)).orderBy(desc(pickups.createdAt)).limit(100);
+}
+
+export async function createPickupForUser(userId: number, input: Omit<typeof pickups.$inferInsert, "organizationId">) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  await db.insert(pickups).values({ ...input, organizationId: scope.organization.id });
+  return { success: true } as const;
+}
+
+export async function listRoutesForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(routes).where(eq(routes.organizationId, scope.organization.id)).orderBy(desc(routes.createdAt)).limit(100);
+}
+
+export async function listRouteStopsForUser(userId: number, routeId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(routeStops).where(and(eq(routeStops.organizationId, scope.organization.id), eq(routeStops.routeId, routeId))).orderBy(routeStops.sequence);
 }

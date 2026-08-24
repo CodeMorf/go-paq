@@ -113,6 +113,74 @@ export const shipmentEvents = mysqlTable("shipment_events", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const pickups = mysqlTable("pickups", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  shipmentId: int("shipmentId"),
+  address: text("address").notNull(),
+  contactName: varchar("contactName", { length: 160 }).notNull(),
+  windowStart: timestamp("windowStart"),
+  windowEnd: timestamp("windowEnd"),
+  status: mysqlEnum("status", ["requested", "assigned", "en_route", "collected", "failed", "cancelled"]).notNull().default("requested"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const routes = mysqlTable("routes", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  branchId: int("branchId"),
+  code: varchar("code", { length: 48 }).notNull().unique(),
+  driverUserId: int("driverUserId"),
+  vehicleLabel: varchar("vehicleLabel", { length: 100 }),
+  status: mysqlEnum("status", ["draft", "assigned", "active", "closed"]).notNull().default("draft"),
+  startedAt: timestamp("startedAt"),
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const routeStops = mysqlTable("route_stops", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  routeId: int("routeId").notNull(),
+  shipmentId: int("shipmentId"),
+  pickupId: int("pickupId"),
+  sequence: int("sequence").notNull(),
+  address: text("address").notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  status: mysqlEnum("status", ["pending", "arrived", "completed", "failed", "skipped"]).notNull().default("pending"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const manifests = mysqlTable("manifests", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  branchId: int("branchId"),
+  code: varchar("code", { length: 48 }).notNull().unique(),
+  direction: mysqlEnum("direction", ["outbound", "inbound", "transfer"]).notNull(),
+  status: mysqlEnum("status", ["open", "sealed", "in_transit", "received", "reconciled"]).notNull().default("open"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const tariffs = mysqlTable("tariffs", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  serviceType: varchar("serviceType", { length: 48 }).notNull(),
+  currency: varchar("currency", { length: 8 }).notNull().default("DOP"),
+  minAmount: decimal("minAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+  perKg: decimal("perKg", { precision: 12, scale: 2 }).notNull().default("0"),
+  perKm: decimal("perKm", { precision: 12, scale: 2 }).notNull().default("0"),
+  fuelSurchargePct: decimal("fuelSurchargePct", { precision: 6, scale: 3 }).notNull().default("0"),
+  version: int("version").notNull().default(1),
+  validFrom: timestamp("validFrom").defaultNow().notNull(),
+  validUntil: timestamp("validUntil"),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const warehouses = mysqlTable("warehouses", {
   id: int("id").autoincrement().primaryKey(),
   organizationId: int("organizationId").notNull(),
@@ -154,3 +222,8 @@ export type Package = typeof packages.$inferSelect;
 export type ShipmentEvent = typeof shipmentEvents.$inferSelect;
 export type Warehouse = typeof warehouses.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type Pickup = typeof pickups.$inferSelect;
+export type Route = typeof routes.$inferSelect;
+export type RouteStop = typeof routeStops.$inferSelect;
+export type Manifest = typeof manifests.$inferSelect;
+export type Tariff = typeof tariffs.$inferSelect;
