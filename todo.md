@@ -135,3 +135,5 @@
 - [x] Aggiungere al portale sucursal un pannello pickup con lista organizzativa e registrazione validata di indirizzo, contatto e note via tRPC.
 
 - [x] Collegare `tracking.publicByCode` al database con codice guida, stato logistico, paesi e messaggio pubblico minimizzato.
+
+- [x] Aggiungere query tRPC `documents.list` e pannello admin/cliente per consultare metadati e aprire documenti autorizzati.

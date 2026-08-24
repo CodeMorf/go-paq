@@ -118,6 +118,14 @@ export async function listRouteStopsForUser(userId: number, routeId: number) {
   return db.select().from(routeStops).where(and(eq(routeStops.organizationId, scope.organization.id), eq(routeStops.routeId, routeId))).orderBy(routeStops.sequence);
 }
 
+export async function listShipmentDocumentsForUser(userId: number, shipmentId?: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  const filters = [eq(shipmentDocuments.organizationId, scope.organization.id)];
+  if (shipmentId) filters.push(eq(shipmentDocuments.shipmentId, shipmentId));
+  return db.select({ id: shipmentDocuments.id, shipmentId: shipmentDocuments.shipmentId, documentType: shipmentDocuments.documentType, fileKey: shipmentDocuments.fileKey, mimeType: shipmentDocuments.mimeType, fileUrl: shipmentDocuments.fileUrl, uploadedBy: shipmentDocuments.uploadedBy, createdAt: shipmentDocuments.createdAt }).from(shipmentDocuments).where(and(...filters)).orderBy(desc(shipmentDocuments.createdAt)).limit(100);
+}
+
 export async function uploadShipmentDocumentForUser(userId: number, input: { shipmentId: number; documentType: "label" | "invoice" | "customs" | "pod" | "incident" | "receipt"; fileName: string; mimeType: string; dataBase64: string }) {
   const scope = await getOrganizationForUser(userId); const db = await getDb();
   if (!db || !scope) return null;

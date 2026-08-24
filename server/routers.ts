@@ -4,7 +4,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
+import { appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listShipmentDocumentsForUser, listEventsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
@@ -81,6 +81,7 @@ export const appRouter = router({
       if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
       return result;
     }),
+    list: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional() }).optional()).query(({ ctx, input }) => listShipmentDocumentsForUser(ctx.user.id, input?.shipmentId)),
   }),
   apiKeys: router({
     list: protectedProcedure.query(({ ctx }) => listApiKeysForUser(ctx.user.id)),
