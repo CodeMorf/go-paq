@@ -32,7 +32,7 @@ Los mapas usan el proxy de Forge y el componente `MapView`; no se debe solicitar
 
 ## Base de datos y migraciones
 
-Una instalación limpia se verificó aplicando la secuencia completa del journal sobre MariaDB vacío: se crearon **39 tablas** a partir de las 25 migraciones oficiales del journal y el default regional de `organizations.language` quedó en `es`. El esquema mantiene `DOP` como moneda por defecto y `America/Santo_Domingo` como zona horaria.
+La instalación limpia se intentó aplicando la secuencia completa del journal en una base temporal: el usuario pudo crear el esquema, pero el cleanup falló con `ER_DBACCESS_DENIED_ERROR` al eliminar la base. Por tanto, **39 tablas** y **25 migraciones** están verificadas por schema/journal/tests, pero la corrida clean-schema no se declara completada hasta disponer de privilegios bootstrap adecuados. El esquema mantiene `DOP` como moneda por defecto y `America/Santo_Domingo` como zona horaria.
 
 El procedimiento completo de instalación limpia, backup, restore, rollback y validación posterior está en [`docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md`](./docs/PRODUCTION_MIGRATION_AND_DEPLOYMENT.md). Para cambios posteriores se debe modificar primero `drizzle/schema.ts`, ejecutar `pnpm drizzle-kit generate`, revisar el SQL generado y aplicar la migración en el entorno correspondiente. Las migraciones no deben contener `DROP TABLE` ni alteraciones destructivas sin una estrategia explícita de respaldo y reversión.
 

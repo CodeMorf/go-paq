@@ -28,7 +28,7 @@ No se encontraron indicios de que deban crearse tablas duplicadas. El esquema ac
 
 El esquema fuente se encuentra en `drizzle/schema.ts`. La cadena de migraciones versionada llega a las 25 migraciones oficiales del journal, con snapshots y journal en `drizzle/meta/`. El repositorio también conserva un script de verificación de schema limpio. No se aplica ninguna migración destructiva durante esta auditoría.
 
-La configuración documenta que una instalación limpia fue comprobada con 39 tablas. El journal es la fuente de verdad y no se debe usar el conteo histórico de 18/29 tablas.
+La instalación limpia se intentó con la cadena completa y confirmó que la credencial puede crear la base temporal, pero el cleanup falló al eliminarla por `ER_DBACCESS_DENIED_ERROR`; por ello 39 tablas y 25 migraciones quedan verificadas por schema/journal/tests, no por una corrida clean-schema completada en esta sesión.
 
 ## Rutas y procedimientos existentes
 
@@ -101,7 +101,7 @@ La firma HMAC de `webhook.ts` queda cubierta por payload alterado, replay fuera 
 
 ## Auditoría integral del árbol de migraciones
 
-La revisión del schema actual identifica **39 tablas**. El journal Drizzle referencia **25 migraciones oficiales**, desde `0000_greedy_black_tom.sql` hasta `0024_nebulous_slyde.sql`. Existía un `0000_open_micromax.sql` adicional, no referenciado por `_journal.json`, que contenía una línea base antigua de 18 tablas; se retiró del árbol para que la instalación limpia tenga una única fuente de verdad. `schema.migration.test.ts` y `scripts/verify-clean-schema.mjs` fueron alineados al journal y a las 39 tablas actuales. La instalación administrada completa todavía requiere un usuario bootstrap con permisos de creación de base, por lo que no se declara restauración productiva verificada.
+La revisión del schema actual identifica **39 tablas**. El journal Drizzle referencia **25 migraciones oficiales**, desde `0000_greedy_black_tom.sql` hasta `0024_nebulous_slyde.sql`. Existía un `0000_open_micromax.sql` adicional, no referenciado por `_journal.json`, que contenía una línea base antigua de 18 tablas; se retiró del árbol para que la instalación limpia tenga una única fuente de verdad. `schema.migration.test.ts` y `scripts/verify-clean-schema.mjs` fueron alineados al journal y a las 39 tablas actuales. La instalación administrada completa todavía requiere un usuario bootstrap con permisos de creación y eliminación de base; la corrida temporal falló en cleanup con `ER_DBACCESS_DENIED_ERROR`, por lo que no se declara restauración productiva verificada.
 
 ## Preflight productivo actualizado
 
