@@ -119,7 +119,7 @@ export const appRouter = router({
   }),
   routes: router({
     list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "routes", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso rotte non disponibile" }); return listRoutesForUser(ctx.user.id); }),
-    stops: protectedProcedure.input(z.object({ routeId: z.number().int().positive() })).query(({ ctx, input }) => listRouteStopsForUser(ctx.user.id, input.routeId)),
+    stops: protectedProcedure.input(z.object({ routeId: z.number().int().positive() })).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "routes", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso fermate non disponibile" }); return listRouteStopsForUser(ctx.user.id, input.routeId); }),
   }),
   manifests: router({
     list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "manifests", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso manifest non disponibile" }); return listManifestsForUser(ctx.user.id); }),
