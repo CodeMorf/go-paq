@@ -120,3 +120,5 @@
 
 - [x] Completare `/docs-api` con errori, response examples, policy di versioning e contratti dettagliati per quotes, shipments, tracking, pickups e webhooks.
 - [ ] Aggiungere enforcement backend forte per l’agente: tipi di azione sensibile validati, suggerimenti non conformi rifiutati e test Vitest dedicati.
+
+- [x] Correggere l’header mobile di `/docs-api` per evitare sovrapposizione tra logo, navigazione e CTA di accesso.
