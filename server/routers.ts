@@ -4,12 +4,23 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { advanceManifestForUser, appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createManifestForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
+import { advanceManifestForUser, appendAuditLog, appendShipmentEvent, canUser, createApiKeyForUser, createManifestForUser, createPickupForUser, getOrganizationForUser, getPublicTrackingByCode, listApiKeysForUser, listAuditLogsForUser, listShipmentDocumentsForUser, listEventsForUser, listManifestsForUser, updateOrganizationProfileForUser, listPickupsForUser, listRouteStopsForUser, listRoutesForUser, listShipmentsForUser, listTrackingPointsForUser, recordTrackingPoint, revokeApiKeyForUser, uploadShipmentDocumentForUser } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { AGENT_ACTION_TYPES, enforceAgentApproval } from "./agentPolicy";
 import { calculateQuote } from "./tariffEngine";
+import { buildTrackingAuditMetadata, trackingResourceId } from "./trackingAudit";
 
 export const appRouter = router({
+  organization: router({
+    updateProfile: protectedProcedure.input(z.object({ country: z.string().min(2).max(80), language: z.string().min(2).max(8), currency: z.string().min(3).max(8), timezone: z.string().min(3).max(80), activeServices: z.array(z.string().min(2).max(48)).max(20) })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "organization", "configure"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso configurazione organizzazione non disponibile" });
+      const result = await updateOrganizationProfileForUser(ctx.user.id, input);
+      if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "security", action: "organization.profile.updated", resourceType: "organization", resourceId: String(scope.organization.id), metadata: input });
+      return result;
+    }),
+  }),
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -25,16 +36,17 @@ export const appRouter = router({
       if (!scope) return null;
       return { organization: scope.organization, role: scope.membership.role, branchId: scope.membership.branchId };
     }),
-    shipments: protectedProcedure.query(async ({ ctx }) => listShipmentsForUser(ctx.user.id)),
-    timeline: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive() })).query(async ({ ctx, input }) => listEventsForUser(ctx.user.id, input.shipmentId)),
+    shipments: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso spedizioni non disponibile" }); return listShipmentsForUser(ctx.user.id); }),
+    timeline: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive() })).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso timeline non disponibile" }); return listEventsForUser(ctx.user.id, input.shipmentId); }),
     appendEvent: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive(), eventType: z.string().min(2), nextStatus: z.string().optional(), note: z.string().optional(), evidenceUrl: z.string().url().optional(), latitude: z.number().optional(), longitude: z.number().optional(), idempotencyKey: z.string().min(8), origin: z.string().min(2).default("operator") })).mutation(async ({ ctx, input }) => {
       const scope = await getOrganizationForUser(ctx.user.id);
-      if (!scope) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso modifica timeline non disponibile" });
       await appendShipmentEvent({ ...input, latitude: input.latitude === undefined ? undefined : String(input.latitude), longitude: input.longitude === undefined ? undefined : String(input.longitude), organizationId: scope.organization.id, actorUserId: ctx.user.id });
       await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "shipment.event.appended", resourceType: "shipment", resourceId: String(input.shipmentId), metadata: input });
       return { success: true } as const;
     }),
     overview: protectedProcedure.query(async ({ ctx }) => {
+      const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "shipments", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso KPI spedizioni non disponibile" });
       const shipments = await listShipmentsForUser(ctx.user.id);
       return {
         active: shipments.filter((item) => !["delivered", "returned", "cancelled"].includes(item.physicalStatus)).length,
@@ -45,16 +57,15 @@ export const appRouter = router({
     }),
     audit: protectedProcedure.input(z.object({ category: z.enum(["operational", "financial", "security", "llm"]), action: z.string().min(2), resourceType: z.string().optional(), resourceId: z.string().optional(), metadata: z.unknown().optional() })).mutation(async ({ ctx, input }) => {
       const scope = await getOrganizationForUser(ctx.user.id);
-      if (scope && ctx.user.role !== "admin" && !(await canUser(ctx.user.id, scope.organization.id, "audit", "create"))) {
-        throw new Error("Permesso insufficiente per registrare questo audit");
-      }
-      await appendAuditLog({ organizationId: scope?.organization.id, actorUserId: ctx.user.id, ...input });
+      if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "audit", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso registrazione audit non disponibile" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, ...input });
       return { success: true } as const;
     }),
   }),
   agent: router({
     suggest: protectedProcedure.input(z.object({ context: z.string().min(5).max(6000), requestedAction: z.string().optional() })).mutation(async ({ ctx, input }) => {
       const scope = await getOrganizationForUser(ctx.user.id);
+      if (!scope) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva per l’agente" });
       const response = await invokeLLM({
         messages: [
           { role: "system", content: "Sei l'agente operativo GoPaq. Analizza il contesto logistico in italiano. Non confermare consegne, pagamenti o modifiche di stato: restituisci sempre una proposta che richiede approvazione umana." },
@@ -68,15 +79,15 @@ export const appRouter = router({
       try {
         suggestion = enforceAgentApproval(rawSuggestion, input.requestedAction);
       } catch (error) {
-        await appendAuditLog({ organizationId: scope?.organization.id, actorUserId: ctx.user.id, category: "security", action: "agent.suggestion.blocked", resourceType: "agent", metadata: { reason: "approval_required" } });
+        await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "security", action: "agent.suggestion.blocked", resourceType: "agent", metadata: { reason: "approval_required" } });
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Proposta agente bloccata" });
       }
-      await appendAuditLog({ organizationId: scope?.organization.id, actorUserId: ctx.user.id, category: "llm", action: "agent.suggestion.created", resourceType: "agent", metadata: { ...suggestion, sensitive: suggestion.sensitive, approved: false } });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "llm", action: "agent.suggestion.created", resourceType: "agent", metadata: { ...suggestion, sensitive: suggestion.sensitive, approved: false } });
       return suggestion;
     }),
   }),
   audit: router({
-    list: protectedProcedure.query(({ ctx }) => listAuditLogsForUser(ctx.user.id)),
+    list: protectedProcedure.query(async ({ ctx }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "audit", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso audit non disponibile" }); return listAuditLogsForUser(ctx.user.id); }),
   }),
   documents: router({
     upload: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive(), documentType: z.enum(["label", "invoice", "customs", "pod", "incident", "receipt"]), fileName: z.string().min(1).max(180).regex(/^[a-zA-Z0-9._-]+$/), mimeType: z.string().min(3).max(120), dataBase64: z.string().min(1) })).mutation(async ({ ctx, input }) => {
@@ -107,10 +118,12 @@ export const appRouter = router({
     }),
   }),
   gps: router({
-    points: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), routeId: z.number().int().positive().optional() })).query(({ ctx, input }) => listTrackingPointsForUser(ctx.user.id, input.shipmentId, input.routeId)),
+    points: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), routeId: z.number().int().positive().optional() })).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso tracking non disponibile" }); const result = await listTrackingPointsForUser(ctx.user.id, input.shipmentId, input.routeId); await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "security", action: "tracking.points.viewed", resourceType: "tracking_points", resourceId: trackingResourceId(input), metadata: buildTrackingAuditMetadata(input, result.length) }); return result; }),
     record: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive().optional(), routeId: z.number().int().positive().optional(), latitude: z.number().gte(-90).lte(90), longitude: z.number().gte(-180).lte(180), accuracyMeters: z.number().nonnegative().optional(), capturedAt: z.date(), source: z.enum(["driver", "branch", "system"]).default("driver") })).mutation(async ({ ctx, input }) => {
+      const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "create"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso registrazione tracking non disponibile" });
       const result = await recordTrackingPoint(ctx.user.id, { ...input, latitude: String(input.latitude), longitude: String(input.longitude), accuracyMeters: input.accuracyMeters === undefined ? undefined : String(input.accuracyMeters) });
       if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "Nessuna organizzazione attiva" });
+      await appendAuditLog({ organizationId: scope.organization.id, actorUserId: ctx.user.id, category: "operational", action: "tracking.point.recorded", resourceType: "tracking_point", resourceId: String(input.shipmentId ?? input.routeId ?? "unassigned"), metadata: { shipmentId: input.shipmentId, routeId: input.routeId, source: input.source } });
       return result;
     }),
   }),
@@ -148,7 +161,7 @@ export const appRouter = router({
     }),
   }),
   tracking: router({
-    privateByShipment: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive() })).query(async ({ ctx, input }) => listEventsForUser(ctx.user.id, input.shipmentId)),
+    privateByShipment: protectedProcedure.input(z.object({ shipmentId: z.number().int().positive() })).query(async ({ ctx, input }) => { const scope = await getOrganizationForUser(ctx.user.id); if (!scope || !(await canUser(ctx.user.id, scope.organization.id, "tracking", "view"))) throw new TRPCError({ code: "FORBIDDEN", message: "Permesso tracking privato non disponibile" }); return listEventsForUser(ctx.user.id, input.shipmentId); }),
     publicByCode: publicProcedure.input(z.object({ code: z.string().min(6).max(48) })).query(async ({ input }) => {
       const result = await getPublicTrackingByCode(input.code);
       if (!result) return { trackingCode: input.code, status: "not_found" as const, message: "Inserisci un codice valido o accedi al tuo spazio cliente." };

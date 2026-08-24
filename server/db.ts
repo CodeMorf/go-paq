@@ -68,6 +68,13 @@ export async function getPublicTrackingByCode(code: string) {
   return { ...shipment, message: shipment.physicalStatus === "delivered" ? "Spedizione consegnata" : "Spedizione monitorata da GoPaq" };
 }
 
+export async function updateOrganizationProfileForUser(userId: number, input: { country: string; language: string; currency: string; timezone: string; activeServices: string[] }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  await db.update(organizations).set(input).where(eq(organizations.id, scope.organization.id));
+  return { success: true } as const;
+}
+
 export async function listShipmentsForUser(userId: number) {
   const scope = await getOrganizationForUser(userId);
   const db = await getDb();

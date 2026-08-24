@@ -161,3 +161,23 @@
 - [x] Mostrare nel portale driver l’ultima posizione GPS sincronizzata, timestamp UTC e accuratezza con refresh periodico.
 - [x] Applicare `routes:view` anche alla query delle fermate per evitare accessi parzialmente autorizzati.
 - [x] Mostrare nel portale admin il profilo organizzativo con regione, lingua, valuta, fuso orario e servizi attivi.
+- [x] Aggiungere modifica protetta del profilo organizzativo con lingua, valuta, fuso orario, paese e servizi attivi.
+- [x] Aggiungere feedback UI per il salvataggio del profilo organizzativo: stato loading, conferma successo e messaggio errore per permessi/validazione/rete.
+- [ ] Verificare in browser il flusso di modifica del profilo organizzativo e coprire successo, errore e stato vuoto.
+- [x] Aggiungere permessi `tracking:view/create` e audit alla lettura e registrazione dei punti GPS.
+- [x] Aggiungere audit anche alla lettura dei punti GPS e testare enforcement `tracking:view/create` e audit di lettura/registrazione.
+- [x] Scrivere test tRPC d’integrazione per `gps.points`/`gps.record`, inclusi permessi `tracking:view/create` e chiamate audit.
+- [x] Coprire esplicitamente il rifiuto `gps.record` senza `tracking:create` e garantire che l’audit sia scritto solo sui percorsi autorizzati.
+- [x] Verificare esplicitamente che `gps.points` non scriva audit quando manca `tracking:view` e che l’audit avvenga solo dopo autorizzazione.
+- [x] Proteggere `audit.list` con `audit:view` e testare il rifiuto senza permesso.
+- [x] Applicare `tracking:view` anche al tracking privato per spedizione e testare il rifiuto senza permesso.
+- [x] Proteggere l’elenco spedizioni con `shipments:view` e testare il rifiuto senza permesso.
+- [x] Applicare permessi tracking alla timeline privata e agli eventi spedizione con test di rifiuto e audit.
+- [x] Aggiungere test tRPC per rifiuto timeline senza `tracking:view`.
+- [x] Aggiungere test tRPC per rifiuto append evento senza `tracking:create` e assenza di persistenza/audit.
+- [x] Aggiungere test tRPC per audit `shipment.event.appended` sul percorso autorizzato.
+- [x] Proteggere la dashboard overview con `shipments:view` e testare il rifiuto senza permesso.
+- [x] Aggiungere test tRPC specifico per il rifiuto di `logistics.overview` senza `shipments:view`.
+- [x] Proteggere la mutation `logistics.audit` con `audit:create` e testare il rifiuto senza permesso.
+- [x] Aggiungere test tRPC per `logistics.audit` senza `audit:create` e verificare assenza di scrittura audit.
+- [x] Richiedere organizzazione attiva nella procedura `agent.suggest` e mantenere audit LLM sempre tenant-scoped.
