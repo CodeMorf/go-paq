@@ -39,8 +39,13 @@ const pickupInput = z.object({
 function requestId() {
   return `req_${randomUUID()}`;
 }
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, nested]) => [key, canonicalize(nested)]));
+  return value;
+}
 function requestHash(payload: unknown) {
-  return createHash("sha256").update(JSON.stringify(payload ?? null)).digest("hex");
+  return createHash("sha256").update(JSON.stringify(canonicalize(payload ?? null))).digest("hex");
 }
 function readIdempotencyKey(req: Request) {
   const key = req.header("Idempotency-Key")?.trim();
