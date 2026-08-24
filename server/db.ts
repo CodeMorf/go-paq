@@ -1,8 +1,8 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, apiKeys, auditLogs, memberships, organizations, pickups, rolePermissions, routeStops, routes, shipmentDocuments, shipmentEvents, shipments, trackingPoints, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { issueApiKey } from "./apiKeys";
+import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -131,6 +131,16 @@ export async function revokeApiKeyForUser(userId: number, apiKeyId: number) {
   if (!db || !scope) return false;
   const result = await db.update(apiKeys).set({ revokedAt: new Date() }).where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.organizationId, scope.organization.id)));
   return result[0].affectedRows > 0;
+}
+
+export async function authenticateApiKey(secret: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const candidates = await db.select().from(apiKeys).where(isNull(apiKeys.revokedAt)).limit(100);
+  const match = candidates.find((key) => verifyApiKey(secret, key.secretHash));
+  if (!match) return null;
+  await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, match.id));
+  return match;
 }
 
 export async function listApiKeysForUser(userId: number) {
