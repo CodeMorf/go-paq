@@ -281,12 +281,12 @@
 - [x] Añadir workflow GitHub Actions para `pnpm check`, `pnpm test` y `pnpm build`, corregir la resolución de pnpm y verificar el commit `b0d7758` en verde.
 - [x] Conectar el formulario POD del driver con la cola offline cifrada y sincronización al recuperar conexión, con clasificación de conflictos y pruebas técnicas verdes.
 - [x] Recuperar automáticamente operaciones offline que quedaron en `syncing` tras una interrupción de la PWA y cubrirlo con prueba unitaria.
-- [ ] Integrar puntos GPS del driver con la cola offline cifrada, limitando la captura a referencia de envío/ruta y sincronizando al recuperar red.
 - [x] Integrar puntos GPS del driver con la cola offline cifrada, limitando la captura a referencia de envío/ruta y sincronizando al recuperar red.
-- [ ] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
+- [x] Integrar puntos GPS del driver con la cola offline cifrada, limitando la captura a referencia de envío/ruta y sincronizando al recuperar red.
+- [x] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
 - [x] Limitar la capacidad de la cola offline y comunicar al driver cuando no pueda aceptar más puntos GPS, preservando operaciones críticas.
 - [ ] Repetir verificación de checkout limpio con un usuario de base de datos con permisos CREATE/DROP aislados; la ejecución actual fue bloqueada por ER_DBACCESS_DENIED_ERROR sin tocar datos activos.
-- [ ] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
+- [x] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
 - [x] Alinear la prueba de migraciones con la línea base y validar que toda la cadena incremental no contenga operaciones destructivas.
 - [ ] Añadir preflight server-side de producción que valide presencia de secretos críticos y exija REDIS_URL con TLS sin imprimir valores sensibles.
 - [x] Añadir preflight server-side de producción que valide presencia de secretos críticos y exija REDIS_URL con TLS sin imprimir valores sensibles.
