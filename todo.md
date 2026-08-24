@@ -128,3 +128,6 @@
 - [x] Aggiungere al portale driver un pannello GPS con consenso esplicito, watchPosition e invio tRPC di coordinate/accuratezza/timestamp.
 
 - [x] Aggiungere una macchina degli stati deterministica e testata per transizioni commerciali, fisiche, trasporto, finanziarie e incidenti.
+
+- [x] Aggiungere al portale admin un pannello chiavi API con emissione scope-limitata, segreto one-time, elenco e revoca.
+- [x] Esporre un endpoint REST `/api/v1/quotes` autenticato con Bearer key, scope e versione.
