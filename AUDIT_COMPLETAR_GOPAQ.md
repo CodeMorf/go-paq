@@ -49,3 +49,13 @@ La siguiente prioridad técnica debe ser completar el ciclo Cliente y Driver de 
 ## Dependencias externas
 
 La producción requiere `DATABASE_URL`, `JWT_SECRET`, OAuth real, Forge/storage, configuración de mapas y `REDIS_URL` con esquema `rediss://`. Ningún valor secreto se incorpora a este documento o al repositorio. El preflight debe ejecutarse antes del arranque productivo y la decisión GO/NO-GO debe basarse en logs verificables, no en pantallas vacías ni en datos ficticios.
+
+## Hito Cliente — migración 0019
+
+Se completó una primera superficie persistente del área Cliente sin datos simulados. La migración `0019_giant_talisman.sql` crea `customer_profiles`, `customer_addresses`, `customer_contacts` y `support_tickets`, todas con `organizationId` y `userId`. Las procedures `customer.profile`, `customer.addresses.*`, `customer.contacts.*` y `customer.tickets.*` aplican sesión protegida, ownership por usuario y organización activa; los tickets administrativos requieren `support_tickets:view/edit`, mientras que el cliente solo lista y crea sus propios casos. Cada alta o cambio relevante escribe auditoría tenant-scoped.
+
+El portal `/cliente` ahora incluye perfil individual/empresarial, teléfono, identificación, idioma, libreta de direcciones con dirección predeterminada y desactivación lógica, contactos autorizados y centro de ayuda con categorías, prioridad y vínculo opcional a un envío propio. `/admin` y `/sucursal` incluyen una vista de soporte que permite actualizar estados con permisos explícitos. Los estados vacíos y errores de red se muestran sin inventar registros.
+
+La validación más reciente observada ejecutó `pnpm check`, `pnpm test -- --run` y `pnpm build`: TypeScript sin errores, **94 pruebas aprobadas y 2 omitidas** por Shopify fuera de alcance, y build de producción correcto. La captura de `/cliente` sin sesión confirmó el acceso protegido; no se ha afirmado una prueba autenticada porque OAuth real y una sesión de prueba aún no están disponibles.
+
+El veredicto permanece **NO-GO para operación productiva** hasta configurar y verificar Redis TLS, OAuth, storage, mapas y secretos, completar el checkout limpio con usuario de base de datos autorizado y ejecutar la caminata E2E autenticada en los cuatro portales y dispositivos con cámara. El nuevo hito reduce el faltante funcional del Cliente, pero no sustituye esas verificaciones de infraestructura y seguridad.

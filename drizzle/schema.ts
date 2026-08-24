@@ -12,6 +12,71 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+export const customerProfiles = mysqlTable("customer_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  customerType: mysqlEnum("customerType", ["individual", "business"]).notNull().default("individual"),
+  legalName: varchar("legalName", { length: 220 }),
+  phone: varchar("phone", { length: 40 }),
+  taxId: varchar("taxId", { length: 80 }),
+  preferredLanguage: varchar("preferredLanguage", { length: 8 }).notNull().default("es"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const customerAddresses = mysqlTable("customer_addresses", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  label: varchar("label", { length: 80 }).notNull(),
+  recipientName: varchar("recipientName", { length: 180 }).notNull(),
+  phone: varchar("phone", { length: 40 }),
+  addressLine1: varchar("addressLine1", { length: 240 }).notNull(),
+  addressLine2: varchar("addressLine2", { length: 240 }),
+  city: varchar("city", { length: 120 }).notNull(),
+  province: varchar("province", { length: 120 }).notNull(),
+  country: varchar("country", { length: 80 }).notNull().default("DO"),
+  postalCode: varchar("postalCode", { length: 24 }),
+  deliveryInstructions: text("deliveryInstructions"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  isDefault: boolean("isDefault").notNull().default(false),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const customerContacts = mysqlTable("customer_contacts", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 180 }).notNull(),
+  relationship: varchar("relationship", { length: 80 }),
+  phone: varchar("phone", { length: 40 }),
+  email: varchar("email", { length: 320 }),
+  notes: text("notes"),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const supportTickets = mysqlTable("support_tickets", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  shipmentId: int("shipmentId"),
+  subject: varchar("subject", { length: 180 }).notNull(),
+  description: text("description").notNull(),
+  category: mysqlEnum("category", ["shipment", "billing", "pickup", "delivery", "account", "other"]).notNull().default("other"),
+  priority: mysqlEnum("priority", ["low", "normal", "high", "urgent"]).notNull().default("normal"),
+  status: mysqlEnum("status", ["open", "in_progress", "waiting_customer", "resolved", "closed"]).notNull().default("open"),
+  resolution: text("resolution"),
+  assignedTo: int("assignedTo"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const organizations = mysqlTable("organizations", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 180 }).notNull(),
@@ -436,6 +501,10 @@ export const auditLogs = mysqlTable("audit_logs", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Organization = typeof organizations.$inferSelect;
+export type CustomerProfile = typeof customerProfiles.$inferSelect;
+export type CustomerAddress = typeof customerAddresses.$inferSelect;
+export type CustomerContact = typeof customerContacts.$inferSelect;
+export type SupportTicket = typeof supportTickets.$inferSelect;
 export type Branch = typeof branches.$inferSelect;
 export type Shipment = typeof shipments.$inferSelect;
 export type Package = typeof packages.$inferSelect;

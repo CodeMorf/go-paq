@@ -134,6 +134,13 @@
       "when": 1787594328234,
       "tag": "0018_eager_trish_tilby",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1787594725084,
+      "tag": "0019_giant_talisman",
+      "breakpoints": true
     }
   ]
 }

@@ -341,3 +341,10 @@
 - [x] Añadir captura de firma del receptor mediante canvas, cargarla como documento POD en storage seguro y mantener validación visual autenticada como pendiente separada.
 - [x] Añadir gastos de ruta del Driver con modelo `route_expenses`, migración 0018, registro DOP restringido a ruta activa, revisión administrativa y pruebas de autenticación.
 - [x] Añadir panel administrativo/sucursal para revisar y aprobar/rechazar/reembolsar gastos de ruta con filtros por estado y ruta.
+- [x] Implementar perfil de cliente tenant-scoped con datos individuales/empresariales y preferencia de idioma.
+- [x] Implementar libreta de direcciones del cliente con dirección predeterminada, geodatos opcionales y desactivación segura.
+- [x] Implementar contactos autorizados del cliente con alta, edición lógica y aislamiento por usuario/organización.
+- [x] Implementar tickets de soporte del cliente vinculables a envíos, con estados, prioridad y gestión administrativa.
+- [x] Añadir UI Cliente para perfil, direcciones, contactos autorizados y tickets con estados vacíos y errores reales.
+- [x] Añadir pruebas tRPC de autenticación y contratos de acceso para el área Cliente; la prueba cross-tenant con sesión real permanece separada del entorno sin OAuth.
+- [x] Añadir vista admin/sucursal para gestionar tickets de soporte con permisos `support_tickets:view/edit` y estados auditados.

@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { resolveSpecialServiceRequirements } from "./specialServiceRules";
-import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
+import { InsertUser, apiKeys, auditLogs, branches, cashMovements, cashSessions, consolidationItems, consolidations, customerAddresses, customerContacts, customerProfiles, deliveryAttempts, inventoryMovements, invoices, manifests, memberships, organizations, packages, payments, pickups, receipts, rolePermissions, routeExpenses, routeStops, routes, shipmentDocuments, shipmentEvents, shipmentIncidents, shipmentServices, shipments, supportTickets, tariffZones, tariffs, trackingPoints, users, warehouses } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { issueApiKey, verifyApiKey } from "./apiKeys";
 import { storagePut } from "./storage";
@@ -67,6 +67,108 @@ export async function canUser(userId: number, organizationId: number, resource: 
   if (result[0].role === "owner") return true;
   const permissions = await db.select().from(rolePermissions).where(and(eq(rolePermissions.organizationId, organizationId), eq(rolePermissions.role, result[0].role), eq(rolePermissions.resource, resource), eq(rolePermissions.action, action))).limit(1);
   return Boolean(permissions[0]);
+}
+
+export async function getCustomerProfileForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const profile = await db.select().from(customerProfiles).where(and(eq(customerProfiles.organizationId, scope.organization.id), eq(customerProfiles.userId, userId))).limit(1);
+  return { user: { id: userId, name: null as string | null, email: null as string | null }, profile: profile[0] ?? null };
+}
+
+export async function upsertCustomerProfileForUser(userId: number, input: { customerType: "individual" | "business"; legalName?: string | null; phone?: string | null; taxId?: string | null; preferredLanguage: string }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const existing = await db.select({ id: customerProfiles.id }).from(customerProfiles).where(and(eq(customerProfiles.organizationId, scope.organization.id), eq(customerProfiles.userId, userId))).limit(1);
+  if (existing[0]) await db.update(customerProfiles).set(input).where(and(eq(customerProfiles.id, existing[0].id), eq(customerProfiles.organizationId, scope.organization.id), eq(customerProfiles.userId, userId)));
+  else await db.insert(customerProfiles).values({ organizationId: scope.organization.id, userId, ...input });
+  const rows = await db.select().from(customerProfiles).where(and(eq(customerProfiles.organizationId, scope.organization.id), eq(customerProfiles.userId, userId))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listCustomerAddressesForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(customerAddresses).where(and(eq(customerAddresses.organizationId, scope.organization.id), eq(customerAddresses.userId, userId), eq(customerAddresses.isActive, true))).orderBy(desc(customerAddresses.isDefault), desc(customerAddresses.updatedAt));
+}
+
+export async function createCustomerAddressForUser(userId: number, input: { label: string; recipientName: string; phone?: string | null; addressLine1: string; addressLine2?: string | null; city: string; province: string; country: string; postalCode?: string | null; deliveryInstructions?: string | null; latitude?: string | null; longitude?: string | null; isDefault?: boolean }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  let createdId = 0;
+  await db.transaction(async (tx) => {
+    if (input.isDefault) await tx.update(customerAddresses).set({ isDefault: false }).where(and(eq(customerAddresses.organizationId, scope.organization.id), eq(customerAddresses.userId, userId), eq(customerAddresses.isActive, true)));
+    const inserted = await tx.insert(customerAddresses).values({ organizationId: scope.organization.id, userId, ...input, isDefault: input.isDefault ?? false, isActive: true });
+    createdId = Number(inserted[0].insertId);
+  });
+  const rows = await db.select().from(customerAddresses).where(and(eq(customerAddresses.id, createdId), eq(customerAddresses.organizationId, scope.organization.id), eq(customerAddresses.userId, userId))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateCustomerAddressForUser(userId: number, addressId: number, input: Partial<{ label: string; recipientName: string; phone: string | null; addressLine1: string; addressLine2: string | null; city: string; province: string; country: string; postalCode: string | null; deliveryInstructions: string | null; latitude: string | null; longitude: string | null; isDefault: boolean; isActive: boolean }>) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const current = await db.select({ id: customerAddresses.id }).from(customerAddresses).where(and(eq(customerAddresses.id, addressId), eq(customerAddresses.organizationId, scope.organization.id), eq(customerAddresses.userId, userId))).limit(1);
+  if (!current[0]) return null;
+  await db.transaction(async (tx) => {
+    if (input.isDefault) await tx.update(customerAddresses).set({ isDefault: false }).where(and(eq(customerAddresses.organizationId, scope.organization.id), eq(customerAddresses.userId, userId), eq(customerAddresses.isActive, true)));
+    await tx.update(customerAddresses).set(input).where(and(eq(customerAddresses.id, addressId), eq(customerAddresses.organizationId, scope.organization.id), eq(customerAddresses.userId, userId)));
+  });
+  const rows = await db.select().from(customerAddresses).where(and(eq(customerAddresses.id, addressId), eq(customerAddresses.organizationId, scope.organization.id), eq(customerAddresses.userId, userId))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listCustomerContactsForUser(userId: number) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  return db.select().from(customerContacts).where(and(eq(customerContacts.organizationId, scope.organization.id), eq(customerContacts.userId, userId), eq(customerContacts.isActive, true))).orderBy(desc(customerContacts.updatedAt));
+}
+
+export async function createCustomerContactForUser(userId: number, input: { name: string; relationship?: string | null; phone?: string | null; email?: string | null; notes?: string | null }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const inserted = await db.insert(customerContacts).values({ organizationId: scope.organization.id, userId, ...input, isActive: true });
+  const rows = await db.select().from(customerContacts).where(and(eq(customerContacts.id, Number(inserted[0].insertId)), eq(customerContacts.organizationId, scope.organization.id), eq(customerContacts.userId, userId))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateCustomerContactForUser(userId: number, contactId: number, input: Partial<{ name: string; relationship: string | null; phone: string | null; email: string | null; notes: string | null; isActive: boolean }>) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const result = await db.update(customerContacts).set(input).where(and(eq(customerContacts.id, contactId), eq(customerContacts.organizationId, scope.organization.id), eq(customerContacts.userId, userId)));
+  if (!result[0].affectedRows) return null;
+  const rows = await db.select().from(customerContacts).where(and(eq(customerContacts.id, contactId), eq(customerContacts.organizationId, scope.organization.id), eq(customerContacts.userId, userId))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listSupportTicketsForUser(userId: number, ownOnly = false) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return [];
+  const filters = [eq(supportTickets.organizationId, scope.organization.id)];
+  if (ownOnly) filters.push(eq(supportTickets.userId, userId));
+  return db.select().from(supportTickets).where(and(...filters)).orderBy(desc(supportTickets.updatedAt)).limit(300);
+}
+
+export async function createSupportTicketForUser(userId: number, input: { shipmentId?: number | null; subject: string; description: string; category: "shipment" | "billing" | "pickup" | "delivery" | "account" | "other"; priority: "low" | "normal" | "high" | "urgent" }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  if (input.shipmentId) {
+    const shipment = await db.select({ id: shipments.id, createdBy: shipments.createdBy }).from(shipments).where(and(eq(shipments.id, input.shipmentId), eq(shipments.organizationId, scope.organization.id))).limit(1);
+    if (!shipment[0] || (scope.membership.role === "customer" && shipment[0].createdBy !== userId)) return null;
+  }
+  const inserted = await db.insert(supportTickets).values({ organizationId: scope.organization.id, userId, ...input, status: "open" });
+  const rows = await db.select().from(supportTickets).where(and(eq(supportTickets.id, Number(inserted[0].insertId)), eq(supportTickets.organizationId, scope.organization.id), eq(supportTickets.userId, userId))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateSupportTicketForUser(userId: number, ticketId: number, input: { status?: "open" | "in_progress" | "waiting_customer" | "resolved" | "closed"; priority?: "low" | "normal" | "high" | "urgent"; resolution?: string | null; assignedTo?: number | null }) {
+  const scope = await getOrganizationForUser(userId); const db = await getDb();
+  if (!db || !scope) return null;
+  const current = await db.select({ id: supportTickets.id }).from(supportTickets).where(and(eq(supportTickets.id, ticketId), eq(supportTickets.organizationId, scope.organization.id))).limit(1);
+  if (!current[0]) return null;
+  await db.update(supportTickets).set(input).where(and(eq(supportTickets.id, ticketId), eq(supportTickets.organizationId, scope.organization.id)));
+  const rows = await db.select().from(supportTickets).where(and(eq(supportTickets.id, ticketId), eq(supportTickets.organizationId, scope.organization.id))).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function getActiveTariffForOrganization(organizationId: number, serviceType: string, zoneCode?: string) {
