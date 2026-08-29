@@ -1,5 +1,4 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { Component, ErrorInfo } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastContainer } from './components/ui/DesignSystem';
 import { CommandPalette } from './components/ui/CommandPalette';
@@ -54,52 +53,57 @@ import { DriverApp } from './components/driver/DriverApp';
 // API Docs
 import { ApiDocs } from './components/docs/ApiDocs';
 
-// 404 Not Found Component
-const NotFound: React.FC = () => {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-6">
-      <div className="text-center space-y-4 max-w-md">
-        <h1 className="text-6xl font-black text-indigo-500">404</h1>
-        <h2 className="text-2xl font-bold">Página No Encontrada</h2>
-        <p className="text-slate-400 text-sm">La ruta solicitada no existe en la plataforma GoPaq.</p>
-        <a href="/" className="inline-block px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm">
-          Volver al Inicio
-        </a>
-      </div>
-    </div>
-  );
-};
-
-// Role Guard Component
-interface RoleGuardProps {
-  children: React.ReactNode;
-  allowedRoles: string[];
-  fallbackPath: string;
+// Error Boundary
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
 }
 
-const RoleGuard: React.FC<RoleGuardProps> = ({ children, allowedRoles, fallbackPath }) => {
-  const { currentRole } = useApp();
-
-  const isRoleAllowed = (role: string) => {
-    if (role === 'Owner' || role === 'Admin') return true;
-    if (allowedRoles.includes(role)) return true;
-    if (allowedRoles.includes('SUPER_ADMIN') && (role === 'Owner' || role === 'Admin' || role === 'Operations')) return true;
-    if (allowedRoles.includes('CLIENT') && role.startsWith('Client_')) return true;
-    if (allowedRoles.includes('DRIVER') && role === 'Driver') return true;
-    if (allowedRoles.includes('BRANCH') && ['Counter', 'Dispatcher', 'Warehouse', 'Manager'].includes(role)) return true;
-    return false;
-  };
-
-  if (!isRoleAllowed(currentRole)) {
-    return <Navigate to={fallbackPath} replace />;
+class ErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
   }
 
-  return <>{children}</>;
-};
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
 
-const MainRouter: React.FC = () => {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('GoPaq Application Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-6">
+          <div className="max-w-lg w-full bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-4">
+            <h2 className="text-xl font-bold text-rose-400">Error en la Aplicación</h2>
+            <p className="text-xs text-slate-300 font-mono bg-slate-950 p-3 rounded-lg overflow-auto">
+              {this.state.error?.message || 'Error inesperado'}
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm text-white"
+            >
+              Reiniciar Plataforma
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const AppContent: React.FC = () => {
   const { 
     currentSection, 
+    setCurrentSection,
+    currentRole,
     activeSubView, 
     isNewShipmentModalOpen, 
     setIsNewShipmentModalOpen,
@@ -107,114 +111,119 @@ const MainRouter: React.FC = () => {
     setActiveLabelShipment
   } = useApp();
 
+  // Role Protection Guard
+  const isRoleAllowedForSection = (section: string, role: string) => {
+    if (role === 'Owner' || role === 'Admin') return true;
+    if (section === 'super-admin') return role === 'Operations';
+    if (section === 'portal') return role.startsWith('Client_');
+    if (section === 'sucursal') return ['Counter', 'Dispatcher', 'Warehouse', 'Manager', 'Operations'].includes(role);
+    if (section === 'driver') return role === 'Driver';
+    if (section === 'docs') return true;
+    return false;
+  };
+
+  // Sync initial URL path if available
+  React.useEffect(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/portal') && currentSection !== 'portal') {
+      setCurrentSection('portal');
+    } else if (path.startsWith('/sucursal') && currentSection !== 'sucursal') {
+      setCurrentSection('sucursal');
+    } else if (path.startsWith('/driver') && currentSection !== 'driver') {
+      setCurrentSection('driver');
+    } else if (path.startsWith('/docs') && currentSection !== 'docs') {
+      setCurrentSection('docs');
+    } else if (path.startsWith('/super-admin') && currentSection !== 'super-admin') {
+      setCurrentSection('super-admin');
+    }
+  }, []);
+
+  // Update browser URL on section change without full page reload
+  React.useEffect(() => {
+    const targetPath = `/${currentSection}`;
+    if (window.location.pathname !== targetPath && window.location.pathname !== '/') {
+      window.history.replaceState(null, '', targetPath);
+    }
+  }, [currentSection]);
+
+  // Enforce role guard: if user role not allowed for current section, redirect to allowed default
+  const isAllowed = isRoleAllowedForSection(currentSection, currentRole);
+  const effectiveSection = isAllowed ? currentSection : (
+    currentRole.startsWith('Client_') ? 'portal' :
+    currentRole === 'Driver' ? 'driver' :
+    ['Counter', 'Dispatcher', 'Warehouse', 'Manager'].includes(currentRole) ? 'sucursal' :
+    'super-admin'
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors duration-150">
-      <Routes>
-        {/* Super Admin Ecosystem */}
-        <Route
-          path="/super-admin/*"
-          element={
-            <RoleGuard allowedRoles={['SUPER_ADMIN', 'Owner', 'Admin', 'Operations']} fallbackPath="/portal/dashboard">
-              <SuperAdminLayout>
-                {activeSubView === 'dashboard' && <SuperAdminDashboard />}
-                {activeSubView === 'operaciones-vivo' && <LiveConsole />}
-                {activeSubView === 'zernio-omnichannel' && <ZernioOmnichannelCenter />}
-                {activeSubView === 'ia-eventos' && <AiEventAutomationStudio />}
-                {activeSubView === 'escaneo-masivo' && <BulkScanner />}
-                {activeSubView === 'mapa-flota' && <LiveFleetMap />}
-                {activeSubView === 'envios' && <ShipmentsManager />}
-                {activeSubView === 'courier-intl' && <InternationalCourier />}
-                {activeSubView === 'rutas' && <RoutesDispatcher />}
-                {activeSubView === 'mudanzas-carga' && <MovingHeavyCargo />}
-                {activeSubView === 'drivers' && <DriversFleet />}
-                {activeSubView === 'sucursales' && <BranchesWarehouses />}
-                {activeSubView === 'registro-sucursal-matcher' && <ClientRegistrationAndBranchMatcher />}
-                {activeSubView === 'clientes' && <ClientsManager />}
-                {activeSubView === 'zonas-peligrosas' && <DangerousZonesManager />}
-                {activeSubView === 'cod' && <CodReconciliation />}
-                {activeSubView === 'tarifas' && <RatesEngine />}
-                {activeSubView === 'equipo' && <TeamRbac />}
-                {activeSubView === 'configuracion' && <SystemSettings />}
-                {![
-                  'dashboard', 'operaciones-vivo', 'zernio-omnichannel', 'ia-eventos',
-                  'escaneo-masivo', 'mapa-flota', 'envios', 'courier-intl', 'rutas',
-                  'mudanzas-carga', 'drivers', 'sucursales', 'registro-sucursal-matcher',
-                  'clientes', 'zonas-peligrosas', 'cod', 'tarifas', 'equipo', 'configuracion'
-                ].includes(activeSubView) && <SuperAdminDashboard />}
-              </SuperAdminLayout>
-            </RoleGuard>
-          }
-        />
+      {/* Super Admin Ecosystem */}
+      {effectiveSection === 'super-admin' && (
+        <SuperAdminLayout>
+          {activeSubView === 'dashboard' && <SuperAdminDashboard />}
+          {activeSubView === 'operaciones-vivo' && <LiveConsole />}
+          {activeSubView === 'zernio-omnichannel' && <ZernioOmnichannelCenter />}
+          {activeSubView === 'ia-eventos' && <AiEventAutomationStudio />}
+          {activeSubView === 'escaneo-masivo' && <BulkScanner />}
+          {activeSubView === 'mapa-flota' && <LiveFleetMap />}
+          {activeSubView === 'envios' && <ShipmentsManager />}
+          {activeSubView === 'courier-intl' && <InternationalCourier />}
+          {activeSubView === 'rutas' && <RoutesDispatcher />}
+          {activeSubView === 'mudanzas-carga' && <MovingHeavyCargo />}
+          {activeSubView === 'drivers' && <DriversFleet />}
+          {activeSubView === 'sucursales' && <BranchesWarehouses />}
+          {activeSubView === 'registro-sucursal-matcher' && <ClientRegistrationAndBranchMatcher />}
+          {activeSubView === 'clientes' && <ClientsManager />}
+          {activeSubView === 'zonas-peligrosas' && <DangerousZonesManager />}
+          {activeSubView === 'cod' && <CodReconciliation />}
+          {activeSubView === 'tarifas' && <RatesEngine />}
+          {activeSubView === 'equipo' && <TeamRbac />}
+          {activeSubView === 'configuracion' && <SystemSettings />}
+          {![
+            'dashboard', 'operaciones-vivo', 'zernio-omnichannel', 'ia-eventos',
+            'escaneo-masivo', 'mapa-flota', 'envios', 'courier-intl', 'rutas',
+            'mudanzas-carga', 'drivers', 'sucursales', 'registro-sucursal-matcher',
+            'clientes', 'zonas-peligrosas', 'cod', 'tarifas', 'equipo', 'configuracion'
+          ].includes(activeSubView) && <SuperAdminDashboard />}
+        </SuperAdminLayout>
+      )}
 
-        {/* Client Portal Ecosystem */}
-        <Route
-          path="/portal/*"
-          element={
-            <RoleGuard allowedRoles={['CLIENT', 'Owner', 'Admin']} fallbackPath="/driver">
-              <PortalLayout>
-                {activeSubView === 'dashboard' && <PortalDashboard />}
-                {activeSubView === 'crear-envio' && <ShipmentCreator />}
-                {activeSubView === 'rastreo' && <TrackingSearch />}
-                {activeSubView === 'mis-paquetes' && <ClientPackagesList />}
-                {activeSubView === 'casilleros' && <LockerAddresses />}
-                {activeSubView === 'facturacion' && <ClientBilling />}
-                {activeSubView === 'api-keys' && <ClientApiKeys />}
-                {![
-                  'dashboard', 'crear-envio', 'rastreo', 'mis-paquetes',
-                  'casilleros', 'facturacion', 'api-keys'
-                ].includes(activeSubView) && <PortalDashboard />}
-              </PortalLayout>
-            </RoleGuard>
-          }
-        />
+      {/* Client Portal Ecosystem */}
+      {effectiveSection === 'portal' && (
+        <PortalLayout>
+          {activeSubView === 'dashboard' && <PortalDashboard />}
+          {activeSubView === 'crear-envio' && <ShipmentCreator />}
+          {activeSubView === 'rastreo' && <TrackingSearch />}
+          {activeSubView === 'mis-paquetes' && <ClientPackagesList />}
+          {activeSubView === 'casilleros' && <LockerAddresses />}
+          {activeSubView === 'facturacion' && <ClientBilling />}
+          {activeSubView === 'api-keys' && <ClientApiKeys />}
+          {![
+            'dashboard', 'crear-envio', 'rastreo', 'mis-paquetes',
+            'casilleros', 'facturacion', 'api-keys'
+          ].includes(activeSubView) && <PortalDashboard />}
+        </PortalLayout>
+      )}
 
-        {/* Sucursal OS Ecosystem */}
-        <Route
-          path="/sucursal/*"
-          element={
-            <RoleGuard allowedRoles={['BRANCH', 'Owner', 'Admin', 'Operations']} fallbackPath="/portal/dashboard">
-              <SucursalLayout>
-                {activeSubView === 'dashboard' && <SucursalDashboard />}
-                {activeSubView === 'mostrador-pos' && <CounterPOS />}
-                {activeSubView === 'inventario' && <BranchInventory />}
-                {activeSubView === 'despacho' && <DriversDispatch />}
-                {activeSubView === 'caja' && <CashRegister />}
-                {![
-                  'dashboard', 'mostrador-pos', 'inventario', 'despacho', 'caja'
-                ].includes(activeSubView) && <SucursalDashboard />}
-              </SucursalLayout>
-            </RoleGuard>
-          }
-        />
+      {/* Sucursal OS Ecosystem */}
+      {effectiveSection === 'sucursal' && (
+        <SucursalLayout>
+          {activeSubView === 'dashboard' && <SucursalDashboard />}
+          {activeSubView === 'mostrador-pos' && <CounterPOS />}
+          {activeSubView === 'inventario' && <BranchInventory />}
+          {activeSubView === 'despacho' && <DriversDispatch />}
+          {activeSubView === 'caja' && <CashRegister />}
+          {![
+            'dashboard', 'mostrador-pos', 'inventario', 'despacho', 'caja'
+          ].includes(activeSubView) && <SucursalDashboard />}
+        </SucursalLayout>
+      )}
 
-        {/* Driver App Ecosystem */}
-        <Route
-          path="/driver/*"
-          element={
-            <RoleGuard allowedRoles={['DRIVER', 'Owner', 'Admin']} fallbackPath="/portal/dashboard">
-              <DriverApp />
-            </RoleGuard>
-          }
-        />
+      {/* Driver App Ecosystem */}
+      {effectiveSection === 'driver' && <DriverApp />}
 
-        {/* API Documentation */}
-        <Route path="/docs/api" element={<ApiDocs />} />
-
-        {/* Root Fallback */}
-        <Route
-          path="/"
-          element={
-            currentSection === 'super-admin' ? <Navigate to="/super-admin" replace /> :
-            currentSection === 'portal' ? <Navigate to="/portal/dashboard" replace /> :
-            currentSection === 'sucursal' ? <Navigate to="/sucursal" replace /> :
-            currentSection === 'driver' ? <Navigate to="/driver" replace /> :
-            <Navigate to="/docs/api" replace />
-          }
-        />
-
-        {/* 404 Route */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      {/* API Documentation */}
+      {effectiveSection === 'docs' && <ApiDocs />}
 
       {/* Global Modals & Notifications */}
       <ToastContainer />
@@ -243,11 +252,11 @@ const MainRouter: React.FC = () => {
 
 export function App() {
   return (
-    <BrowserRouter>
+    <ErrorBoundary>
       <AppProvider>
-        <MainRouter />
+        <AppContent />
       </AppProvider>
-    </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
