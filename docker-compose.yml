@@ -16,11 +16,21 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - GOPAQ_PUBLIC_ORG_ID=${GOPAQ_PUBLIC_ORG_ID:-org-gopaq}
       - KARRIO_API_URL=${KARRIO_API_URL:-}
       - KARRIO_API_KEY=${KARRIO_API_KEY:-}
+      - WITYLOGIX_SERVICE_URL=${WITYLOGIX_SERVICE_URL:-}
+      - WITYLOGIX_API_TOKEN=${WITYLOGIX_API_TOKEN:-}
+      - WITYLOGIX_TIMEOUT_MS=${WITYLOGIX_TIMEOUT_MS:-8000}
+      - WITYLOGIX_ORDERS_PATH=${WITYLOGIX_ORDERS_PATH:-/api/v4/orders}
+      - WITYLOGIX_DRIVERS_PATH=${WITYLOGIX_DRIVERS_PATH:-/api/v4/drivers}
+      - WITYLOGIX_ROUTES_PATH=${WITYLOGIX_ROUTES_PATH:-/api/v4/routes}
+      - WITYLOGIX_HEALTH_PATH=${WITYLOGIX_HEALTH_PATH:-/health}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
 
   postgres:
     image: postgis/postgis:15-3.3-alpine
@@ -34,6 +44,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gopaq_user} -d ${POSTGRES_DB:-gopaq_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -43,6 +58,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:
