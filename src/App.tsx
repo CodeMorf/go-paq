@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import { ToastContainer } from './components/ui/DesignSystem';
+import { ToastContainer, Modal } from './components/ui/DesignSystem';
 import { CommandPalette } from './components/ui/CommandPalette';
-import { Modal } from './components/ui/DesignSystem';
 import { ShipmentCreator } from './components/portal/ShipmentCreator';
+import { ApiClient } from './api/client';
+import { LoginPage, RegisterPage } from './components/auth/AuthPages';
 
-// Super Admin
 import { SuperAdminLayout } from './components/super-admin/SuperAdminLayout';
 import { SuperAdminDashboard } from './components/super-admin/SuperAdminDashboard';
 import { LiveConsole } from './components/super-admin/LiveConsole';
@@ -23,14 +23,10 @@ import { SystemSettings } from './components/super-admin/SystemSettings';
 import { DangerousZonesManager } from './components/super-admin/DangerousZonesManager';
 import { ZernioOmnichannelCenter } from './components/super-admin/ZernioOmnichannelCenter';
 import { AiEventAutomationStudio } from './components/super-admin/AiEventAutomationStudio';
-
-// Operations
 import { BulkScanner } from './components/operations/BulkScanner';
 import { LiveFleetMap } from './components/operations/LiveFleetMap';
 import { ClientRegistrationAndBranchMatcher } from './components/clients/ClientRegistrationAndBranchMatcher';
 import { ThermalLabelModal } from './components/ui/ThermalLabelModal';
-
-// Client Portal
 import { PortalLayout } from './components/portal/PortalLayout';
 import { PortalDashboard } from './components/portal/PortalDashboard';
 import { TrackingSearch } from './components/portal/TrackingSearch';
@@ -38,149 +34,144 @@ import { LockerAddresses } from './components/portal/LockerAddresses';
 import { ClientPackagesList } from './components/portal/ClientPackagesList';
 import { ClientBilling } from './components/portal/ClientBilling';
 import { ClientApiKeys } from './components/portal/ClientApiKeys';
-
-// Branch / Sucursal OS
 import { SucursalLayout } from './components/sucursal/SucursalLayout';
 import { SucursalDashboard } from './components/sucursal/SucursalDashboard';
 import { CounterPOS } from './components/sucursal/CounterPOS';
 import { BranchInventory } from './components/sucursal/BranchInventory';
 import { DriversDispatch } from './components/sucursal/DriversDispatch';
 import { CashRegister } from './components/sucursal/CashRegister';
-
-// Driver App
 import { DriverApp } from './components/driver/DriverApp';
-
-// API Docs
 import { ApiDocs } from './components/docs/ApiDocs';
 
+const routeFor = (section: string, view: string) => {
+  const root = section === 'docs' ? '/docs/api' : `/${section}`;
+  if (section === 'driver' || section === 'docs') return root;
+  const normalized = view === 'paquetes-list' ? 'paquetes' : view === 'cuenta-corriente' ? 'facturacion' : view;
+  return `${root}/${normalized || 'dashboard'}`;
+};
+
+const stateForPath = (pathname: string) => {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts[0] === 'portal') return { section: 'portal', view: parts[1] === 'paquetes' ? 'paquetes-list' : parts[1] === 'facturacion' ? 'cuenta-corriente' : (parts[1] || 'dashboard') };
+  if (parts[0] === 'sucursal') return { section: 'sucursal', view: parts[1] || 'dashboard' };
+  if (parts[0] === 'driver') return { section: 'driver', view: 'dashboard' };
+  if (parts[0] === 'docs') return { section: 'docs', view: 'api' };
+  return { section: 'super-admin', view: parts[0] === 'super-admin' ? (parts[1] || 'dashboard') : 'dashboard' };
+};
+
 const AppContent: React.FC = () => {
-  const { 
-    currentSection, 
-    activeSubView, 
-    isNewShipmentModalOpen, 
-    setIsNewShipmentModalOpen 
-  } = useApp();
+  const { currentSection, setCurrentSection, activeSubView, setActiveSubView } = useApp();
+  const [pathname, setPathname] = useState(window.location.pathname || '/');
+  const [sessionState, setSessionState] = useState<'checking' | 'valid' | 'invalid'>(ApiClient.hasSession() ? 'checking' : 'invalid');
 
-  // Super Admin Ecosystem
+  useEffect(() => {
+    const onPop = () => setPathname(window.location.pathname || '/');
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    if (pathname === '/login' || pathname === '/register' || pathname.startsWith('/docs')) return;
+    const route = stateForPath(pathname);
+    if (route.section !== currentSection) setCurrentSection(route.section as any);
+    if (route.view !== activeSubView) setActiveSubView(route.view);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname === '/login' || pathname === '/register' || pathname.startsWith('/docs')) return;
+    const desired = routeFor(currentSection, activeSubView);
+    if (desired !== pathname) {
+      window.history.replaceState({}, '', desired);
+      setPathname(desired);
+    }
+  }, [currentSection, activeSubView]);
+
+  useEffect(() => {
+    if (!ApiClient.hasSession()) { setSessionState('invalid'); return; }
+    ApiClient.getMe().then(() => setSessionState('valid')).catch(() => {
+      ApiClient.logout();
+      setSessionState('invalid');
+    });
+  }, [pathname === '/login' || pathname === '/register']);
+
+  if (pathname === '/login') return <LoginPage />;
+  if (pathname === '/register') return <RegisterPage />;
+  if (pathname.startsWith('/docs')) return <ApiDocs />;
+
+  if (sessionState === 'checking') return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Validando sesión…</div>;
+  if (sessionState === 'invalid') {
+    window.history.replaceState({}, '', '/login');
+    return <LoginPage />;
+  }
+
   if (currentSection === 'super-admin') {
-    return (
-      <SuperAdminLayout>
-        {activeSubView === 'dashboard' && <SuperAdminDashboard />}
-        {activeSubView === 'operaciones-vivo' && <LiveConsole />}
-        {activeSubView === 'zernio-omnichannel' && <ZernioOmnichannelCenter />}
-        {activeSubView === 'ia-eventos' && <AiEventAutomationStudio />}
-        {activeSubView === 'escaneo-masivo' && <BulkScanner />}
-        {activeSubView === 'mapa-flota' && <LiveFleetMap />}
-        {activeSubView === 'envios' && <ShipmentsManager />}
-        {activeSubView === 'courier-intl' && <InternationalCourier />}
-        {activeSubView === 'rutas' && <RoutesDispatcher />}
-        {activeSubView === 'mudanzas-carga' && <MovingHeavyCargo />}
-        {activeSubView === 'drivers' && <DriversFleet />}
-        {activeSubView === 'sucursales' && <BranchesWarehouses />}
-        {activeSubView === 'registro-sucursal-matcher' && <ClientRegistrationAndBranchMatcher />}
-        {activeSubView === 'clientes' && <ClientsManager />}
-        {activeSubView === 'zonas-peligrosas' && <DangerousZonesManager />}
-        {activeSubView === 'cod' && <CodReconciliation />}
-        {activeSubView === 'tarifas' && <RatesEngine />}
-        {activeSubView === 'equipo' && <TeamRbac />}
-        {activeSubView === 'configuracion' && <SystemSettings />}
-        {![
-          'dashboard', 'operaciones-vivo', 'zernio-omnichannel', 'ia-eventos',
-          'escaneo-masivo', 'mapa-flota', 'envios', 'courier-intl', 'rutas',
-          'mudanzas-carga', 'drivers', 'sucursales', 'registro-sucursal-matcher',
-          'clientes', 'zonas-peligrosas', 'cod', 'tarifas', 'equipo', 'configuracion'
-        ].includes(activeSubView) && <SuperAdminDashboard />}
-      </SuperAdminLayout>
-    );
+    return <SuperAdminLayout>
+      {activeSubView === 'dashboard' && <SuperAdminDashboard />}
+      {activeSubView === 'operaciones-vivo' && <LiveConsole />}
+      {activeSubView === 'zernio-omnichannel' && <ZernioOmnichannelCenter />}
+      {activeSubView === 'ia-eventos' && <AiEventAutomationStudio />}
+      {activeSubView === 'escaneo-masivo' && <BulkScanner />}
+      {activeSubView === 'mapa-flota' && <LiveFleetMap />}
+      {activeSubView === 'envios' && <ShipmentsManager />}
+      {activeSubView === 'courier-intl' && <InternationalCourier />}
+      {activeSubView === 'rutas' && <RoutesDispatcher />}
+      {activeSubView === 'mudanzas-carga' && <MovingHeavyCargo />}
+      {activeSubView === 'drivers' && <DriversFleet />}
+      {activeSubView === 'sucursales' && <BranchesWarehouses />}
+      {activeSubView === 'registro-sucursal-matcher' && <ClientRegistrationAndBranchMatcher />}
+      {activeSubView === 'clientes' && <ClientsManager />}
+      {activeSubView === 'zonas-peligrosas' && <DangerousZonesManager />}
+      {activeSubView === 'cod' && <CodReconciliation />}
+      {activeSubView === 'tarifas' && <RatesEngine />}
+      {activeSubView === 'equipo' && <TeamRbac />}
+      {activeSubView === 'configuracion' && <SystemSettings />}
+    </SuperAdminLayout>;
   }
 
-  // Client Portal Ecosystem
   if (currentSection === 'portal') {
-    return (
-      <PortalLayout>
-        {activeSubView === 'dashboard' && <PortalDashboard />}
-        {activeSubView === 'crear-envio' && <ShipmentCreator />}
-        {activeSubView === 'tracking' && <TrackingSearch />}
-        {activeSubView === 'casillero' && <LockerAddresses />}
-        {activeSubView === 'paquetes-list' && <ClientPackagesList />}
-        {activeSubView === 'cuenta-corriente' && <ClientBilling />}
-        {activeSubView === 'api-keys' && <ClientApiKeys />}
-        {![
-          'dashboard', 'crear-envio', 'tracking', 'casillero', 'paquetes-list', 'cuenta-corriente', 'api-keys'
-        ].includes(activeSubView) && <PortalDashboard />}
-      </PortalLayout>
-    );
+    return <PortalLayout>
+      {activeSubView === 'dashboard' && <PortalDashboard />}
+      {activeSubView === 'crear-envio' && <ShipmentCreator />}
+      {activeSubView === 'tracking' && <TrackingSearch />}
+      {activeSubView === 'casillero' && <LockerAddresses />}
+      {activeSubView === 'paquetes-list' && <ClientPackagesList />}
+      {activeSubView === 'cuenta-corriente' && <ClientBilling />}
+      {activeSubView === 'api-keys' && <ClientApiKeys />}
+    </PortalLayout>;
   }
 
-  // Sucursal / Agency Operating System
   if (currentSection === 'sucursal') {
-    return (
-      <SucursalLayout>
-        {activeSubView === 'dashboard' && <SucursalDashboard />}
-        {activeSubView === 'escaneo-masivo' && <BulkScanner />}
-        {activeSubView === 'mostrador' && <CounterPOS />}
-        {activeSubView === 'inventario' && <BranchInventory />}
-        {activeSubView === 'despacho-drivers' && <DriversDispatch />}
-        {activeSubView === 'arqueo-caja' && <CashRegister />}
-        {![
-          'dashboard', 'escaneo-masivo', 'mostrador', 'inventario', 'despacho-drivers', 'arqueo-caja'
-        ].includes(activeSubView) && <SucursalDashboard />}
-      </SucursalLayout>
-    );
+    return <SucursalLayout>
+      {activeSubView === 'dashboard' && <SucursalDashboard />}
+      {activeSubView === 'escaneo-masivo' && <BulkScanner />}
+      {activeSubView === 'mostrador' && <CounterPOS />}
+      {activeSubView === 'inventario' && <BranchInventory />}
+      {activeSubView === 'despacho-drivers' && <DriversDispatch />}
+      {activeSubView === 'arqueo-caja' && <CashRegister />}
+    </SucursalLayout>;
   }
 
-  // Mobile Driver App
-  if (currentSection === 'driver') {
-    return <DriverApp />;
-  }
-
-  // API Docs
-  if (currentSection === 'docs') {
-    return <ApiDocs />;
-  }
-
+  if (currentSection === 'driver') return <DriverApp />;
   return <SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout>;
 };
 
 export default function App() {
-  return (
-    <AppProvider>
-      <AppContent />
-      <ToastContainer />
-      <CommandPalette />
-      
-      {/* Global Create Shipment Modal */}
-      <GlobalShipmentModal />
-      <GlobalThermalLabelWrapper />
-    </AppProvider>
-  );
+  return <AppProvider>
+    <AppContent />
+    <ToastContainer />
+    <CommandPalette />
+    <GlobalShipmentModal />
+    <GlobalThermalLabelWrapper />
+  </AppProvider>;
 }
 
 const GlobalThermalLabelWrapper: React.FC = () => {
   const { activeLabelShipment, setActiveLabelShipment } = useApp();
-
   if (!activeLabelShipment) return null;
-
-  return (
-    <ThermalLabelModal
-      shipment={activeLabelShipment}
-      isOpen={!!activeLabelShipment}
-      onClose={() => setActiveLabelShipment(null)}
-    />
-  );
+  return <ThermalLabelModal shipment={activeLabelShipment} isOpen={!!activeLabelShipment} onClose={() => setActiveLabelShipment(null)} />;
 };
 
 const GlobalShipmentModal: React.FC = () => {
   const { isNewShipmentModalOpen, setIsNewShipmentModalOpen } = useApp();
-
-  return (
-    <Modal
-      isOpen={isNewShipmentModalOpen}
-      onClose={() => setIsNewShipmentModalOpen(false)}
-      title="Crear Nuevo Envío"
-      size="xl"
-    >
-      <ShipmentCreator />
-    </Modal>
-  );
+  return <Modal isOpen={isNewShipmentModalOpen} onClose={() => setIsNewShipmentModalOpen(false)} title="Crear Nuevo Envío" size="xl"><ShipmentCreator /></Modal>;
 };
