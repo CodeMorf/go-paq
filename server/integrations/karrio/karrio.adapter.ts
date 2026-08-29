@@ -81,7 +81,7 @@ export class KarrioAdapter {
 
   static async fetchLiveCarrierRates(payload: KarrioRateRequest): Promise<{ success: boolean; shipmentId?: string; rates?: KarrioRateResponse[]; error?: string }> {
     const result = await this.createShipment(payload);
-    if (!result.success) return { success: false, error: result.error };
+    if ('error' in result) return { success: false, error: result.error };
     const shipment: any = result.data;
     const rates: KarrioRateResponse[] = (shipment.rates || []).map((rate: any) => ({
       id: rate.id,
