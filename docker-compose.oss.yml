@@ -1,0 +1,185 @@
+version: '3.9'
+
+# Optional OSS engines for GoPaq.
+# Start together with the core stack:
+#   docker compose -f docker-compose.yml -f docker-compose.oss.yml up -d --build
+#
+# Witylogix remains an independent AGPL-3.0 service and is only consumed over HTTP.
+# Karrio remains an independent LGPL-3.0 service and is only consumed over HTTP.
+
+services:
+  gopaq-api:
+    environment:
+      KARRIO_API_URL: http://karrio-api:5002
+      KARRIO_API_KEY: ${KARRIO_API_KEY:-}
+      WITYLOGIX_SERVICE_URL: http://witylogix-api:3001
+      WITYLOGIX_API_TOKEN: ${WITYLOGIX_API_TOKEN:-}
+      WITYLOGIX_TIMEOUT_MS: ${WITYLOGIX_TIMEOUT_MS:-8000}
+      WITYLOGIX_ORDERS_PATH: /api/v4/orders
+      WITYLOGIX_DRIVERS_PATH: /api/v4/drivers
+      WITYLOGIX_ROUTES_PATH: /api/v4/routes
+      WITYLOGIX_HEALTH_PATH: /health
+    depends_on:
+      karrio-api:
+        condition: service_healthy
+      witylogix-api:
+        condition: service_healthy
+
+  # ---------------- Karrio ----------------
+  karrio-db:
+    image: postgres:16-alpine
+    container_name: gopaq-karrio-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KARRIO_DATABASE_NAME:-karrio}
+      POSTGRES_USER: ${KARRIO_DATABASE_USERNAME:-karrio}
+      POSTGRES_PASSWORD: ${KARRIO_DATABASE_PASSWORD:-karrio_change_me}
+    volumes:
+      - karrio_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KARRIO_DATABASE_USERNAME:-karrio} -d ${KARRIO_DATABASE_NAME:-karrio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  karrio-redis:
+    image: redis:7-alpine
+    container_name: gopaq-karrio-redis
+    restart: unless-stopped
+    volumes:
+      - karrio_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  karrio-api:
+    image: karrio.docker.scarf.sh/karrio/server:${KARRIO_TAG:-2026.1.32}
+    container_name: gopaq-karrio-api
+    restart: unless-stopped
+    ports:
+      - "${KARRIO_HTTP_PORT:-5002}:5002"
+    depends_on:
+      karrio-db:
+        condition: service_healthy
+      karrio-redis:
+        condition: service_healthy
+    environment:
+      DEBUG_MODE: "False"
+      DETACHED_WORKER: "True"
+      SECRET_KEY: ${KARRIO_SECRET_KEY:-change-this-karrio-secret}
+      REDIS_HOST: karrio-redis
+      REDIS_PORT: 6379
+      DATABASE_HOST: karrio-db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${KARRIO_DATABASE_NAME:-karrio}
+      DATABASE_ENGINE: postgresql_psycopg2
+      DATABASE_USERNAME: ${KARRIO_DATABASE_USERNAME:-karrio}
+      DATABASE_PASSWORD: ${KARRIO_DATABASE_PASSWORD:-karrio_change_me}
+      KARRIO_HTTP_PORT: 5002
+      ENABLE_ALL_PLUGINS_BY_DEFAULT: "True"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:5002/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+
+  karrio-worker:
+    image: karrio.docker.scarf.sh/karrio/server:${KARRIO_TAG:-2026.1.32}
+    container_name: gopaq-karrio-worker
+    restart: unless-stopped
+    depends_on:
+      karrio-api:
+        condition: service_healthy
+    environment:
+      DEBUG_MODE: "False"
+      REDIS_HOST: karrio-redis
+      REDIS_PORT: 6379
+      DATABASE_HOST: karrio-db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${KARRIO_DATABASE_NAME:-karrio}
+      DATABASE_ENGINE: postgresql_psycopg2
+      DATABASE_USERNAME: ${KARRIO_DATABASE_USERNAME:-karrio}
+      DATABASE_PASSWORD: ${KARRIO_DATABASE_PASSWORD:-karrio_change_me}
+      ENABLE_ALL_PLUGINS_BY_DEFAULT: "True"
+    command: "/bin/bash ./worker"
+
+  # ---------------- Witylogix ----------------
+  witylogix-db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: gopaq-witylogix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${WITYLOGIX_POSTGRES_USER:-witylogix}
+      POSTGRES_PASSWORD: ${WITYLOGIX_POSTGRES_PASSWORD:-witylogix_change_me}
+      POSTGRES_DB: ${WITYLOGIX_POSTGRES_DB:-witylogix}
+    volumes:
+      - witylogix_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WITYLOGIX_POSTGRES_USER:-witylogix} -d ${WITYLOGIX_POSTGRES_DB:-witylogix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  witylogix-redis:
+    image: redis:7-alpine
+    container_name: gopaq-witylogix-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - witylogix_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  witylogix-migrate:
+    build:
+      context: https://github.com/wityliti/witylogix.git#${WITYLOGIX_GIT_REF:-main}
+      dockerfile: infra/docker/Dockerfile.api
+      target: build
+    container_name: gopaq-witylogix-migrate
+    restart: "no"
+    depends_on:
+      witylogix-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${WITYLOGIX_POSTGRES_USER:-witylogix}:${WITYLOGIX_POSTGRES_PASSWORD:-witylogix_change_me}@witylogix-db:5432/${WITYLOGIX_POSTGRES_DB:-witylogix}
+    command: ["pnpm", "--filter", "@witylogix/db", "db:migrate:deploy"]
+
+  witylogix-api:
+    build:
+      context: https://github.com/wityliti/witylogix.git#${WITYLOGIX_GIT_REF:-main}
+      dockerfile: infra/docker/Dockerfile.api
+    container_name: gopaq-witylogix-api
+    restart: unless-stopped
+    ports:
+      - "${WITYLOGIX_API_PORT:-3001}:3001"
+    depends_on:
+      witylogix-migrate:
+        condition: service_completed_successfully
+      witylogix-redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      LOG_LEVEL: ${WITYLOGIX_LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://${WITYLOGIX_POSTGRES_USER:-witylogix}:${WITYLOGIX_POSTGRES_PASSWORD:-witylogix_change_me}@witylogix-db:5432/${WITYLOGIX_POSTGRES_DB:-witylogix}
+      REDIS_URL: redis://witylogix-redis:6379
+      JWT_SECRET: ${WITYLOGIX_JWT_SECRET:-change-this-witylogix-jwt-secret}
+      MAPBOX_ACCESS_TOKEN: ${WITYLOGIX_MAPBOX_ACCESS_TOKEN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+volumes:
+  karrio_postgres_data:
+  karrio_redis_data:
+  witylogix_postgres_data:
+  witylogix_redis_data:
