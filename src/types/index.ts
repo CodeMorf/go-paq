@@ -32,6 +32,8 @@ export type ServiceType =
 
 export type ShipmentStatus = 
   | 'draft'
+  | 'registered'
+  | 'active'
   | 'pending'
   | 'confirmed'
   | 'assigned'
@@ -42,6 +44,7 @@ export type ShipmentStatus =
   | 'at_warehouse'
   | 'in_transit'
   | 'customs'
+  | 'ready_for_pickup'
   | 'out_for_delivery'
   | 'delivered'
   | 'failed'
@@ -114,11 +117,14 @@ export interface Shipment {
   branchId?: string;
   branchName?: string;
   warehouseSlot?: string;
+  clientId?: string;
+  clientName?: string;
   
   // International courier specific
   originCountry?: CountryCode;
   destinationCountry?: CountryCode;
   lockerId?: string;
+  lockerCode?: string;
   customsTax?: number;
   manifestId?: string;
   flightVoyageNumber?: string;
@@ -167,16 +173,18 @@ export interface Driver {
   email: string;
   avatar: string;
   rating: number;
-  status: 'available' | 'busy' | 'offline';
+  status: 'available' | 'busy' | 'offline' | 'on_route' | 'active' | 'in_motion' | 'idle';
   assignedVehicleId: string;
   vehicleName: string;
   vehicleType: 'moto' | 'van' | 'camion' | 'camioneta' | 'pesado';
   licensePlate: string;
+  vehiclePlate?: string;
   currentLat: number;
   currentLng: number;
   currentRouteId?: string;
   pendingDeliveriesCount: number;
   completedDeliveriesToday: number;
+  completedDeliveries?: number;
   codCollectedToday: number;
   codPendingSettlement: number;
   batteryLevel: number;
@@ -263,6 +271,8 @@ export interface DeliveryRoute {
   vehiclePlate: string;
   vehicleType?: 'moto' | 'van' | 'camion' | 'camioneta' | 'pesado';
   maxWeightKg?: number;
+  maxCapacityWeightKg?: number;
+  zone?: string;
   currentWeightKg?: number;
   maxStopsCapacity?: number;
   branchId: string;
@@ -297,6 +307,7 @@ export interface Branch {
   capacityMaxPackages: number;
   currentPackagesCount: number;
   activeDriversCount: number;
+  activeFleetCount?: number;
   cashInDrawer: number;
   currency: Currency;
   zones: WarehouseZone[];
@@ -398,6 +409,7 @@ export interface ClientProfile {
   lockerCode: string;
   accountExecutive?: string;
   activeShipments: number;
+  totalShipments?: number;
   balanceDop: number;
   creditLimitDop: number;
   creditUsedDop?: number;

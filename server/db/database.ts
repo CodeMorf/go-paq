@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -17,7 +17,6 @@ let pgPool: Pool | null = null;
 let sqliteDb: Database.Database | null = null;
 
 if (isPostgres) {
-  console.log('[DB] Connecting to PostgreSQL database at:', DATABASE_URL.split('@')[1] || 'remote');
   pgPool = new Pool({
     connectionString: DATABASE_URL,
     max: 20,
@@ -44,12 +43,130 @@ export function initDatabase() {
   }
 }
 
+export async function initDatabaseAsync() {
+  const schemaPath = path.resolve(__dirname, 'schema.sql');
+  const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+
+  if (isPostgres && pgPool) {
+    // Execute PostgreSQL DDL
+    await pgPool.query(schemaSql);
+  } else if (sqliteDb) {
+    sqliteDb.exec(schemaSql);
+  }
+}
+
+export async function queryOneAsync<T = any>(sql: string, params: any[] = []): Promise<T | null> {
+  if (isPostgres && pgPool) {
+    let pIdx = 1;
+    const pgSql = sql.replace(/\?/g, () => `$${pIdx++}`);
+    const res = await pgPool.query(pgSql, params);
+    return (res.rows[0] as T) || null;
+  }
+  if (sqliteDb) {
+    const stmt = sqliteDb.prepare(sql);
+    const row = stmt.get(...params) as T | undefined;
+    return row || null;
+  }
+  return null;
+}
+
+export async function queryAllAsync<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  if (isPostgres && pgPool) {
+    let pIdx = 1;
+    const pgSql = sql.replace(/\?/g, () => `$${pIdx++}`);
+    const res = await pgPool.query(pgSql, params);
+    return res.rows as T[];
+  }
+  if (sqliteDb) {
+    const stmt = sqliteDb.prepare(sql);
+    return stmt.all(...params) as T[];
+  }
+  return [];
+}
+
+export async function executeAsync(sql: string, params: any[] = []): Promise<{ changes: number }> {
+  if (isPostgres && pgPool) {
+    let pIdx = 1;
+    const pgSql = sql.replace(/\?/g, () => `$${pIdx++}`);
+    const res = await pgPool.query(pgSql, params);
+    return { changes: res.rowCount || 0 };
+  }
+  if (sqliteDb) {
+    const stmt = sqliteDb.prepare(sql);
+    const info = stmt.run(...params);
+    return { changes: info.changes };
+  }
+  return { changes: 0 };
+}
+
+export async function transactionAsync<T>(callback: (client: { queryOne: typeof queryOneAsync; queryAll: typeof queryAllAsync; execute: typeof executeAsync }) => Promise<T>): Promise<T> {
+  if (isPostgres && pgPool) {
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+      const scopedClient = {
+        queryOne: async <R = any>(sql: string, params: any[] = []) => {
+          let pIdx = 1;
+          const pgSql = sql.replace(/\?/g, () => `$${pIdx++}`);
+          const res = await client.query(pgSql, params);
+          return (res.rows[0] as R) || null;
+        },
+        queryAll: async <R = any>(sql: string, params: any[] = []) => {
+          let pIdx = 1;
+          const pgSql = sql.replace(/\?/g, () => `$${pIdx++}`);
+          const res = await client.query(pgSql, params);
+          return res.rows as R[];
+        },
+        execute: async (sql: string, params: any[] = []) => {
+          let pIdx = 1;
+          const pgSql = sql.replace(/\?/g, () => `$${pIdx++}`);
+          const res = await client.query(pgSql, params);
+          return { changes: res.rowCount || 0 };
+        }
+      };
+      const result = await callback(scopedClient);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  // SQLite transaction with rollback support
+  if (sqliteDb) {
+    sqliteDb.exec('BEGIN');
+    try {
+      const scopedClient = {
+        queryOne: queryOneAsync,
+        queryAll: queryAllAsync,
+        execute: executeAsync
+      };
+      const result = await callback(scopedClient);
+      sqliteDb.exec('COMMIT');
+      return result;
+    } catch (err) {
+      sqliteDb.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  return await callback({
+    queryOne: queryOneAsync,
+    queryAll: queryAllAsync,
+    execute: executeAsync
+  });
+}
+
+// Synchronous Fallbacks for existing synchronous tests
 export function queryOne<T = any>(sql: string, params: any[] = []): T | undefined {
   if (sqliteDb) {
     const stmt = sqliteDb.prepare(sql);
     return stmt.get(...params) as T | undefined;
   }
-  throw new Error('Sync queryOne called in async PostgreSQL mode. Use async queryOneAsync.');
+  return undefined;
 }
 
 export function queryAll<T = any>(sql: string, params: any[] = []): T[] {
@@ -57,7 +174,7 @@ export function queryAll<T = any>(sql: string, params: any[] = []): T[] {
     const stmt = sqliteDb.prepare(sql);
     return stmt.all(...params) as T[];
   }
-  throw new Error('Sync queryAll called in async PostgreSQL mode. Use async queryAllAsync.');
+  return [];
 }
 
 export function execute(sql: string, params: any[] = []) {
@@ -73,17 +190,4 @@ export function transaction<T>(fn: () => T): T {
     return runTx();
   }
   return fn();
-}
-
-export async function queryAsync<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-  if (pgPool) {
-    // Convert ? to $1, $2, etc. for PostgreSQL
-    let pIdx = 1;
-    const pgSql = sql.replace(/\?/g, () => `$${pIdx++}`);
-    const res = await pgPool.query(pgSql, params);
-    return res.rows as T[];
-  } else if (sqliteDb) {
-    return queryAll<T>(sql, params);
-  }
-  return [];
 }

@@ -132,7 +132,7 @@ export const LiveConsole: React.FC = () => {
           value={`${syncHealthMetrics.pendingCount + syncHealthMetrics.failedCount} paradas`}
           subtitle={`Latencia promedio: ${syncHealthMetrics.avgLatencyMs}ms`}
           icon={<Activity className="w-5 h-5" />}
-          accent={syncHealthMetrics.failedCount > 0 ? 'rose' : 'slate'}
+          accent={syncHealthMetrics.failedCount > 0 ? 'rose' : 'blue'}
         />
       </div>
 

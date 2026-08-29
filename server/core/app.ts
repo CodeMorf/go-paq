@@ -15,6 +15,7 @@ import { heavyCargoRouter } from '../api/v1/heavyCargo.routes';
 import { apiKeysRouter } from '../api/v1/apiKeys.routes';
 import { webhooksRouter } from '../api/v1/webhooks.routes';
 import { openapiRouter } from '../api/v1/openapi.routes';
+import { integrationsRouter } from '../api/v1/integrations.routes';
 
 export const app = express();
 
@@ -60,6 +61,7 @@ apiV1.use('/moving', movingRouter);
 apiV1.use('/heavy-cargo', heavyCargoRouter);
 apiV1.use('/api-keys', apiKeysRouter);
 apiV1.use('/webhooks', webhooksRouter);
+apiV1.use('/integrations', integrationsRouter);
 apiV1.use('/docs', openapiRouter);
 
 app.use('/api/v1', apiV1);

@@ -2,7 +2,7 @@ import request from 'supertest';
 import crypto from 'crypto';
 import { app } from '../core/app';
 import { runSeeds } from '../db/seed';
-import { execute, queryOne } from '../db/database';
+import { execute, queryOne, queryOneAsync, queryAllAsync, executeAsync, transactionAsync } from '../db/database';
 import { KarrioAdapter } from '../integrations/karrio/karrio.adapter';
 import { GoPaqRoutingEngine } from '../modules/routing/routing.engine';
 
@@ -39,17 +39,39 @@ async function runComprehensiveTestSuite() {
     .send({ email: 'admin@gopaq.local', password: 'WrongPassword!' });
   assert(invalidLogin.status === 401, 'POST /api/v1/auth/login rejects invalid password with 401');
 
-  // 3. Security: Unauthenticated access rejected
+  // 3. Register: Explicit Tenant Resolution
+  const testEmail = `newclient_${Date.now()}@example.com`;
+  const registerRes = await request(app)
+    .post('/api/v1/auth/register')
+    .send({
+      email: testEmail,
+      password: 'SecurePass123!',
+      name: 'Cliente E-commerce Demo',
+      tenantSlug: 'gopaq-global'
+    });
+  assert(registerRes.status === 201 && registerRes.body.token, 'POST /api/v1/auth/register resolves tenant and creates CLIENT user with 201');
+
+  // 4. Register: Duplicate Email Prevention
+  const dupRegisterRes = await request(app)
+    .post('/api/v1/auth/register')
+    .send({
+      email: testEmail,
+      password: 'SecurePass123!',
+      name: 'Cliente Duplicado'
+    });
+  assert(dupRegisterRes.status === 409, 'POST /api/v1/auth/register rejects duplicate email registration with 409');
+
+  // 5. Security: Unauthenticated access rejected
   const unauthRes = await request(app).get('/api/v1/shipments');
   assert(unauthRes.status === 401, 'GET /api/v1/shipments rejects unauthenticated requests with 401');
 
-  // 4. Authenticated Shipments List
+  // 6. Authenticated Shipments List
   const shipmentsRes = await request(app)
     .get('/api/v1/shipments')
     .set('Authorization', `Bearer ${token}`);
   assert(shipmentsRes.status === 200 && Array.isArray(shipmentsRes.body.shipments), 'GET /api/v1/shipments returns real DB shipments');
 
-  // 5. Create Shipment & Persistence
+  // 7. Create Shipment & Persistence
   const createShpRes = await request(app)
     .post('/api/v1/shipments')
     .set('Authorization', `Bearer ${token}`)
@@ -62,10 +84,8 @@ async function runComprehensiveTestSuite() {
     });
   assert(createShpRes.status === 201 && createShpRes.body.shipment.trackingNumber.startsWith('GP-'), 'POST /api/v1/shipments persists shipment with unique GP- tracking');
   const newTracking = createShpRes.body.shipment.trackingNumber;
-  const newShipmentId = createShpRes.body.shipment.id;
 
-  // 6. Tenant Isolation Check
-  // Create a shipment in another organization and ensure org-gopaq cannot read it
+  // 8. Tenant Isolation Check
   execute(`
     INSERT INTO organizations (id, name, slug, active) VALUES ('org-rival', 'Competidor Logistics', 'competidor', 1)
     ON CONFLICT (id) DO NOTHING
@@ -81,8 +101,7 @@ async function runComprehensiveTestSuite() {
     .set('Authorization', `Bearer ${token}`);
   assert(isolationRes.status === 404, 'TENANT ISOLATION: Org cannot access shipment of another organization (404)');
 
-  // 7. API Key Security: Valid Key
-  // Key prefix is 'gp_live_' and hash is for 'gp_live_sec_test123'
+  // 9. API Key Security: Valid Key
   const rawTestKey = 'gp_live_sec_0123456789abcdef01234567';
   const testKeyHash = crypto.createHash('sha256').update(rawTestKey).digest('hex');
   execute(`
@@ -96,30 +115,50 @@ async function runComprehensiveTestSuite() {
     .set('x-api-key', rawTestKey);
   assert(apiKeyRes.status === 200, 'API KEY SECURITY: Valid hashed API Key authenticates correctly (200)');
 
-  // 8. API Key Security: Invalid Key
+  // 10. API Key Security: Invalid Key
   const invalidKeyRes = await request(app)
     .get('/api/v1/shipments')
     .set('x-api-key', 'gp_live_sec_invalid_fake_key_9999');
   assert(invalidKeyRes.status === 401, 'API KEY SECURITY: Invalid API Key strictly rejected with 401');
 
-  // 9. API Key Security: Scope Validation
+  // 11. API Key Security: Scope Validation
   const scopeDeniedRes = await request(app)
     .post('/api/v1/shipments')
     .set('x-api-key', rawTestKey)
     .send({ origin: {}, destination: {}, package: {} });
   assert(scopeDeniedRes.status === 403, 'API KEY SECURITY: Key without shipments:write scope rejected with 403');
 
-  // 10. Real Quotes & Pricing Engine
+  // 12. PostgreSQL / Async Database Layer & Transaction Rollback
+  const testBranchId = `br-test-rollback-${Date.now()}`;
+  try {
+    await transactionAsync(async (tx) => {
+      await tx.execute(`
+        INSERT INTO branches (id, organization_id, code, name, city, address, phone, manager_name, is_hub, active)
+        VALUES (?, 'org-gopaq', 'TEST-ROLL', 'Sucursal Rollback', 'SDQ', 'Calle Test', '809', 'Admin', 0, 1)
+      `, [testBranchId]);
+      throw new Error('Simulated atomic transaction failure');
+    });
+  } catch {
+    // Expected to catch rollback error
+  }
+  const checkBranch = await queryOneAsync('SELECT id FROM branches WHERE id = ?', [testBranchId]);
+  assert(!checkBranch, 'ASYNC DATABASE LAYER: transactionAsync rolled back atomically upon error');
+
+  // 13. Integrations Health Endpoint (Witylogix & Karrio status reporting)
+  const healthRes = await request(app).get('/api/v1/integrations/health');
+  assert(healthRes.status === 200 && healthRes.body.witylogix && healthRes.body.karrio, 'GET /api/v1/integrations/health returns live diagnostics for Witylogix & Karrio');
+
+  // 14. Real Quotes & Pricing Engine
   const quoteRes = await request(app)
     .post('/api/v1/quotes')
     .send({ serviceType: 'nacional', originCity: 'Santo Domingo', destCity: 'Santiago', weightKg: 5, lengthCm: 40, widthCm: 30, heightCm: 20 });
   assert(quoteRes.status === 200 && quoteRes.body.quote.total > 300, 'POST /api/v1/quotes calculates dynamic national pricing with volumetric IATA weight');
 
-  // 11. Public Tracking
+  // 15. Public Tracking
   const trackingRes = await request(app).get(`/api/v1/tracking/${newTracking}`);
   assert(trackingRes.status === 200 && trackingRes.body.shipment.status === 'pending', 'GET /api/v1/tracking/:tracking retrieves real-time shipment events');
 
-  // 12. GoPaq Native Routing Engine
+  // 16. GoPaq Native Routing Engine
   const stops = [
     { id: '1', address: 'Av. Luperon', lat: 18.45, lng: -69.97, type: 'delivery' as const, contact: { name: 'A' }, shipmentTracking: 'GP-1' },
     { id: '2', address: 'Av. 27 Feb', lat: 18.48, lng: -69.92, type: 'delivery' as const, contact: { name: 'B' }, shipmentTracking: 'GP-2' }
@@ -127,7 +166,7 @@ async function runComprehensiveTestSuite() {
   const routeOpt = GoPaqRoutingEngine.optimizeStops(stops);
   assert(routeOpt.orderedStops.length === 2 && routeOpt.estimatedDistanceKm > 0, 'GoPaq Routing Engine processes 2-opt spatial optimization');
 
-  // 13. Karrio Adapter: Provider Unavailable Check
+  // 17. Karrio Adapter: Provider Unavailable Check
   const karrioRes = await KarrioAdapter.fetchLiveCarrierRates({
     shipper: { country_code: 'US' },
     recipient: { country_code: 'DO' },
@@ -135,7 +174,7 @@ async function runComprehensiveTestSuite() {
   });
   assert(karrioRes.error === 'provider_unavailable' || karrioRes.success, 'Karrio Adapter handles unconfigured environment gracefully without fake local rates');
 
-  // 14. COD Ledger
+  // 18. COD Ledger
   const codRes = await request(app)
     .get('/api/v1/cod/ledger')
     .set('Authorization', `Bearer ${token}`);

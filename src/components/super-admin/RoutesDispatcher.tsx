@@ -524,7 +524,7 @@ export const RoutesDispatcher: React.FC = () => {
               >
                 {drivers.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name} ({d.vehicleType} • {d.vehiclePlate})
+                    {d.name} ({d.vehicleType} • {d.vehiclePlate || d.licensePlate})
                   </option>
                 ))}
               </select>

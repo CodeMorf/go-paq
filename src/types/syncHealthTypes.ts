@@ -42,6 +42,8 @@ export interface SyncHealthMetrics {
   pendingCount: number;
   failedCount: number;
   syncedCount: number;
+  syncedPercentage?: number;
+  avgLatencyMs?: number;
   isOnline: boolean;
   lastSyncTime: string;
   statusLevel: 'healthy' | 'warning' | 'critical' | 'offline';

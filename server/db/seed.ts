@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { db, initDatabase, execute, queryOne } from './database';
+import { initDatabase, execute, queryOne, executeAsync, queryOneAsync } from './database';
 
 export function runSeeds() {
   initDatabase();

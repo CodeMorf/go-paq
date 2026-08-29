@@ -277,11 +277,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [bulkScanHistory, setBulkScanHistory] = useState<BulkScanItem[]>([]);
   const [activeLabelShipment, setActiveLabelShipment] = useState<Shipment | null>(null);
 
-  // Zernio Omnichannel & WhatsApp AI Integration State
-  const [zernioConfig, setZernioConfig] = useState<ZernioWebhookConfig>(MOCK_ZERNIO_CONFIG);
-  const [zernioMessages, setZernioMessages] = useState<ZernioMessage[]>(MOCK_ZERNIO_MESSAGES);
-  const [zernioCalls, setZernioCalls] = useState<ZernioCallLog[]>(MOCK_ZERNIO_CALLS);
-  const [socialConnections, setSocialConnections] = useState<SocialOAuthConnection[]>(MOCK_SOCIAL_OAUTH_CONNECTIONS);
+  // Zernio Omnichannel & WhatsApp AI Integration State (Clean unconfigured initial state)
+  const [zernioConfig, setZernioConfig] = useState<ZernioWebhookConfig>({
+    webhookUrl: '',
+    secretToken: '',
+    cliConnected: false,
+    cliVersion: 'v1.4.0-standalone',
+    activeEvents: [],
+    lastPingTimestamp: 'Sin conexión',
+    whatsappCloudConfig: {
+      phoneNumberId: '',
+      businessAccountId: '',
+      businessProxyNumber: '',
+      verifiedStatus: 'pending'
+    },
+    metaFacebookConfig: {
+      pageId: '',
+      pageName: '',
+      appSecretSet: false
+    },
+    aiEngineConfig: {
+      model: 'gemini-1.5-flash',
+      autoReplyEnabled: false,
+      voiceAgentEnabled: false,
+      confidenceThreshold: 0.85,
+      escalateToHumanOnUrgent: true,
+      businessKnowledgePrompt: 'GoPaq Logistics Support AI'
+    }
+  });
+  const [zernioMessages, setZernioMessages] = useState<ZernioMessage[]>([]);
+  const [zernioCalls, setZernioCalls] = useState<ZernioCallLog[]>([]);
+  const [socialConnections, setSocialConnections] = useState<SocialOAuthConnection[]>([
+    {
+      id: 'soc-wa',
+      provider: 'whatsapp',
+      name: 'WhatsApp Business Cloud API',
+      connected: false,
+      status: 'disconnected',
+      accountIdentifier: 'Sin vincular',
+      connectedAt: 'No configurado',
+      scopes: ['messages.read', 'messages.send'],
+      webhookStatus: 'pending',
+      credentials: {}
+    },
+    {
+      id: 'soc-meta',
+      provider: 'facebook',
+      name: 'Meta / Facebook Messenger API',
+      connected: false,
+      status: 'disconnected',
+      accountIdentifier: 'Sin vincular',
+      connectedAt: 'No configurado',
+      scopes: ['pages_messaging'],
+      webhookStatus: 'pending',
+      credentials: {}
+    }
+  ]);
 
   const toggleSocialOAuth = (id: string) => {
     setSocialConnections((prev) =>
@@ -292,7 +343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...c,
             connected: nextConnected,
             status: nextConnected ? 'active' : 'disconnected',
-            connectedAt: nextConnected ? 'Conectado recientemente' : 'Desconectado'
+            connectedAt: nextConnected ? new Date().toISOString() : 'Desconectado'
           };
         }
         return c;
@@ -320,45 +371,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!target) return;
     addToast('info', 'Verificando Conexión...', `Enviando ping de diagnóstico a ${target.name}`);
     setTimeout(() => {
-      addToast('success', 'Diagnóstico Exitoso (200 OK)', `${target.name} respondió en 32ms. Tokens y Webhooks activos.`);
-    }, 1000);
+      if (target.connected) {
+        addToast('success', 'Diagnóstico Exitoso', `${target.name} respondió. Tokens y Webhooks activos.`);
+      } else {
+        addToast('warning', 'Sin Conexión Activa', `${target.name} no está configurado en este entorno.`);
+      }
+    }, 800);
   };
 
   // Pusher Real-time State
-  const [pusherConfig, setPusherConfig] = useState<PusherConfig>(MOCK_PUSHER_CONFIG);
-  const [pusherEvents, setPusherEvents] = useState<PusherRealtimeEvent[]>([
-    {
-      id: 'evt-1',
-      channel: 'presence-fleet-live',
-      event: 'driver.location.updated',
-      data: { driverId: 'drv-01', lat: 18.4735, lng: -69.9405, speedKmh: 42, battery: 89 },
-      timestamp: '14:22:04'
-    },
-    {
-      id: 'evt-2',
-      channel: 'private-chat-relay-GP-8924',
-      event: 'message.received',
-      data: { sender: 'Dra. María Elena', text: 'Secretaria lista para recibir...', masked: true },
-      timestamp: '14:20:18'
-    },
-    {
-      id: 'evt-3',
-      channel: 'super-admin-events',
-      event: 'route.wave.dispatched',
-      data: { wave: 'wave_morning_0800', routesCount: 3, totalPackages: 56 },
-      timestamp: '08:00:10'
-    }
-  ]);
+  const [pusherConfig, setPusherConfig] = useState<PusherConfig>({
+    appId: '',
+    key: '',
+    secret: '',
+    cluster: 'us2',
+    encrypted: true,
+    connectionStatus: 'disconnected',
+    lastPingMs: 0,
+    activeSocketsCount: 0,
+    channelsSubscribed: []
+  });
+  const [pusherEvents, setPusherEvents] = useState<PusherRealtimeEvent[]>([]);
 
   // Masked Chat Active Target
   const [activeMaskedChatShipment, setActiveMaskedChatShipment] = useState<Shipment | null>(null);
   
   // AI Event Automation Studio State
-  const [automationRules, setAutomationRules] = useState<AutomationRule[]>(INITIAL_AUTOMATION_RULES);
-  const [automationLogs, setAutomationLogs] = useState<AiAutomationExecutionLog[]>(INITIAL_AI_EXECUTION_LOGS);
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
+  const [automationLogs, setAutomationLogs] = useState<AiAutomationExecutionLog[]>([]);
 
   // Sync Health & Outbox Transaction Ledger State
-  const [syncTransactions, setSyncTransactions] = useState<SyncTransaction[]>(initialSyncTransactions);
+  const [syncTransactions, setSyncTransactions] = useState<SyncTransaction[]>([]);
   const [isRetryingSync, setIsRetryingSync] = useState(false);
 
   // Driver state
@@ -992,10 +1035,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (d.id === currentRoute.driverId) {
             return {
               ...d,
-              completedDeliveries: d.completedDeliveries + 1,
+              completedDeliveries: (d.completedDeliveries || d.completedDeliveriesToday || 0) + 1,
+              completedDeliveriesToday: (d.completedDeliveriesToday || 0) + 1,
               pendingDeliveriesCount: Math.max(0, d.pendingDeliveriesCount - 1),
-              codCollectedToday: d.codCollectedToday + addCod,
-              codPendingSettlement: d.codPendingSettlement + addCod
+              codCollectedToday: (d.codCollectedToday || 0) + addCod,
+              codPendingSettlement: (d.codPendingSettlement || 0) + addCod
             };
           }
           return d;
@@ -1019,7 +1063,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return {
                 ...c,
                 codPendingPayoutDop: c.codPendingPayoutDop + addCod,
-                totalShipments: c.totalShipments + 1
+                totalShipments: (c.totalShipments || c.activeShipments || 0) + 1
               };
             }
             return c;
@@ -1554,13 +1598,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addShipment,
         updateShipmentStatus,
         drivers,
+        setDrivers,
+        addDriver,
+        updateDriver,
+        deleteDriver,
+        settleDriverCod,
+        vehicles,
+        setVehicles,
+        addVehicle,
+        updateVehicle,
+        deleteVehicle,
         branches,
-        selectedBranch,
+        setBranches,
+        selectedBranch: selectedBranch || {
+          id: 'br-sdq-central',
+          code: 'SDQ-01',
+          name: 'Sucursal Central Piantini',
+          city: 'Santo Domingo',
+          address: 'Av. Winston Churchill #1099',
+          phone: '(809) 555-0101',
+          managerName: 'Carlos Mendoza',
+          type: 'hub',
+          country: 'DO',
+          capacityMaxPackages: 5000,
+          currentPackagesCount: 0,
+          activeDriversCount: 0,
+          cashInDrawer: 0,
+          currency: 'DOP',
+          zones: []
+        },
         setSelectedBranch,
+        addBranch,
+        updateBranch,
+        deleteBranch,
+        addBranchZone,
+        updateBranchZone,
         routes,
         setRoutes,
-        currentRoute,
-        setCurrentRoute,
+        currentRoute: currentRoute || {
+          id: 'rt-default',
+          routeCode: 'RT-000',
+          driverId: 'drv-01',
+          driverName: 'Driver Activo',
+          vehiclePlate: 'L-000000',
+          branchId: 'br-sdq-central',
+          branchName: 'Sucursal Central',
+          status: 'draft',
+          totalStops: 0,
+          completedStops: 0,
+          totalDistanceKm: 0,
+          estimatedDurationHours: 0,
+          totalCodAmount: 0,
+          collectedCodAmount: 0,
+          stops: []
+        },
+        setCurrentRoute: setCurrentRoute as any,
         addRoute,
         updateRoute,
         deleteRoute,

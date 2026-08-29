@@ -18,9 +18,11 @@ import { useApp } from '../../context/AppContext';
 
 // ===================== BADGES =====================
 
-export const StatusBadge: React.FC<{ status: ShipmentStatus; size?: 'sm' | 'md' }> = ({ status, size = 'md' }) => {
-  const configs: Record<ShipmentStatus, { label: string; bg: string; text: string; dot: string }> = {
+export const StatusBadge: React.FC<{ status: ShipmentStatus; size?: 'sm' | 'md'; label?: string }> = ({ status, size = 'md', label }) => {
+  const configs: Record<string, { label: string; bg: string; text: string; dot: string }> = {
     draft: { label: 'Borrador', bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300', dot: 'bg-slate-400' },
+    registered: { label: 'Registrado', bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300', dot: 'bg-slate-400' },
+    active: { label: 'Activo', bg: 'bg-blue-50 dark:bg-blue-950/50', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
     pending: { label: 'Pendiente', bg: 'bg-amber-50 dark:bg-amber-950/50', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
     confirmed: { label: 'Confirmado', bg: 'bg-blue-50 dark:bg-blue-950/50', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
     assigned: { label: 'Asignado', bg: 'bg-indigo-50 dark:bg-indigo-950/50', text: 'text-indigo-700 dark:text-indigo-400', dot: 'bg-indigo-500' },
@@ -44,7 +46,7 @@ export const StatusBadge: React.FC<{ status: ShipmentStatus; size?: 'sm' | 'md' 
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border border-current/10 ${config.bg} ${config.text} ${sizeClasses}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
-      <span className="truncate">{config.label}</span>
+      <span className="truncate">{label || config.label}</span>
     </span>
   );
 };
@@ -74,7 +76,7 @@ export const ServiceBadge: React.FC<{ type: ServiceType; showIcon?: boolean }> =
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   icon?: React.ReactNode;
   iconRight?: React.ReactNode;
   loading?: boolean;
@@ -102,6 +104,7 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const sizeClasses = {
+    xs: 'px-2 py-1 text-[11px] rounded-md gap-1 min-h-[26px]',
     sm: 'px-3 py-1.5 text-xs rounded-lg gap-1.5 min-h-[32px]',
     md: 'px-4 py-2 text-sm rounded-lg gap-2 min-h-[40px]',
     lg: 'px-6 py-3 text-base rounded-xl gap-2.5 min-h-[48px]'
@@ -205,12 +208,17 @@ export const Modal: React.FC<{
   onClose: () => void;
   title: string;
   description?: string;
+  subtitle?: string;
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl';
-}> = ({ isOpen, onClose, title, description, children, maxWidth = 'lg' }) => {
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl' | string;
+}> = ({ isOpen, onClose, title, description, subtitle, children, maxWidth, size }) => {
   if (!isOpen) return null;
 
-  const maxWidthClasses = {
+  const effectiveWidth = (maxWidth || (['sm', 'md', 'lg', 'xl', '2xl', '4xl'].includes(size as string) ? size : 'lg')) as 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl';
+  const effectiveDesc = description || subtitle;
+
+  const maxWidthClasses: Record<string, string> = {
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
@@ -222,13 +230,13 @@ export const Modal: React.FC<{
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div 
-        className={`bg-white dark:bg-slate-900 border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full ${maxWidthClasses[maxWidth]} overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200 pb-safe`}
+        className={`bg-white dark:bg-slate-900 border-t sm:border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full ${maxWidthClasses[effectiveWidth] || 'max-w-lg'} overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200 pb-safe`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200/80 dark:border-slate-800 shrink-0">
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">{title}</h3>
-            {description && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{description}</p>}
+            {effectiveDesc && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{effectiveDesc}</p>}
           </div>
           <button
             onClick={onClose}

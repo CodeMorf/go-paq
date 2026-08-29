@@ -5,12 +5,16 @@
 
 const API_BASE = '/api/v1';
 
+export type ApiResponse<T = Record<string, any>> =
+  | ({ success: true; error?: never } & T)
+  | ({ success: false; error: string } & Partial<T>);
+
 export class ApiClient {
   private static getToken(): string | null {
-    return localStorage.getItem('gopaq_token');
+    return typeof localStorage !== 'undefined' ? localStorage.getItem('gopaq_token') : null;
   }
 
-  private static async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private static async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -21,192 +25,174 @@ export class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers
-    });
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Error de conexión con el servidor GoPaq' }));
-      throw new Error(err.error || `HTTP ${res.status}`);
+      const data = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+
+      if (!res.ok) {
+        return { success: false, error: data.error || `HTTP ${res.status}` } as ApiResponse<T>;
+      }
+
+      return data as ApiResponse<T>;
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error de conexión con el servidor GoPaq' } as ApiResponse<T>;
     }
-
-    return res.json();
   }
 
   // Auth
-  static async login(email: string, password: string) {
-    const data = await this.request<{ success: boolean; token: string; user: any }>('/auth/login', {
+  static async login(email: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> {
+    const data = await this.request<{ token: string; user: any }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password })
     });
-    if (data.token) {
+    if (data.success && data.token && typeof localStorage !== 'undefined') {
       localStorage.setItem('gopaq_token', data.token);
     }
     return data;
   }
 
-  static async getMe() {
-    return this.request<{ success: boolean; user: any }>('/auth/me');
+  static async register(payload: { email: string; password: string; name: string; organizationId?: string; tenantSlug?: string }): Promise<ApiResponse<{ token: string; user: any }>> {
+    const data = await this.request<{ token: string; user: any }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (data.success && data.token && typeof localStorage !== 'undefined') {
+      localStorage.setItem('gopaq_token', data.token);
+    }
+    return data;
+  }
+
+  static async getMe(): Promise<ApiResponse<{ user: any }>> {
+    return this.request<{ user: any }>('/auth/me');
   }
 
   // Shipments
-  static async getShipments(params?: { status?: string; search?: string }) {
+  static async getShipments(params?: { status?: string; search?: string }): Promise<ApiResponse<{ count: number; shipments: any[] }>> {
     const query = new URLSearchParams(params as any).toString();
-    return this.request<{ success: boolean; count: number; shipments: any[] }>(`/shipments?${query}`);
+    return this.request<{ count: number; shipments: any[] }>(`/shipments?${query}`);
   }
 
-  static async getShipment(id: string) {
-    return this.request<{ success: boolean; shipment: any }>(`/shipments/${id}`);
+  static async getShipment(id: string): Promise<ApiResponse<{ shipment: any }>> {
+    return this.request<{ shipment: any }>(`/shipments/${id}`);
   }
 
-  static async createShipment(payload: any) {
-    return this.request<{ success: boolean; shipment: any }>('/shipments', {
+  static async createShipment(payload: any): Promise<ApiResponse<{ shipment: any }>> {
+    return this.request<{ shipment: any }>('/shipments', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
   // Quotes
-  static async calculateQuote(payload: any) {
-    return this.request<{ success: boolean; quote: any }>('/quotes', {
+  static async calculateQuote(payload: any): Promise<ApiResponse<{ quote: any }>> {
+    return this.request<{ quote: any }>('/quotes', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
   // Tracking
-  static async getTracking(trackingNumber: string) {
-    return this.request<{ success: boolean; shipment: any }>(`/tracking/${trackingNumber}`);
+  static async getTracking(trackingNumber: string): Promise<ApiResponse<{ shipment: any }>> {
+    return this.request<{ shipment: any }>(`/tracking/${trackingNumber}`);
   }
 
   // Routes
-  static async getRoutes() {
-    return this.request<{ success: boolean; routes: any[] }>('/routes');
+  static async getRoutes(): Promise<ApiResponse<{ routes: any[] }>> {
+    return this.request<{ routes: any[] }>('/routes');
   }
 
-  static async createRoute(payload: any) {
-    return this.request<{ success: boolean; route: any }>('/routes', {
+  static async createRoute(payload: any): Promise<ApiResponse<{ route: any }>> {
+    return this.request<{ route: any }>('/routes', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
-  static async dispatchRoute(routeId: string, driverId?: string) {
-    return this.request<{ success: boolean; message: string }>(`/routes/${routeId}/dispatch`, {
+  static async dispatchRoute(routeId: string, driverId?: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>(`/routes/${routeId}/dispatch`, {
       method: 'POST',
       body: JSON.stringify({ driverId })
     });
   }
 
   // Drivers
-  static async getDrivers() {
-    return this.request<{ success: boolean; drivers: any[] }>('/drivers');
+  static async getDrivers(): Promise<ApiResponse<{ drivers: any[] }>> {
+    return this.request<{ drivers: any[] }>('/drivers');
   }
 
-  static async sendDriverTelemetry(payload: { driverId: string; lat: number; lng: number; speed?: number; heading?: number; battery?: number }) {
-    return this.request<{ success: boolean; processed: any }>('/drivers/telemetry', {
+  static async sendDriverTelemetry(payload: { driverId: string; lat: number; lng: number; speed?: number; heading?: number; battery?: number }): Promise<ApiResponse<{ processed: any }>> {
+    return this.request<{ processed: any }>('/drivers/telemetry', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
-  static async getActiveManifest(driverId?: string) {
-    return this.request<{ success: boolean; driver: any; route: any; stops: any[] }>(`/drivers/active-manifest?driverId=${driverId || ''}`);
+  static async getActiveManifest(driverId?: string): Promise<ApiResponse<{ driver: any; route: any; stops: any[] }>> {
+    return this.request<{ driver: any; route: any; stops: any[] }>(`/drivers/active-manifest?driverId=${driverId || ''}`);
   }
 
   // Branches
-  static async getBranches() {
-    return this.request<{ success: boolean; branches: any[] }>('/branches');
+  static async getBranches(): Promise<ApiResponse<{ branches: any[] }>> {
+    return this.request<{ branches: any[] }>('/branches');
   }
 
-  static async getBranchInventory(branchId: string) {
-    return this.request<{ success: boolean; count: number; inventory: any[] }>(`/branches/${branchId}/inventory`);
+  static async getBranchInventory(branchId: string): Promise<ApiResponse<{ count: number; inventory: any[] }>> {
+    return this.request<{ count: number; inventory: any[] }>(`/branches/${branchId}/inventory`);
   }
 
-  static async closeBranchCash(branchId: string, payload: any) {
-    return this.request<{ success: boolean; message: string; summary: any }>(`/branches/${branchId}/cash-close`, {
+  static async closeBranchCash(branchId: string, payload: any): Promise<ApiResponse<{ message: string; summary: any }>> {
+    return this.request<{ message: string; summary: any }>(`/branches/${branchId}/cash-close`, {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
   // Clients
-  static async getClients() {
-    return this.request<{ success: boolean; clients: any[] }>('/clients');
+  static async getClients(): Promise<ApiResponse<{ clients: any[] }>> {
+    return this.request<{ clients: any[] }>('/clients');
   }
 
-  static async createClient(payload: any) {
-    return this.request<{ success: boolean; client: any }>('/clients', {
+  static async createClient(payload: any): Promise<ApiResponse<{ client: any }>> {
+    return this.request<{ client: any }>('/clients', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   }
 
   // COD
-  static async getCodLedger() {
-    return this.request<{ success: boolean; summary: any; transactions: any[] }>('/cod/ledger');
+  static async getCodLedger(): Promise<ApiResponse<{ summary: any; transactions: any[] }>> {
+    return this.request<{ summary: any; transactions: any[] }>('/cod/ledger');
   }
 
-  static async settleCod(transactionIds: string[], notes?: string) {
-    return this.request<{ success: boolean; message: string; settlementReference: string; settledAt: string }>('/cod/settle', {
+  static async settleCod(transactionIds: string[], notes?: string): Promise<ApiResponse<{ message: string; settlementReference: string; settledAt: string }>> {
+    return this.request<{ message: string; settlementReference: string; settledAt: string }>('/cod/settle', {
       method: 'POST',
       body: JSON.stringify({ transactionIds, notes })
     });
   }
 
   // International
-  static async getInternationalLockers() {
-    return this.request<{ success: boolean; lockers: any[] }>('/international/lockers');
+  static async getInternationalLockers(): Promise<ApiResponse<{ lockers: any[] }>> {
+    return this.request<{ lockers: any[] }>('/international/lockers');
   }
 
-  static async getInternationalPackages() {
-    return this.request<{ success: boolean; count: number; packages: any[] }>('/international/packages');
+  static async getInternationalPackages(): Promise<ApiResponse<{ count: number; packages: any[] }>> {
+    return this.request<{ count: number; packages: any[] }>(`/international/packages`);
   }
 
-  static async consolidateInternationalPackages(packageIds: string[], notes?: string) {
-    return this.request<{ success: boolean; message: string; masterTracking: string; packagesConsolidated: number }>('/international/consolidate', {
+  static async consolidateInternationalPackages(packageIds: string[], notes?: string): Promise<ApiResponse<{ message: string; masterTracking: string; packagesConsolidated: number }>> {
+    return this.request<{ message: string; masterTracking: string; packagesConsolidated: number }>('/international/consolidate', {
       method: 'POST',
       body: JSON.stringify({ packageIds, notes })
     });
   }
 
-  // Moving & Heavy Cargo
-  static async getMovingOrders() {
-    return this.request<{ success: boolean; orders: any[] }>('/moving/orders');
-  }
-
-  static async calculateMovingQuote(payload: any) {
-    return this.request<{ success: boolean; quote: any }>('/moving/quote', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-  }
-
-  static async getHeavyCargoOrders() {
-    return this.request<{ success: boolean; orders: any[] }>('/heavy-cargo/orders');
-  }
-
-  // API Keys & Webhooks
-  static async getApiKeys() {
-    return this.request<{ success: boolean; keys: any[] }>('/api-keys');
-  }
-
-  static async createApiKey(payload: any) {
-    return this.request<{ success: boolean; message: string; apiKey: any }>('/api-keys', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-  }
-
-  static async getWebhooks() {
-    return this.request<{ success: boolean; webhooks: any[] }>('/webhooks');
-  }
-
-  static async createWebhook(payload: any) {
-    return this.request<{ success: boolean; webhook: any }>('/webhooks', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
+  // Integrations Health Check
+  static async getIntegrationsHealth(): Promise<ApiResponse<{ witylogix: any; karrio: any; database: any }>> {
+    return this.request<{ witylogix: any; karrio: any; database: any }>('/integrations/health');
   }
 }

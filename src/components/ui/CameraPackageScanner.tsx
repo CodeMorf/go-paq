@@ -17,13 +17,19 @@ import { PackageDimensions, ServiceType } from '../../types';
 import { useApp } from '../../context/AppContext';
 
 interface CameraPackageScannerProps {
-  onDimensionsDetected: (dims: PackageDimensions, serviceRecommended: ServiceType, price: number) => void;
+  onDimensionsDetected?: (dims: PackageDimensions, serviceRecommended: ServiceType, price: number) => void;
+  onDetectPackage?: (data: any) => void;
+  onScanComplete?: (data: any) => void;
   onCancel?: () => void;
+  onClose?: () => void;
 }
 
 export const CameraPackageScanner: React.FC<CameraPackageScannerProps> = ({
   onDimensionsDetected,
-  onCancel
+  onDetectPackage,
+  onScanComplete,
+  onCancel,
+  onClose
 }) => {
   const { formatMoney } = useApp();
   const [scanState, setScanState] = useState<'scanning' | 'detected' | 'editing'>('scanning');

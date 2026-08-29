@@ -6,18 +6,19 @@ Todos los endpoints listados a continuación están implementados y activos en e
 
 ## 🔐 Autenticación & Usuarios
 - `POST /api/v1/auth/login`: Autenticación con email/password y retorno de JWT token.
+- `POST /api/v1/auth/register`: Registro de nuevos clientes con resolución explícita de tenant (`organizationId` o `tenantSlug`), prevención de emails duplicados y asignación de casillero internacional.
 - `GET /api/v1/auth/me`: Perfil del usuario autenticado y organización.
 
 ## 📦 Envíos & Tracking
-- `GET /api/v1/shipments`: Lista de envíos con filtros por estado y búsqueda.
-- `POST /api/v1/shipments`: Creación transaccional de envíos con cálculo de tarifas y asignación de guía.
-- `GET /api/v1/shipments/:id`: Detalle completo de guía con hitos de trazabilidad.
+- `GET /api/v1/shipments`: Lista de envíos con filtros por estado y búsqueda (aislado por `organization_id`).
+- `POST /api/v1/shipments`: Creación transaccional de envíos con cálculo de tarifas y asignación de guía criptográfica colisión-safe (`GP-HEX`).
+- `GET /api/v1/shipments/:id`: Detalle completo de guía con hitos de trazabilidad (aislado por `organization_id`).
 - `GET /api/v1/tracking/:trackingNumber`: Consulta pública de rastreo en tiempo real.
 
 ## 💰 Cotizaciones & Tarifas
-- `POST /api/v1/quotes`: Cálculo dinámico de costos por peso, dimensiones, servicio y zonas.
+- `POST /api/v1/quotes`: Cálculo dinámico de costos por peso, dimensiones IATA, servicio y zonas.
 
-## 🚚 Rutas & Despacho (Witylogix Engine)
+## 🚚 Rutas & Despacho (GoPaq Engine)
 - `GET /api/v1/routes`: Lista de rutas activas e historial de despacho.
 - `POST /api/v1/routes`: Creación y ordenamiento heurístico de paradas de entrega.
 - `POST /api/v1/routes/:id/dispatch`: Publicación y despacho de ruta a conductor.
@@ -46,7 +47,8 @@ Todos los endpoints listados a continuación están implementados y activos en e
 - `POST /api/v1/moving/quote`: Cotizador de mudanzas por $m^3$ y pisos.
 - `GET /api/v1/heavy-cargo/orders`: Órdenes de carga industrial y maquinaria.
 
-## 🔑 Integraciones & OpenAPI
+## 🔑 Integraciones, Diagnóstico & OpenAPI
+- `GET /api/v1/integrations/health`: Diagnóstico en vivo de Base de Datos, Witylogix (AGPL) y Karrio (LGPL).
 - `GET /api/v1/api-keys`: Listado de claves de API.
 - `POST /api/v1/api-keys`: Generación segura de API Keys hasheadas con SHA-256.
 - `GET /api/v1/webhooks`: Registro de webhooks y endpoints suscritos.
