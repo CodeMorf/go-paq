@@ -1,0 +1,11 @@
+{
+  "name": "Remix NEXLOGIS | Plataforma Logística \u0026 Courier Global",
+  "description": "Plataforma SaaS integral de logística, courier internacional, envíos locales/nacionales, mudanzas, carga pesada, control de sucursales y app para conductores.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
