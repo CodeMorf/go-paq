@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  gopaq-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gopaq-core-api
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_URL=postgresql://gopaq_user:gopaq_secure_pass_2026@postgres:5432/gopaq_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=gopaq_super_secure_production_secret_2026
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: gopaq-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: gopaq_user
+      POSTGRES_PASSWORD: gopaq_secure_pass_2026
+      POSTGRES_DB: gopaq_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: gopaq-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:

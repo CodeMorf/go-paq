@@ -7,15 +7,25 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>Remix NEXLOGIS | Plataforma Logística &amp; Courier Global</title>
+    <title>GoPaq | Plataforma Integral de Logística &amp; Courier Global</title>
     <meta name="description" content="Plataforma SaaS integral de logística, courier internacional, envíos locales/nacionales, mudanzas, carga pesada, control de sucursales y app para conductores." />
-    <meta property="og:title" content="Remix NEXLOGIS | Plataforma Logística &amp; Courier Global" />
+    <meta property="og:title" content="GoPaq | Plataforma Integral de Logística &amp; Courier Global" />
     <meta property="og:description" content="Plataforma SaaS integral de logística, courier internacional, envíos locales/nacionales, mudanzas, carga pesada, control de sucursales y app para conductores." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          const saved = localStorage.getItem('gopaq_theme');
+          const isDark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (isDark) document.documentElement.classList.add('dark');
+          else document.documentElement.classList.remove('dark');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100 selection:bg-indigo-500 selection:text-white font-sans">
     <div id="root"></div>

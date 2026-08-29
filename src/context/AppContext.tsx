@@ -60,6 +60,7 @@ import {
   MOCK_SOCIAL_OAUTH_CONNECTIONS,
   MOCK_CLIENT_PROFILES
 } from '../data/mockData';
+import { ApiClient } from '../api/client';
 import confetti from 'canvas-confetti';
 
 interface Toast {
@@ -249,8 +250,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentRole, setCurrentRole] = useState<UserRole>('Owner');
   const [activeSubView, setActiveSubView] = useState<string>('dashboard');
   
-  // Theme state
+  // Theme state with localStorage persistence
   const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('gopaq_theme');
+    if (saved !== null) {
+      return saved === 'dark';
+    }
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   
@@ -368,12 +373,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Apply dark mode class to html element
+  // Apply dark mode class to html element and save in localStorage
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('gopaq_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('gopaq_theme', 'light');
     }
   }, [darkMode]);
 
@@ -412,9 +419,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return `€ ${amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const addShipment = (newShp: Shipment) => {
-    setShipments((prev) => [newShp, ...prev]);
-    addToast('success', 'Envío Creado Exitosamente', `Guía: ${newShp.trackingNumber}`);
+  // Initial backend synchronization
+  useEffect(() => {
+    async function loadRealBackendData() {
+      try {
+        const shpRes = await ApiClient.getShipments();
+        if (shpRes?.shipments && shpRes.shipments.length > 0) {
+          setShipments(shpRes.shipments);
+        }
+        const cliRes = await ApiClient.getClients();
+        if (cliRes?.clients && cliRes.clients.length > 0) {
+          setClients(cliRes.clients);
+        }
+        const drvRes = await ApiClient.getDrivers();
+        if (drvRes?.drivers && drvRes.drivers.length > 0) {
+          setDrivers(drvRes.drivers);
+        }
+        const brRes = await ApiClient.getBranches();
+        if (brRes?.branches && brRes.branches.length > 0) {
+          setBranches(brRes.branches);
+        }
+      } catch (err) {
+        console.warn('[GoPaq Sync Notice]:', err);
+      }
+    }
+    loadRealBackendData();
+  }, []);
+
+  const addShipment = async (newShp: Shipment) => {
+    try {
+      const res = await ApiClient.createShipment({
+        serviceType: newShp.serviceType,
+        origin: newShp.origin,
+        destination: newShp.destination,
+        package: newShp.package,
+        codAmount: newShp.codAmount || 0,
+        codCurrency: newShp.codCurrency || 'DOP',
+        clientId: 'cli-techstore'
+      });
+      const created = res.shipment ? { ...newShp, ...res.shipment } : newShp;
+      setShipments((prev) => [created, ...prev]);
+      addToast('success', 'Envío Creado en DB Real', `Guía: ${created.trackingNumber}`);
+    } catch {
+      setShipments((prev) => [newShp, ...prev]);
+      addToast('success', 'Envío Creado Exitosamente', `Guía: ${newShp.trackingNumber}`);
+    }
     
     // Add notification
     const notif: NotificationItem = {

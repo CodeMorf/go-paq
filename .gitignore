@@ -14,4 +14,7 @@ Thumbs.db
 *.p12
 .idea/
 .vscode/
+*.sqlite*
+*.db
+
 

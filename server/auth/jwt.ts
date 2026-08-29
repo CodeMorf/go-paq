@@ -1,0 +1,34 @@
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'gopaq_super_secure_jwt_secret_dev_2026';
+const JWT_EXPIRES_IN = '7d';
+
+export interface TokenPayload {
+  userId: string;
+  organizationId: string;
+  branchId?: string;
+  email: string;
+  role: string;
+  name: string;
+}
+
+export function generateToken(payload: TokenPayload): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+export function verifyToken(token: string): TokenPayload | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as TokenPayload;
+  } catch {
+    return null;
+  }
+}
+
+export function hashPassword(plain: string): string {
+  return bcrypt.hashSync(plain, 10);
+}
+
+export function comparePassword(plain: string, hash: string): boolean {
+  return bcrypt.compareSync(plain, hash);
+}
