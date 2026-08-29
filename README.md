@@ -21,43 +21,98 @@
 
 ---
 
-## 🧩 Arquitectura de Módulos
+## 🧩 Arquitectura de Sistemas & Paneles (34 Vistas Especializadas)
 
-### 1. 🛡️ Super Admin & Centro de Control Operativo
-- **Live Console & Dashboard:** Monitoreo en tiempo real de envíos, métricas financieras, volumen de paquetes y KPIs operativos.
-- **Gestión de Envíos & Courier Internacional:** Control unificado de paquetes locales, nacionales e importaciones/exportaciones con gestión aduanal.
-- **Despacho & Optimización de Rutas:** Asignación inteligente de paquetes a conductores y cálculo dinámico de rutas de entrega.
-- **Motor de Tarifas Dinámicas:** Configuración de precios por peso, volumen, zona geográfica, tipo de servicio y recargos.
-- **Conciliación COD (Cash on Delivery):** Liquidación automatizada de pagos contra entrega, control de recaudos y pagos a clientes comerciales.
-- **Gestión de Zonas de Riesgo:** Delimitación de polígonos y tarifas/restricciones especiales por nivel de seguridad.
-- **IA Event Automation Studio:** Reglas automatizadas de alertas, reintentos y escalamiento ante excepciones en tránsito.
-- **Centro Omnicanal Zernio:** Gestión de comunicaciones, notificaciones al cliente vía WhatsApp, SMS y correo electrónico.
-- **Control de Flota & RBAC:** Administración de roles y permisos granulares (Super Admin, Operaciones, Sucursal, Conductor, Cliente).
+GoPaq está estructurado en **5 Grandes Ecosistemas** interconectados en tiempo real que suman **34 paneles operativos** y **11 pestañas maestras de configuración**:
 
-### 2. 🏢 Sucursal OS (Punto de Venta & Agencias)
-- **Counter POS:** Registro rápido de paquetes en mostrador con generación inmediata de guía.
-- **Inventario Físico de Sucursal:** Control de paquetes recibidos, en custodia y listos para entrega en tienda (Pickup).
-- **Caja & Cuadre Diario:** Arqueo de efectivo, cobros POS y transferencias con cierre de turno.
-- **Despacho Local:** Asignación directa de paquetes a mensajeros y transportistas de la zona.
+---
 
-### 3. 👤 Portal de Clientes & Empresas
-- **Creación & Cotización de Envíos:** Asistente interactivo para cotizar y registrar envíos individuales o por lote.
-- **Casillero Internacional (Locker Addresses):** Direcciones asignadas en Miami, Madrid, etc., para recepción y reenvío de compras internacionales.
-- **Tracking & Trazabilidad:** Consulta en tiempo real con línea de tiempo detallada de estados y evidencias.
-- **Facturación & Balance:** Historial de facturas, recargas de saldo y estado de cuenta COD.
-- **API Keys & Webhooks:** Acceso a llaves API y configuración de webhooks para integraciones directas con tiendas e-commerce (Shopify, WooCommerce, Custom).
+### 1. 🛡️ Super Admin & Centro de Control Operativo (19 Paneles)
 
-### 4. 📱 Driver App (Aplicación para Conductores)
-- **Manifiesto de Ruta:** Lista interactiva de entregas y recolecciones ordenadas con geolocalización.
-- **Escaneo OCR & Cámara:** Lectura visual y de código de barras de etiquetas para confirmación rápida.
-- **Prueba de Entrega Digital (e-POD):** Captura de firma digital táctil, fotografía de entrega y coordenadas GPS.
-- **Sincronización Offline/Online:** Manejo resiliente de conectividad para registro en zonas sin cobertura.
-- **Notificaciones Push:** Avisos en tiempo real sobre nuevas asignaciones, cancelaciones o cambios de ruta.
+| Panel / Subvista | Identificador | Descripción y Funcionalidad |
+|---|---|---|
+| **Dashboard General** | `dashboard` | KPIs operativos y financieros, volumen de envíos, tasas de entrega y métricas ejecutivas. |
+| **Operaciones en Vivo (Live Console)** | `operaciones-vivo` | Consola de telemetría en tiempo real, logs de eventos y estado de toda la red logística. |
+| **Centro Omnicanal Zernio** | `zernio-omnichannel` | Hub centralizado de atención al cliente multicanal (WhatsApp, SMS, Email) con bots IA. |
+| **IA Event Automation Studio** | `ia-eventos` | Motor visual de reglas automatizadas para alertas, reintentos y excepciones en tránsito. |
+| **Escaneo Masivo (Bulk Scanner)** | `escaneo-masivo` | Recepción, clasificación y despacho de paquetes por lote con alertas de audio. |
+| **Mapa de Flota en Vivo** | `mapa-flota` | Telemetría GPS en tiempo real de choferes, unidades móviles y rutas activas. |
+| **Gestión de Envíos (Shipments)** | `envios` | Control integral del ciclo de vida de guías, filtros avanzados y actualización de estados. |
+| **Courier Internacional & Lockers** | `courier-intl` | Gestión aduanal, vuelos/contenedores, manifiestos y casilleros de importación. |
+| **Despacho y Rutas (Routes Dispatcher)** | `rutas` | Planificación, optimización y asignación dinámica de paquetes a transportistas. |
+| **Mudanzas & Carga Pesada** | `mudanzas-carga` | Cubicaje, estiba, cotización de volumen ($m^3$) y fletes especiales. |
+| **Flota de Drivers** | `drivers` | Ficha de choferes, vehículos, pólizas, licencias y métricas de rendimiento. |
+| **Sucursales y Almacenes (Hubs)** | `sucursales` | Red de agencias físicas, centros de distribución e inventarios por sede. |
+| **Registro & Matcher de Sucursales** | `registro-sucursal-matcher` | Enrutamiento inteligente y asignación de clientes a la agencia más cercana. |
+| **Gestión de Clientes Corporativos** | `clientes` | Fichas de cliente, límites de crédito, cuentas por cobrar y facturación. |
+| **Zonas Peligrosas / Alto Riesgo** | `zonas-peligrosas` | Geocercas de seguridad, restricciones de entrega y recargos por zona de riesgo. |
+| **Conciliación COD (Cash on Delivery)** | `cod` | Liquidación automatizada de pagos contra entrega y transferencias a comercios. |
+| **Motor de Tarifas Dinámicas** | `tarifas` | Matrices de precios por peso, volumen, zona geográfica y tipo de servicio. |
+| **Equipo & RBAC** | `equipo` | Control de acceso basado en roles con permisos granulares por módulo. |
+| **Configuración Global del Sistema** | `configuracion` | Centro de control maestro con **11 Pestañas de Ajustes**: |
+| | ↳ *Branding & Identidad* | Logo, paleta de colores y personalización corporativa. |
+| | ↳ *Localización & Divisas* | Moneda base (`DOP`, `USD`, `EUR`), impuestos y formatos regionales. |
+| | ↳ *Aduanas & Casilleros* | Tarifas arancelarias, direcciones físicas en Miami/Madrid y límites. |
+| | ↳ *Operaciones & Despacho* | Parámetros de SLA, tolerancias de tiempo y radios de cobertura. |
+| | ↳ *Facturación Fiscal* | Comprobantes fiscales (NCF), secuencias numéricas e impuestos. |
+| | ↳ *Pagos & Pasarelas COD* | Comisiones de recaudo, métodos de pago y transferencias. |
+| | ↳ *Notificaciones & Alertas* | Plantillas para SMS, Push, WhatsApp y correos transaccionales. |
+| | ↳ *Automatización IA* | Integración con Gemini AI, modelos OCR y prompts del sistema. |
+| | ↳ *Base de Datos & Redis* | Estado de conexiones, sincronización de caché y réplicas. |
+| | ↳ *Seguridad & 2FA* | Políticas de contraseñas, sesiones activas y listas de IP permitidas. |
+| | ↳ *Desarrolladores & Webhooks* | Endpoints, logs de webhooks y tokens de integración. |
 
-### 5. ⚡ Operaciones & Scanner Masivo
-- **Bulk Scanner:** Escaneo masivo con pistola óptica o cámara para recepción en bodega, transferencias entre hubs y salidas a ruta.
-- **Feedback Auditivo y Háptico:** Alertas sonoras para validación rápida y detección de errores de clasificación.
-- **Impresión de Etiquetas Térmicas:** Generación y envío a impresión de formatos estándar (4x6", etc.).
+---
+
+### 2. 🏢 Sucursal OS — Sistema para Agencias y Puntos de Venta (6 Paneles)
+
+| Panel / Subvista | Identificador | Descripción y Funcionalidad |
+|---|---|---|
+| **Dashboard de Sucursal** | `dashboard` | Resumen de ventas diarias en mostrador, paquetes entrantes y por entregar. |
+| **Mostrador / Punto de Venta (Counter POS)** | `mostrador` | Emisión rápida de guías físicas, pesaje y cobro de envíos al público. |
+| **Inventario Físico de Sucursal** | `inventario` | Paquetes en custodia para retiro en tienda (*Pickup*) y transferencias. |
+| **Despacho de Drivers Locales** | `despacho-drivers` | Asignación y salida de mensajeros de última milla asignados a la agencia. |
+| **Arqueo y Cierre de Caja** | `arqueo-caja` | Control de cobros en efectivo, tarjeta y transferencias con balance diario. |
+| **Escáner Masivo de Sucursal** | `escaneo-masivo` | Validación de bultos al ingreso de la camioneta troncal o salida a ruta. |
+
+---
+
+### 3. 👤 Portal de Clientes & E-Commerce (7 Paneles)
+
+| Panel / Subvista | Identificador | Descripción y Funcionalidad |
+|---|---|---|
+| **Dashboard del Cliente** | `dashboard` | Resumen de paquetes en tránsito, saldo disponible y recaudos COD pendientes. |
+| **Crear Envío / Cotizador** | `crear-envio` | Asistente de cotización y generación de envíos individuales o masivos. |
+| **Tracking Público & Privado** | `tracking` | Rastreador en tiempo real con línea de tiempo detallada y fotos de evidencia. |
+| **Casillero Internacional (Lockers)** | `casillero` | Direcciones asignadas en Miami, Madrid, etc., para compras internacionales. |
+| **Mis Paquetes & Historial** | `paquetes-list` | Historial completo con filtros de búsqueda y descarga de comprobantes. |
+| **Cuenta Corriente & Facturación** | `cuenta-corriente` | Historial de facturación, abonos y transferencias de dinero COD. |
+| **API Keys & Webhooks** | `api-keys` | Generación de credenciales y webhooks para integrar tiendas Shopify, WooCommerce, etc. |
+
+---
+
+### 4. 📱 Driver App — Aplicación Móvil para Conductores (1 Módulo con 6 Capacidades)
+
+- 🚚 **Manifiesto de Ruta:** Lista interactiva de paradas ordenadas con geolocalización y enlace a Waze/Google Maps.
+- 📷 **Escaneo OCR con Cámara:** Reconocimiento visual de etiquetas y códigos de barra con la cámara del dispositivo.
+- ✍️ **Prueba de Entrega Digital (e-POD):** Captura de firma táctil en pantalla, fotografía de entrega y coordenadas GPS.
+- 💵 **Control de Recaudación COD:** Registro y validación del dinero cobrado en efectivo al cliente final.
+- 🔔 **Notificaciones Push & Audio:** Alertas auditivas y avisos instantáneos ante cambios de ruta o asignaciones.
+- 📶 **Modo Offline & Sync Health:** Cola local de transacciones para operar en zonas sin cobertura celular.
+
+---
+
+### 5. 📖 Documentación & API REST (1 Panel)
+
+- ⚡ **API Docs & Explorer (`docs`):** Especificación interactiva con endpoints REST, autenticación Bearer y ejemplos de código en cURL, JavaScript y Python.
+
+---
+
+### 🖨️ Componentes y Modales Globales
+- **Command Palette (`Ctrl+K`):** Buscador rápido universal para navegación instantánea.
+- **Modal de Impresión Térmica:** Generador e impresión directa de etiquetas estándar (4x6").
+- **Modal Global de Creación de Envíos:** Accesible desde cualquier vista del sistema.
+
 
 ---
 
