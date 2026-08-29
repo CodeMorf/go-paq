@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastContainer, Modal } from './components/ui/DesignSystem';
 import { CommandPalette } from './components/ui/CommandPalette';
@@ -43,6 +43,9 @@ import { CashRegister } from './components/sucursal/CashRegister';
 import { DriverApp } from './components/driver/DriverApp';
 import { ApiDocs } from './components/docs/ApiDocs';
 
+type Section = 'super-admin' | 'portal' | 'sucursal' | 'driver' | 'docs';
+type SessionUser = { role?: string; [key: string]: any };
+
 const routeFor = (section: string, view: string) => {
   const root = section === 'docs' ? '/docs/api' : `/${section}`;
   if (section === 'driver' || section === 'docs') return root;
@@ -50,7 +53,7 @@ const routeFor = (section: string, view: string) => {
   return `${root}/${normalized || 'dashboard'}`;
 };
 
-const stateForPath = (pathname: string) => {
+const stateForPath = (pathname: string): { section: Section; view: string } => {
   const parts = pathname.split('/').filter(Boolean);
   if (parts[0] === 'portal') return { section: 'portal', view: parts[1] === 'paquetes' ? 'paquetes-list' : parts[1] === 'facturacion' ? 'cuenta-corriente' : (parts[1] || 'dashboard') };
   if (parts[0] === 'sucursal') return { section: 'sucursal', view: parts[1] || 'dashboard' };
@@ -59,10 +62,39 @@ const stateForPath = (pathname: string) => {
   return { section: 'super-admin', view: parts[0] === 'super-admin' ? (parts[1] || 'dashboard') : 'dashboard' };
 };
 
+const normalizeRole = (role?: string) => (role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+
+const sectionForRole = (role?: string): Exclude<Section, 'docs'> => {
+  const normalized = normalizeRole(role);
+  if (['SUPER_ADMIN', 'OWNER', 'ADMIN'].includes(normalized)) return 'super-admin';
+  if (['CLIENT', 'CUSTOMER'].includes(normalized)) return 'portal';
+  if (['DRIVER', 'COURIER'].includes(normalized)) return 'driver';
+  if (['BRANCH_MANAGER', 'MANAGER', 'SUPERVISOR', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(normalized)) return 'sucursal';
+  return 'portal';
+};
+
+const homeForRole = (role?: string) => {
+  const section = sectionForRole(role);
+  return section === 'driver' ? '/driver' : `/${section}/dashboard`;
+};
+
+const isPublicPath = (pathname: string) => pathname === '/login' || pathname === '/register' || pathname.startsWith('/docs');
+
 const AppContent: React.FC = () => {
   const { currentSection, setCurrentSection, activeSubView, setActiveSubView } = useApp();
   const [pathname, setPathname] = useState(window.location.pathname || '/');
   const [sessionState, setSessionState] = useState<'checking' | 'valid' | 'invalid'>(ApiClient.hasSession() ? 'checking' : 'invalid');
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+
+  const navigate = (to: string, replace = true) => {
+    if (window.location.pathname === to) {
+      setPathname(to);
+      return;
+    }
+    if (replace) window.history.replaceState({}, '', to);
+    else window.history.pushState({}, '', to);
+    setPathname(to);
+  };
 
   useEffect(() => {
     const onPop = () => setPathname(window.location.pathname || '/');
@@ -71,38 +103,87 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (pathname === '/login' || pathname === '/register' || pathname.startsWith('/docs')) return;
-    const route = stateForPath(pathname);
-    if (route.section !== currentSection) setCurrentSection(route.section as any);
-    if (route.view !== activeSubView) setActiveSubView(route.view);
-  }, [pathname]);
-
-  useEffect(() => {
-    if (pathname === '/login' || pathname === '/register' || pathname.startsWith('/docs')) return;
-    const desired = routeFor(currentSection, activeSubView);
-    if (desired !== pathname) {
-      window.history.replaceState({}, '', desired);
-      setPathname(desired);
+    if (!ApiClient.hasSession()) {
+      setSessionUser(null);
+      setSessionState('invalid');
+      return;
     }
-  }, [currentSection, activeSubView]);
 
-  useEffect(() => {
-    if (!ApiClient.hasSession()) { setSessionState('invalid'); return; }
-    ApiClient.getMe().then(() => setSessionState('valid')).catch(() => {
+    let active = true;
+    setSessionState('checking');
+    ApiClient.getMe().then((response) => {
+      if (!active) return;
+      setSessionUser(response.user);
+      setSessionState('valid');
+    }).catch(() => {
+      if (!active) return;
       ApiClient.logout();
+      setSessionUser(null);
       setSessionState('invalid');
     });
+
+    return () => { active = false; };
   }, [pathname === '/login' || pathname === '/register']);
 
-  if (pathname === '/login') return <LoginPage />;
-  if (pathname === '/register') return <RegisterPage />;
+  useEffect(() => {
+    if (isPublicPath(pathname) || sessionState !== 'valid' || !sessionUser) return;
+
+    if (pathname === '/' || pathname === '') {
+      navigate(homeForRole(sessionUser.role));
+      return;
+    }
+
+    const requested = stateForPath(pathname);
+    const allowedSection = sectionForRole(sessionUser.role);
+
+    if (requested.section !== allowedSection) {
+      navigate(homeForRole(sessionUser.role));
+      return;
+    }
+
+    if (requested.section !== currentSection) setCurrentSection(requested.section as any);
+    if (requested.view !== activeSubView) setActiveSubView(requested.view);
+  }, [pathname, sessionState, sessionUser]);
+
+  useEffect(() => {
+    if (isPublicPath(pathname) || sessionState !== 'valid' || !sessionUser) return;
+    const allowedSection = sectionForRole(sessionUser.role);
+
+    if (currentSection !== allowedSection) {
+      setCurrentSection(allowedSection as any);
+      setActiveSubView('dashboard');
+      navigate(homeForRole(sessionUser.role));
+      return;
+    }
+
+    const desired = routeFor(currentSection, activeSubView);
+    if (desired !== pathname) navigate(desired);
+  }, [currentSection, activeSubView, sessionState, sessionUser]);
+
+  if (pathname === '/login') {
+    if (sessionState === 'valid' && sessionUser) {
+      navigate(homeForRole(sessionUser.role));
+      return null;
+    }
+    return <LoginPage />;
+  }
+  if (pathname === '/register') {
+    if (sessionState === 'valid' && sessionUser) {
+      navigate(homeForRole(sessionUser.role));
+      return null;
+    }
+    return <RegisterPage />;
+  }
   if (pathname.startsWith('/docs')) return <ApiDocs />;
 
   if (sessionState === 'checking') return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Validando sesión…</div>;
   if (sessionState === 'invalid') {
-    window.history.replaceState({}, '', '/login');
+    navigate('/login');
     return <LoginPage />;
   }
+
+  const allowedSection = sectionForRole(sessionUser?.role);
+  if (currentSection !== allowedSection) return null;
 
   if (currentSection === 'super-admin') {
     return <SuperAdminLayout>
@@ -152,7 +233,7 @@ const AppContent: React.FC = () => {
   }
 
   if (currentSection === 'driver') return <DriverApp />;
-  return <SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout>;
+  return null;
 };
 
 export default function App() {
