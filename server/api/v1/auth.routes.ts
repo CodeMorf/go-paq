@@ -38,8 +38,8 @@ authRouter.post('/login', (req, res) => {
 
 authRouter.post('/register', (req, res) => {
   const { email, password, name, phone, companyName, organizationId, tenantSlug } = req.body;
-  if (!email || !password || !name || !phone) {
-    return res.status(400).json({ success: false, error: 'Nombre, email, teléfono y contraseña son obligatorios.' });
+  if (!email || !password || !name) {
+    return res.status(400).json({ success: false, error: 'Nombre, email y contraseña son obligatorios.' });
   }
   if (String(password).length < 8) {
     return res.status(422).json({ success: false, error: 'La contraseña debe contener al menos 8 caracteres.' });
@@ -50,10 +50,7 @@ authRouter.post('/register', (req, res) => {
     const orgBySlug = queryOne<{ id: string }>('SELECT id FROM organizations WHERE slug = ? AND active = 1', [tenantSlug]);
     if (orgBySlug) resolvedOrgId = orgBySlug.id;
   }
-  if (!resolvedOrgId) resolvedOrgId = process.env.GOPAQ_PUBLIC_ORG_ID;
-  if (!resolvedOrgId) {
-    return res.status(503).json({ success: false, error: 'El registro público no tiene una organización configurada.' });
-  }
+  if (!resolvedOrgId) resolvedOrgId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
 
   const org = queryOne<{ id: string; name: string }>('SELECT id, name FROM organizations WHERE id = ? AND active = 1', [resolvedOrgId]);
   if (!org) return res.status(422).json({ success: false, error: 'Tenant u organización inválida.' });
@@ -76,17 +73,18 @@ authRouter.post('/register', (req, res) => {
   const lockerCode = `GP-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
   const passwordHash = hashPassword(password);
   const now = new Date().toISOString();
+  const normalizedPhone = phone ? String(phone).trim() : '';
 
   transaction(() => {
     execute(`
       INSERT INTO users (id, organization_id, branch_id, email, password_hash, name, role, phone, active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 'CLIENT', ?, 1, ?, ?)
-    `, [userId, org.id, branchId, emailNormalized, passwordHash, String(name).trim(), String(phone).trim(), now, now]);
+    `, [userId, org.id, branchId, emailNormalized, passwordHash, String(name).trim(), normalizedPhone, now, now]);
 
     execute(`
       INSERT INTO clients (id, organization_id, branch_id, name, company_name, email, phone, tier, credit_limit, balance, cod_pending_balance, active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'Standard', 0, 0, 0, 1, ?, ?)
-    `, [clientId, org.id, branchId, String(name).trim(), companyName || String(name).trim(), emailNormalized, String(phone).trim(), now, now]);
+    `, [clientId, org.id, branchId, String(name).trim(), companyName || String(name).trim(), emailNormalized, normalizedPhone, now, now]);
 
     execute(`
       INSERT INTO international_lockers (id, organization_id, client_id, locker_code, us_address, es_address, it_address, created_at)
