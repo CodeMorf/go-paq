@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { ToastContainer, Modal } from './components/ui/DesignSystem';
 import { CommandPalette } from './components/ui/CommandPalette';
@@ -7,7 +7,6 @@ import { ShipmentCreator } from './components/portal/ShipmentCreator';
 import { ApiClient } from './api/client';
 import { LoginPage, RegisterPage, destinationForRole } from './components/auth/AuthPages';
 import { UserRole } from './types';
-
 import { SuperAdminLayout } from './components/super-admin/SuperAdminLayout';
 import { SuperAdminDashboard } from './components/super-admin/SuperAdminDashboard';
 import { LiveConsole } from './components/super-admin/LiveConsole';
@@ -92,9 +91,18 @@ const viewForPath = (section: Section, pathname: string) => {
   return part;
 };
 
+const pathForView = (section: Section, view: string) => {
+  if (section === 'driver') return '/driver';
+  const reversePortal: Record<string, string> = { rastreo: 'tracking', 'mis-paquetes': 'paquetes', casilleros: 'casillero', facturacion: 'billing' };
+  const reverseSucursal: Record<string, string> = { 'mostrador-pos': 'mostrador', despacho: 'despacho-drivers', caja: 'arqueo-caja' };
+  const slug = section === 'portal' ? (reversePortal[view] || view) : section === 'sucursal' ? (reverseSucursal[view] || view) : view;
+  return `/${section}/${slug || 'dashboard'}`;
+};
+
 const ProtectedArea: React.FC<{ section: Section }> = ({ section }) => {
   const location = useLocation();
-  const { setCurrentSection, setCurrentRole, setActiveSubView } = useApp();
+  const navigate = useNavigate();
+  const { activeSubView, setCurrentSection, setCurrentRole, setActiveSubView } = useApp();
   const [state, setState] = useState<{ loading: boolean; user?: any; invalid?: boolean }>({ loading: true });
 
   useEffect(() => {
@@ -112,8 +120,17 @@ const ProtectedArea: React.FC<{ section: Section }> = ({ section }) => {
     if (!state.user) return;
     setCurrentSection(section as any);
     setCurrentRole(uiRoleFor(state.user.role));
-    setActiveSubView(viewForPath(section, location.pathname));
+    const view = viewForPath(section, location.pathname);
+    if (view !== activeSubView) setActiveSubView(view);
   }, [state.user, section, location.pathname]);
+
+  useEffect(() => {
+    if (!state.user) return;
+    const allowed = sectionForRole(state.user.role);
+    if (allowed !== section) return;
+    const target = pathForView(section, activeSubView);
+    if (target !== location.pathname) navigate(target, { replace: false });
+  }, [activeSubView, state.user, section]);
 
   if (state.loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Validando sesión…</div>;
   if (state.invalid) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
