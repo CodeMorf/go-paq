@@ -12,7 +12,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-gopaq_user}:${POSTGRES_PASSWORD:-gopaq_password}@postgres:5432/${POSTGRES_DB:-gopaq_db}
+      # Leave DATABASE_URL empty for the current production-safe SQLite mode.
+      # PostgreSQL support remains available for the async DB layer but is not enabled
+      # by default until every legacy synchronous route has been migrated.
+      - DATABASE_URL=${DATABASE_URL:-}
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
@@ -27,28 +30,10 @@ services:
       - WITYLOGIX_ROUTES_PATH=${WITYLOGIX_ROUTES_PATH:-/api/v4/routes}
       - WITYLOGIX_HEALTH_PATH=${WITYLOGIX_HEALTH_PATH:-/health}
     depends_on:
-      postgres:
-        condition: service_started
       redis:
-        condition: service_started
-
-  postgres:
-    image: postgis/postgis:15-3.3-alpine
-    container_name: gopaq-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-gopaq_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gopaq_password}
-      POSTGRES_DB: ${POSTGRES_DB:-gopaq_db}
-    ports:
-      - "5432:5432"
+        condition: service_healthy
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gopaq_user} -d ${POSTGRES_DB:-gopaq_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      - gopaq_sqlite_data:/app/server/db
 
   redis:
     image: redis:7-alpine
@@ -64,6 +49,28 @@ services:
       timeout: 5s
       retries: 10
 
+  # Optional PostgreSQL/PostGIS target for the ongoing async DB migration.
+  # Start explicitly with: docker compose --profile postgres up -d postgres
+  postgres:
+    profiles: ["postgres"]
+    image: postgis/postgis:16-3.4-alpine
+    container_name: gopaq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gopaq_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gopaq_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gopaq_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gopaq_user} -d ${POSTGRES_DB:-gopaq_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
+  gopaq_sqlite_data:
   postgres_data:
   redis_data:
