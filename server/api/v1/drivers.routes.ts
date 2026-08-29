@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import { queryAll, queryOne, execute } from '../../db/database';
 import { authenticate, AuthenticatedRequest } from '../../auth/middleware';
-import { WitylogixAdapter } from '../../integrations/witylogix/witylogix.adapter';
 
 export const driversRouter = Router();
 
 // GET /api/v1/drivers
 driversRouter.get('/', authenticate, (req: AuthenticatedRequest, res) => {
-  const orgId = req.organizationId || 'org-gopaq';
+  const orgId = req.organizationId!;
   const drivers = queryAll(`
     SELECT d.*, b.name as branch_name, u.email as user_email
     FROM drivers d
@@ -21,21 +20,30 @@ driversRouter.get('/', authenticate, (req: AuthenticatedRequest, res) => {
 
 // POST /api/v1/drivers/telemetry (GPS Telemetry stream)
 driversRouter.post('/telemetry', authenticate, (req: AuthenticatedRequest, res) => {
+  const orgId = req.organizationId!;
   const { driverId, lat, lng, speed = 0, heading = 0, battery = 100 } = req.body;
 
   if (!driverId || lat === undefined || lng === undefined) {
     return res.status(400).json({ success: false, error: 'driverId, lat y lng son obligatorios.' });
   }
 
-  const processed = WitylogixAdapter.processGpsTelemetry(driverId, { lat, lng, speed, heading, battery });
+  const status = speed > 5 ? 'in_motion' : 'idle';
 
   execute(`
     UPDATE drivers 
     SET current_lat = ?, current_lng = ?, speed = ?, heading = ?, battery = ?, status = ?, updated_at = datetime('now')
-    WHERE id = ?
-  `, [lat, lng, speed, heading, battery, processed.status, driverId]);
+    WHERE id = ? AND organization_id = ?
+  `, [lat, lng, speed, heading, battery, status, driverId, orgId]);
 
-  return res.json({ success: true, processed });
+  return res.json({
+    success: true,
+    processed: {
+      driverId,
+      position: { lat, lng },
+      telemetry: { speedKmh: speed, headingDeg: heading, batteryPct: battery, timestamp: new Date().toISOString() },
+      status
+    }
+  });
 });
 
 // GET /api/v1/drivers/active-manifest

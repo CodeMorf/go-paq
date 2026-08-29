@@ -262,18 +262,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currency, setCurrency] = useState<Currency>('DOP');
   const [country, setCountry] = useState<CountryCode>('DO');
   
-  // Dynamic Entities
-  const [clients, setClients] = useState<ClientProfile[]>(MOCK_CLIENT_PROFILES);
-  const [shipments, setShipments] = useState<Shipment[]>(MOCK_SHIPMENTS);
-  const [drivers, setDrivers] = useState<Driver[]>(MOCK_DRIVERS);
-  const [vehicles, setVehicles] = useState<Vehicle[]>(MOCK_VEHICLES);
-  const [branches, setBranches] = useState<Branch[]>(MOCK_BRANCHES);
-  const [selectedBranch, setSelectedBranch] = useState<Branch>(MOCK_BRANCHES[0]);
-  const [routes, setRoutes] = useState<DeliveryRoute[]>(MOCK_ROUTES);
-  const [currentRoute, setCurrentRoute] = useState<DeliveryRoute>(MOCK_ROUTES[0]);
-  const [internationalPackages, setInternationalPackages] = useState<InternationalPackage[]>(MOCK_INTERNATIONAL_PACKAGES);
-  const [dangerousZones, setDangerousZones] = useState<DangerousZone[]>(MOCK_DANGEROUS_ZONES);
-  const [coverageZones, setCoverageZones] = useState<CoverageZoneRate[]>(MOCK_COVERAGE_ZONES);
+  // Dynamic Entities loaded from Database (Zero mock defaults)
+  const [clients, setClients] = useState<ClientProfile[]>([]);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  const [routes, setRoutes] = useState<DeliveryRoute[]>([]);
+  const [currentRoute, setCurrentRoute] = useState<DeliveryRoute | null>(null);
+  const [internationalPackages, setInternationalPackages] = useState<InternationalPackage[]>([]);
+  const [dangerousZones, setDangerousZones] = useState<DangerousZone[]>([]);
+  const [coverageZones, setCoverageZones] = useState<CoverageZoneRate[]>([]);
   const [bulkScanHistory, setBulkScanHistory] = useState<BulkScanItem[]>([]);
   const [activeLabelShipment, setActiveLabelShipment] = useState<Shipment | null>(null);
 
@@ -419,28 +419,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return `€ ${amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // Initial backend synchronization
+  // Initial real backend database synchronization
   useEffect(() => {
     async function loadRealBackendData() {
       try {
-        const shpRes = await ApiClient.getShipments();
-        if (shpRes?.shipments && shpRes.shipments.length > 0) {
-          setShipments(shpRes.shipments);
-        }
-        const cliRes = await ApiClient.getClients();
-        if (cliRes?.clients && cliRes.clients.length > 0) {
-          setClients(cliRes.clients);
-        }
-        const drvRes = await ApiClient.getDrivers();
-        if (drvRes?.drivers && drvRes.drivers.length > 0) {
-          setDrivers(drvRes.drivers);
-        }
-        const brRes = await ApiClient.getBranches();
-        if (brRes?.branches && brRes.branches.length > 0) {
+        const [shpRes, cliRes, drvRes, brRes, rtRes, pkgRes] = await Promise.all([
+          ApiClient.getShipments().catch(() => null),
+          ApiClient.getClients().catch(() => null),
+          ApiClient.getDrivers().catch(() => null),
+          ApiClient.getBranches().catch(() => null),
+          ApiClient.getRoutes().catch(() => null),
+          ApiClient.getInternationalPackages().catch(() => null)
+        ]);
+
+        if (shpRes?.shipments) setShipments(shpRes.shipments);
+        if (cliRes?.clients) setClients(cliRes.clients);
+        if (drvRes?.drivers) setDrivers(drvRes.drivers);
+        if (brRes?.branches) {
           setBranches(brRes.branches);
+          if (brRes.branches.length > 0) setSelectedBranch(brRes.branches[0]);
         }
-      } catch (err) {
-        console.warn('[GoPaq Sync Notice]:', err);
+        if (rtRes?.routes) {
+          setRoutes(rtRes.routes);
+          if (rtRes.routes.length > 0) setCurrentRoute(rtRes.routes[0]);
+        }
+        if (pkgRes?.packages) setInternationalPackages(pkgRes.packages);
+      } catch (err: any) {
+        console.error('[GoPaq Sync Error]:', err);
+        addToast('error', 'Error de Conexión', 'No se pudo sincronizar con la base de datos backend.');
       }
     }
     loadRealBackendData();
@@ -457,25 +463,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         codCurrency: newShp.codCurrency || 'DOP',
         clientId: 'cli-techstore'
       });
-      const created = res.shipment ? { ...newShp, ...res.shipment } : newShp;
+
+      if (!res.success || !res.shipment) {
+        throw new Error(res.error || 'Error desconocido al guardar en base de datos.');
+      }
+
+      const created = res.shipment;
       setShipments((prev) => [created, ...prev]);
       addToast('success', 'Envío Creado en DB Real', `Guía: ${created.trackingNumber}`);
-    } catch {
-      setShipments((prev) => [newShp, ...prev]);
-      addToast('success', 'Envío Creado Exitosamente', `Guía: ${newShp.trackingNumber}`);
+
+      const notif: NotificationItem = {
+        id: `notif-${Date.now()}`,
+        title: '📦 Nuevo Envío Registrado',
+        message: `Guía ${created.trackingNumber} creada para ${created.destination.name}`,
+        type: 'info',
+        category: 'shipment',
+        timestamp: 'Ahora mismo',
+        read: false
+      };
+      setNotifications((prev) => [notif, ...prev]);
+    } catch (err: any) {
+      addToast('error', 'Error al Crear Envío', err.message || 'No se pudo registrar el paquete en el servidor.');
     }
-    
-    // Add notification
-    const notif: NotificationItem = {
-      id: `notif-${Date.now()}`,
-      title: '📦 Nuevo Envío Registrado',
-      message: `Guía ${newShp.trackingNumber} creada para ${newShp.destination.name}`,
-      type: 'info',
-      category: 'shipment',
-      timestamp: 'Ahora mismo',
-      read: false
-    };
-    setNotifications((prev) => [notif, ...prev]);
   };
 
   const updateShipmentStatus = (id: string, status: Shipment['status'], extra?: Partial<Shipment>) => {

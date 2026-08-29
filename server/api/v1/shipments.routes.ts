@@ -1,13 +1,14 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { queryAll, queryOne, execute, transaction } from '../../db/database';
-import { authenticate, AuthenticatedRequest } from '../../auth/middleware';
+import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/middleware';
 import { calculatePricing } from '../../modules/pricing/pricing.engine';
 
 export const shipmentsRouter = Router();
 
 // GET /api/v1/shipments
-shipmentsRouter.get('/', authenticate, (req: AuthenticatedRequest, res) => {
-  const orgId = req.organizationId || 'org-gopaq';
+shipmentsRouter.get('/', authenticate, requireScope('shipments:read'), (req: AuthenticatedRequest, res) => {
+  const orgId = req.organizationId!;
   const { status, limit = 100, search } = req.query;
 
   let sql = `SELECT * FROM shipments WHERE organization_id = ?`;
@@ -40,8 +41,8 @@ shipmentsRouter.get('/', authenticate, (req: AuthenticatedRequest, res) => {
 });
 
 // POST /api/v1/shipments
-shipmentsRouter.post('/', authenticate, (req: AuthenticatedRequest, res) => {
-  const orgId = req.organizationId || 'org-gopaq';
+shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), (req: AuthenticatedRequest, res) => {
+  const orgId = req.organizationId!;
   const {
     serviceType = 'local',
     origin,
@@ -71,10 +72,25 @@ shipmentsRouter.post('/', authenticate, (req: AuthenticatedRequest, res) => {
     codAmount: Number(codAmount) || 0
   }, orgId);
 
-  // Generate unique tracking number: GP-XXXXXX
-  const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-  const trackingNumber = `GP-${randomSuffix}`;
-  const shipmentId = `shp-${Date.now()}`;
+  // Cryptographic collision-safe tracking number generator with retry
+  let trackingNumber = '';
+  let attempts = 0;
+  while (attempts < 5) {
+    const entropy = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const candidate = `GP-${entropy}`;
+    const exists = queryOne('SELECT id FROM shipments WHERE tracking_number = ?', [candidate]);
+    if (!exists) {
+      trackingNumber = candidate;
+      break;
+    }
+    attempts++;
+  }
+
+  if (!trackingNumber) {
+    return res.status(500).json({ success: false, error: 'Error generando número de guía único.' });
+  }
+
+  const shipmentId = `shp-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
   const now = new Date().toISOString();
 
   const newShipment = transaction(() => {
@@ -96,7 +112,7 @@ shipmentsRouter.post('/', authenticate, (req: AuthenticatedRequest, res) => {
       VALUES (?, ?, 'pending', ?, 'Envío creado y registrado en sistema', 'system', ?)
     `, [`evt-${Date.now()}`, shipmentId, origin.city || 'Sede Central', now]);
 
-    // COD Transaction
+    // COD Transaction if applicable
     if (codAmount > 0) {
       execute(`
         INSERT INTO cod_transactions (
@@ -125,13 +141,18 @@ shipmentsRouter.post('/', authenticate, (req: AuthenticatedRequest, res) => {
   return res.status(201).json({ success: true, shipment: newShipment });
 });
 
-// GET /api/v1/shipments/:id
-shipmentsRouter.get('/:id', authenticate, (req: AuthenticatedRequest, res) => {
+// GET /api/v1/shipments/:id (Audited with organization_id isolation)
+shipmentsRouter.get('/:id', authenticate, requireScope('shipments:read'), (req: AuthenticatedRequest, res) => {
+  const orgId = req.organizationId!;
   const { id } = req.params;
-  const row = queryOne(`SELECT * FROM shipments WHERE id = ? OR tracking_number = ?`, [id, id]);
+
+  const row = queryOne(`
+    SELECT * FROM shipments 
+    WHERE organization_id = ? AND (id = ? OR tracking_number = ?)
+  `, [orgId, id, id]);
 
   if (!row) {
-    return res.status(404).json({ success: false, error: 'Envío no encontrado.' });
+    return res.status(404).json({ success: false, error: 'Envío no encontrado en su organización.' });
   }
 
   const events = queryAll(`SELECT * FROM shipment_events WHERE shipment_id = ? ORDER BY created_at ASC`, [row.id]);

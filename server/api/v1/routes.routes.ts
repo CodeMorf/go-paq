@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { queryAll, queryOne, execute, transaction } from '../../db/database';
 import { authenticate, AuthenticatedRequest } from '../../auth/middleware';
-import { WitylogixAdapter } from '../../integrations/witylogix/witylogix.adapter';
+import { GoPaqRoutingEngine } from '../../modules/routing/routing.engine';
 
 export const routesRouter = Router();
 

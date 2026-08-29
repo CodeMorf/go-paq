@@ -1,63 +1,83 @@
 /**
- * Karrio Multi-Carrier Shipping & Tracking Adapter
+ * Karrio Real Multi-Carrier Shipping & Rating Adapter
+ * Open Source Carrier Gateway (LGPL-3.0 / Enterprise Components)
  * Reference: https://github.com/karrioapi/karrio
- * Open Source Carrier Gateway Adapter for GoPaq Logistics Platform
  */
 
-export interface KarrioCarrierRate {
-  carrier: 'dhl' | 'fedex' | 'ups' | 'usps' | 'gopaq_express';
-  serviceName: string;
-  totalCharge: number;
-  currency: string;
-  transitDays: number;
+export interface KarrioRateRequest {
+  shipper: { country_code: string; postal_code?: string; city?: string };
+  recipient: { country_code: string; postal_code?: string; city?: string };
+  parcels: Array<{ weight: number; length?: number; width?: number; height?: number }>;
 }
 
-export interface KarrioTrackingEvent {
-  date: string;
-  time: string;
-  location: string;
-  description: string;
-  status: string;
+export interface KarrioRateResponse {
+  carrier: string;
+  service: string;
+  totalCharge: number;
+  currency: string;
+  transitDays?: number;
 }
 
 export class KarrioAdapter {
-  static async getCarrierRates(originCountry: string, destCountry: string, weightKg: number): Promise<KarrioCarrierRate[]> {
-    // Standard Multi-carrier Rate Aggregator
-    const baseRates: KarrioCarrierRate[] = [
-      {
-        carrier: 'gopaq_express',
-        serviceName: 'GoPaq Courier Direct',
-        totalCharge: 450 + (weightKg * 180),
-        currency: 'DOP',
-        transitDays: 3
-      },
-      {
-        carrier: 'dhl',
-        serviceName: 'DHL Express Worldwide',
-        totalCharge: 850 + (weightKg * 320),
-        currency: 'DOP',
-        transitDays: 2
-      },
-      {
-        carrier: 'fedex',
-        serviceName: 'FedEx International Priority',
-        totalCharge: 820 + (weightKg * 310),
-        currency: 'DOP',
-        transitDays: 2
-      }
-    ];
+  private static getApiConfig() {
+    return {
+      apiUrl: process.env.KARRIO_API_URL || '',
+      apiKey: process.env.KARRIO_API_KEY || ''
+    };
+  }
 
-    return baseRates;
+  static async fetchLiveCarrierRates(payload: KarrioRateRequest): Promise<{ success: boolean; rates?: KarrioRateResponse[]; error?: string }> {
+    const { apiUrl, apiKey } = this.getApiConfig();
+
+    if (!apiUrl || !apiKey) {
+      return {
+        success: false,
+        error: 'provider_unavailable',
+      };
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/v1/rates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${apiKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `Karrio API respondió con estado HTTP ${response.status}`
+        };
+      }
+
+      const data = await response.json();
+      const rates: KarrioRateResponse[] = (data.rates || []).map((r: any) => ({
+        carrier: r.carrier_name,
+        service: r.service,
+        totalCharge: r.total_charge,
+        currency: r.currency || 'USD',
+        transitDays: r.transit_days
+      }));
+
+      return { success: true, rates };
+    } catch (e: any) {
+      return {
+        success: false,
+        error: `Error de red al conectar con Karrio: ${e.message || 'provider_unavailable'}`
+      };
+    }
   }
 
   static generateThermalLabel(shipment: { trackingNumber: string; origin: any; destination: any; package: any }) {
-    // Generate 4x6" Thermal Label Payload conforming to ZPL / Standard Thermal Matrix
     return {
       format: 'PDF_4X6',
       trackingNumber: shipment.trackingNumber,
       barcode: `*${shipment.trackingNumber}*`,
-      carrier: 'GOPAQ EXPRESS',
-      service: 'PRIORITY_LOGISTICS',
+      carrier: 'GOPAQ PRIORITY EXPRESS',
+      service: 'STANDARD_GROUND',
       createdDate: new Date().toLocaleDateString('es-DO'),
       weight: `${shipment.package?.weightKg || 1} kg`,
       origin: `${shipment.origin?.city || 'SDQ'}, DO`,

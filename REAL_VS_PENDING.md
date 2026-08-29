@@ -1,31 +1,33 @@
-# 📊 GoPaq — Estado de Funcionalidades: Real vs Pendiente
+# 📊 GoPaq — Estado Real de Módulos & Auditoría Técnica
 
-Este documento presenta una auditoría técnica detallada sobre qué funcionalidades operan con backend y persistencia real en base de datos frente a integraciones con proveedores de infraestructura productiva externa.
-
----
-
-## 🟢 Funcionalidades 100% REALES (Backend, DB, API & Frontend Conectado)
-
-| Módulo / Capacidad | Estado | Backend & DB |
-|---|---|---|
-| **Autenticación & Sesiones** | 100% REAL | JWT, bcrypt, `admin@gopaq.local`, `sucursal@gopaq.local`, `cliente@gopaq.local`. |
-| **Multi-Tenancy & RBAC** | 100% REAL | Aislamiento por `organization_id` y validación de roles en endpoints. |
-| **Motor de Tarifas** | 100% REAL | Cálculo matemático exacto por peso, volumen IATA, distancia y zonas rojas. |
-| **Creación de Envíos** | 100% REAL | `POST /api/v1/shipments`, número de tracking único server-side, persistencia en DB. |
-| **Rastreo (Tracking)** | 100% REAL | `GET /api/v1/tracking/:tracking`, consulta en DB relacional con historial de eventos. |
-| **Despacho y Rutas (Witylogix)** | 100% REAL | Optimización de paradas, asignación a choferes y despacho en vivo. |
-| **Telemetría GPS & Driver App** | 100% REAL | Transmisión de coordenadas, velocidad, rumbo y batería vía REST y WebSocket. |
-| **Firma Digital & e-POD** | 100% REAL | Captura táctil de firma, foto de evidencia y registro en base de datos. |
-| **Conciliación COD** | 100% REAL | Ledger contable de recaudos, custodia y liquidaciones a comercios. |
-| **Sucursal OS & POS** | 100% REAL | Emisión de guías en mostrador, inventario de tienda y arqueo de caja diario. |
-| **Casilleros Internacionales** | 100% REAL | Direcciones en Miami/Madrid/Milán/RD y consolidación de bultos. |
-| **Mudanzas & Carga Pesada** | 100% REAL | Cotizador por volumen ($m^3$), pisos y fletes especializados. |
-| **API Keys & Webhooks** | 100% REAL | Keys hasheadas con SHA-256, scopes de seguridad y registro de webhooks. |
-| **Documentación OpenAPI** | 100% REAL | Especificación OpenAPI 3.1 real servida en `/api/v1/docs/openapi.json`. |
+Este documento audita el estado real de cada módulo de GoPaq conforme a la regla estricta:
+**Un módulo es REAL únicamente si tiene persistencia en base de datos relacional, endpoints con control de acceso y tenant isolation, manejo de errores y pruebas automatizadas que lo validan.**
 
 ---
 
-## 🟡 Integraciones Externas Pendientes (Para Fase de Producción en Cloud)
-- **WhatsApp Business API Real:** Actualmente las conversaciones operan mediante el centro omnicanal en base de datos; la conexión directa con Meta Cloud API / Twilio requiere credenciales productivas de cliente.
-- **Pasarelas de Pago Bancarias Externas:** El sistema procesa balance interno, crédito y COD; la conexión con Stripe o procesadores locales requiere claves de comercio en vivo.
-- **Hardware de Báscula Serial / Bluetooth:** El peso se ingresa en el formulario del POS o mediante estimación óptica con cámara.
+## 🟢 ESTADO DETALLADO POR MÓDULOS
+
+| Módulo / Capacidad | Estado | Backend & DB | Frontend Conectado | Notas Técnicas |
+|---|---|---|---|---|
+| **Autenticación & Sesiones** | **REAL** | JWT, bcrypt, `admin@gopaq.local`, `sucursal@gopaq.local`, `cliente@gopaq.local` | ✅ Sí | Validado con pruebas de login y rechazo de contraseñas inválidas. |
+| **Aislamiento Multi-Tenant** | **REAL** | `organization_id` obligatorio en todas las consultas y mutations | ✅ Sí | Probado en test suite (acceso cruzado entre tenants bloqueado con 404/403). |
+| **API Key Security & Scopes** | **REAL** | Hashing SHA-256 en DB, prefijo `gp_live_`, validación de scopes | ✅ Sí | Probado con claves válidas, inválidas y validación de scopes (`shipments:write`). |
+| **Motor de Tarifas GoPaq** | **REAL** | Base + peso real + volumétrico IATA + distancia + zonas rojas + COD | ✅ Sí | Servidor calcula server-side sin Math.random. |
+| **Creación de Envíos & Tracking** | **REAL** | `POST /api/v1/shipments` con tracking criptográfico colisión-safe (`GP-HEX`) | ✅ Sí | Si API falla, el frontend muestra error real y no crea datos ficticios. |
+| **Despacho y Rutas (GoPaq Engine)** | **REAL** | Optimización espacial 2-opt, asignación de paradas a chofer y despacho | ✅ Sí | Motor propietario desacoplado de AGPL. |
+| **Telemetría GPS & WebSockets** | **REAL** | Streaming vía WebSocket autenticado por JWT y canal aislado por organización | ✅ Sí | Drivers solo pueden actualizar su propia unidad. |
+| **Firma Digital & e-POD** | **REAL** | Captura en canvas táctil, foto y verificación en servidor | ✅ Sí | Persiste en tabla `shipments.pod_json`. |
+| **Conciliación COD (Ledger)** | **REAL** | Transacciones contables de recaudo, custodia y liquidación con referencia | ✅ Sí | Totalización de caja y saldos pendientes en DB. |
+| **Sucursal OS (Punto de Venta)** | **REAL** | Registro de guías en mostrador, inventario físico y arqueo de caja | ✅ Sí | Persiste balance diario en DB. |
+| **Casilleros & Consolidación** | **REAL** | Direcciones en Miami/Madrid/Milán/RD y consolidación de guías master | ✅ Sí | Persiste en tablas de casilleros y paquetes. |
+| **Mudanzas & Carga Pesada** | **REAL** | Cotización por $m^3$, pisos, ayudantes y fletes pesados | ✅ Sí | Endpoint REST activo en backend. |
+| **Karrio Multi-Carrier Rating** | **PARTIAL (Adapter)** | Adaptador HTTP real a `KARRIO_API_URL` | ✅ Sí | Si Karrio no está activo, devuelve `provider_unavailable` (sin tarifas falsas). |
+| **Witylogix Engine** | **NOT INTEGRATED (License Boundary)** | Adaptador HTTP RPC aislado para contenedor externo | N/A | Excluido del core por licencia AGPL-3.0; reemplazado por motor propio. |
+| **Notificaciones WhatsApp / SMS** | **PARTIAL (Local DB Center)** | Registro en base de datos y WebSockets activos | ✅ Sí | Conexión con proveedores externos (Meta Cloud API/Twilio) requiere credenciales de producción. |
+| **Hardware de Báscula Serial** | **NOT IMPLEMENTED** | Entrada manual en formulario POS o estimación óptica por cámara | ✅ Sí | Requiere driver WebSerial / hardware físico conectado. |
+
+---
+
+## 🔒 Auditoría de Fallbacks Simulados (Fake Fallbacks)
+- **Eliminación Total de Fallback Falso:** En [`src/context/AppContext.tsx`](file:///C:/Users/grupo.SHIP24GO/Desktop/GoPaq/src/context/AppContext.tsx), la función `addShipment` ya NO inserta datos locales ficticios si la API falla. El frontend captura el error HTTP y notifica al usuario con un toast de error explícito.
+- **Empty States:** Si una consulta a la base de datos devuelve un array vacío, la interfaz muestra el estado vacío real del sistema sin inyectar datos mock.

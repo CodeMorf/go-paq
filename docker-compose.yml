@@ -8,13 +8,16 @@ services:
     container_name: gopaq-core-api
     restart: always
     ports:
-      - "4000:4000"
+      - "${PORT:-4000}:4000"
     environment:
       - NODE_ENV=production
       - PORT=4000
-      - DATABASE_URL=postgresql://gopaq_user:gopaq_secure_pass_2026@postgres:5432/gopaq_db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-gopaq_user}:${POSTGRES_PASSWORD:-gopaq_password}@postgres:5432/${POSTGRES_DB:-gopaq_db}
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=gopaq_super_secure_production_secret_2026
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - KARRIO_API_URL=${KARRIO_API_URL:-}
+      - KARRIO_API_KEY=${KARRIO_API_KEY:-}
     depends_on:
       - postgres
       - redis
@@ -24,9 +27,9 @@ services:
     container_name: gopaq-postgres
     restart: always
     environment:
-      POSTGRES_USER: gopaq_user
-      POSTGRES_PASSWORD: gopaq_secure_pass_2026
-      POSTGRES_DB: gopaq_db
+      POSTGRES_USER: ${POSTGRES_USER:-gopaq_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gopaq_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gopaq_db}
     ports:
       - "5432:5432"
     volumes:

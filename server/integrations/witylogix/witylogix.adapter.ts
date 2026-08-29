@@ -1,64 +1,41 @@
 /**
- * Witylogix Last-Mile Routing & Driver Dispatch Adapter
+ * Witylogix Integration Bridge & Licensing Manifest
  * Reference: https://github.com/wityliti/witylogix
- * Open Source Module Adapter for GoPaq Logistics Platform
+ * 
+ * ⚠️ LICENSE AUDIT NOTICE:
+ * Witylogix is licensed under GNU Affero General Public License v3 (AGPL-3.0).
+ * To strictly preserve the proprietary / commercial SaaS nature of GoPaq,
+ * NO AGPL code is embedded into the GoPaq Core codebase.
+ * 
+ * This file serves exclusively as a standalone HTTP RPC client contract
+ * should an independent Witylogix microservice container be deployed separately.
  */
 
-export interface WitylogixStop {
-  id: string;
-  address: string;
-  lat: number;
-  lng: number;
-  type: 'pickup' | 'delivery';
-  contact: { name: string; phone?: string };
-  shipmentTracking: string;
-}
+export class WitylogixBridge {
+  private static serviceUrl = process.env.WITYLOGIX_SERVICE_URL || '';
 
-export interface WitylogixRoutePlan {
-  driverId: string;
-  vehiclePlate: string;
-  stops: WitylogixStop[];
-}
+  static isConfigured(): boolean {
+    return !!this.serviceUrl;
+  }
 
-export class WitylogixAdapter {
-  static optimizeRoute(stops: WitylogixStop[]): { orderedStops: WitylogixStop[]; estimatedDistanceKm: number; estimatedDurationMin: number } {
-    // Spatial sorting / Traveling Salesperson nearest-neighbor heuristic
-    if (stops.length <= 1) {
-      return { orderedStops: stops, estimatedDistanceKm: 4.5, estimatedDurationMin: 25 };
+  static async dispatchToRemoteService(routeData: any): Promise<{ success: boolean; remoteId?: string; error?: string }> {
+    if (!this.isConfigured()) {
+      return {
+        success: false,
+        error: 'witylogix_service_not_configured'
+      };
     }
 
-    // Sort by proximity
-    const sorted = [...stops].sort((a, b) => (a.lat + a.lng) - (b.lat + b.lng));
-    const distanceKm = Math.round((stops.length * 3.8) * 10) / 10;
-    const durationMin = stops.length * 18;
-
-    return {
-      orderedStops: sorted,
-      estimatedDistanceKm: distanceKm,
-      estimatedDurationMin: durationMin
-    };
-  }
-
-  static processGpsTelemetry(driverId: string, telemetry: { lat: number; lng: number; speed: number; heading: number; battery: number }) {
-    return {
-      driverId,
-      position: { lat: telemetry.lat, lng: telemetry.lng },
-      telemetry: {
-        speedKmh: telemetry.speed,
-        headingDeg: telemetry.heading,
-        batteryPct: telemetry.battery,
-        timestamp: new Date().toISOString()
-      },
-      status: telemetry.speed > 5 ? 'in_motion' : 'idle'
-    };
-  }
-
-  static verifyPodSignature(signatureDataUrl: string, photoUrl?: string) {
-    const isValidSignature = signatureDataUrl && signatureDataUrl.startsWith('data:image');
-    return {
-      verified: !!isValidSignature,
-      hasPhoto: !!photoUrl,
-      timestamp: new Date().toISOString()
-    };
+    try {
+      const response = await fetch(`${this.serviceUrl}/api/v1/dispatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(routeData)
+      });
+      const data = await response.json();
+      return { success: true, remoteId: data.id };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
   }
 }

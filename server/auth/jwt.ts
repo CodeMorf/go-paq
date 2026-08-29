@@ -1,7 +1,15 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import dotenv from 'dotenv';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'gopaq_super_secure_jwt_secret_dev_2026';
+dotenv.config();
+
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is missing in production mode.');
+  process.exit(1);
+}
+
+const JWT_SECRET = process.env.JWT_SECRET || 'gopaq_development_secret_key_only_2026';
 const JWT_EXPIRES_IN = '7d';
 
 export interface TokenPayload {
