@@ -25,7 +25,6 @@ services:
       witylogix-api:
         condition: service_healthy
 
-  # ---------------- Karrio ----------------
   karrio-db:
     image: postgres:16-alpine
     container_name: gopaq-karrio-db
@@ -106,7 +105,6 @@ services:
       ENABLE_ALL_PLUGINS_BY_DEFAULT: "True"
     command: "/bin/bash ./worker"
 
-  # ---------------- Witylogix ----------------
   witylogix-db:
     image: postgis/postgis:16-3.4-alpine
     container_name: gopaq-witylogix-db
@@ -138,7 +136,7 @@ services:
 
   witylogix-migrate:
     build:
-      context: https://github.com/wityliti/witylogix.git#${WITYLOGIX_GIT_REF:-main}
+      context: https://github.com/wityliti/witylogix.git#${WITYLOGIX_GIT_REF:-d73682793c8cd930065cee7fc710f4395f8e5784}
       dockerfile: infra/docker/Dockerfile.api
       target: build
     container_name: gopaq-witylogix-migrate
@@ -152,7 +150,7 @@ services:
 
   witylogix-api:
     build:
-      context: https://github.com/wityliti/witylogix.git#${WITYLOGIX_GIT_REF:-main}
+      context: https://github.com/wityliti/witylogix.git#${WITYLOGIX_GIT_REF:-d73682793c8cd930065cee7fc710f4395f8e5784}
       dockerfile: infra/docker/Dockerfile.api
     container_name: gopaq-witylogix-api
     restart: unless-stopped
