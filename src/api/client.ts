@@ -5,6 +5,10 @@
 
 const API_BASE = '/api/v1';
 
+type ApiSuccess<T extends object> = { success: true } & T;
+type ApiFailure = { success: false; error: string };
+export type ApiResponse<T extends object> = ApiSuccess<T> | ApiFailure;
+
 export class ApiClient {
   private static getToken(): string | null {
     return localStorage.getItem('gopaq_token');
@@ -52,7 +56,7 @@ export class ApiClient {
     return this.request<{ success: boolean; count: number; shipments: any[] }>(`/shipments?${query}`);
   }
   static async getShipment(id: string) { return this.request<{ success: boolean; shipment: any }>(`/shipments/${id}`); }
-  static async createShipment(payload: any) { return this.request<{ success: boolean; shipment: any }>('/shipments', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async createShipment(payload: any) { return this.request<ApiResponse<{ shipment: any }>>('/shipments', { method: 'POST', body: JSON.stringify(payload) }); }
   static async calculateQuote(payload: any) { return this.request<{ success: boolean; quote: any }>('/quotes', { method: 'POST', body: JSON.stringify(payload) }); }
   static async getTracking(trackingNumber: string) { return this.request<{ success: boolean; shipment: any }>(`/tracking/${trackingNumber}`); }
   static async getRoutes() { return this.request<{ success: boolean; routes: any[] }>('/routes'); }
