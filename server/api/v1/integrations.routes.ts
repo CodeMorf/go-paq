@@ -16,13 +16,14 @@ integrationsRouter.get('/health', async (_req, res) => {
 
   const wityStart = Date.now();
   const wityResult = await WitylogixBridge.health();
+  const wityError = 'error' in wityResult ? wityResult.error : undefined;
   const witylogix = {
     configured: WitylogixBridge.isConfigured(),
     serviceUrl: process.env.WITYLOGIX_SERVICE_URL || null,
     licenseNotice: 'GNU AGPL-3.0 — independent service, HTTP boundary',
     reachable: wityResult.success,
     latencyMs: WitylogixBridge.isConfigured() ? Date.now() - wityStart : null,
-    status: !WitylogixBridge.isConfigured() ? 'NOT CONFIGURED' : wityResult.success ? 'ONLINE' : wityResult.error
+    status: !WitylogixBridge.isConfigured() ? 'NOT CONFIGURED' : wityResult.success ? 'ONLINE' : (wityError || 'UNAVAILABLE')
   };
 
   const karrioStart = Date.now();
@@ -33,7 +34,7 @@ integrationsRouter.get('/health', async (_req, res) => {
     licenseNotice: 'GNU LGPL-3.0 OSS core — independent service',
     reachable: karrioResult.success,
     latencyMs: process.env.KARRIO_API_URL ? Date.now() - karrioStart : null,
-    status: !process.env.KARRIO_API_URL ? 'NOT CONFIGURED' : karrioResult.success ? 'ONLINE' : karrioResult.error
+    status: !process.env.KARRIO_API_URL ? 'NOT CONFIGURED' : karrioResult.success ? 'ONLINE' : (karrioResult.error || 'UNAVAILABLE')
   };
 
   return res.json({
