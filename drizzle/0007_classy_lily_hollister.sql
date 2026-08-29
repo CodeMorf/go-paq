@@ -1,1 +1,0 @@
-ALTER TABLE `organizations` MODIFY COLUMN `language` varchar(8) NOT NULL DEFAULT 'es';

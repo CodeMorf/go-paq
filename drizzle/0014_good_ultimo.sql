@@ -1,1 +1,0 @@
-ALTER TABLE `shipment_services` MODIFY COLUMN `status` enum('requested','quoted','awaiting_approval','approved','purchasing','purchased','fulfillment','scheduled','in_progress','completed','cancelled','rejected') NOT NULL DEFAULT 'requested';

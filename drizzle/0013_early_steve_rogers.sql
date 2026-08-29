@@ -1,1 +1,0 @@
-ALTER TABLE `shipment_events` ADD `reason` text;

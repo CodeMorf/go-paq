@@ -1,1 +1,0 @@
-ALTER TABLE `delivery_attempts` ADD `evidenceUrl` varchar(1024);
