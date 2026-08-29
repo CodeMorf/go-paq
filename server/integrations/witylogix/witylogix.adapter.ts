@@ -53,7 +53,7 @@ export class WitylogixBridge {
 
   static async dispatchToRemoteService(routeData: any): Promise<{ success: boolean; remoteId?: string; error?: string }> {
     const result = await this.createRoute(routeData);
-    if (!result.success) return { success: false, error: result.error };
+    if ('error' in result) return { success: false, error: result.error };
     const data: any = result.data;
     return { success: true, remoteId: data?.id || data?.route?.id || data?.data?.id };
   }
