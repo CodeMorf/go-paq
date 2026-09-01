@@ -33,6 +33,7 @@ codRouter.get('/ledger', authenticate, (req: AuthenticatedRequest, res) => {
 
 // POST /api/v1/cod/settle (Liquidación a comerciante)
 codRouter.post('/settle', authenticate, (req: AuthenticatedRequest, res) => {
+  const orgId = req.organizationId!;
   const { transactionIds = [], settlementReference, notes } = req.body;
 
   if (transactionIds.length === 0) {
@@ -47,8 +48,8 @@ codRouter.post('/settle', authenticate, (req: AuthenticatedRequest, res) => {
       execute(`
         UPDATE cod_transactions 
         SET status = 'settled_merchant', settled_at = ?, settlement_reference = ?, notes = ?
-        WHERE id = ?
-      `, [now, ref, notes || 'Liquidación bancaria automática GoPaq COD', txId]);
+        WHERE id = ? AND organization_id = ? AND status != 'settled_merchant'
+      `, [now, ref, notes || 'Liquidación bancaria automática GoPaq COD', txId, orgId]);
     }
   });
 
