@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { queryAll, queryOne, execute, transaction } from '../../db/database';
 import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/middleware';
 import { calculatePricing } from '../../modules/pricing/pricing.engine';
+import { serializeShipment } from '../../utils/serializers';
 
 export const shipmentsRouter = Router();
 
@@ -28,14 +29,7 @@ shipmentsRouter.get('/', authenticate, requireScope('shipments:read'), (req: Aut
   params.push(Number(limit));
 
   const rows = queryAll(sql, params);
-  const formatted = rows.map((r) => ({
-    ...r,
-    origin: JSON.parse(r.origin_json || '{}'),
-    destination: JSON.parse(r.destination_json || '{}'),
-    package: JSON.parse(r.package_json || '{}'),
-    pricing: JSON.parse(r.pricing_json || '{}'),
-    pod: r.pod_json ? JSON.parse(r.pod_json) : null
-  }));
+  const formatted = rows.map((r) => serializeShipment(r));
 
   return res.json({ success: true, count: formatted.length, shipments: formatted });
 });
@@ -58,7 +52,6 @@ shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), (req: A
     return res.status(400).json({ success: false, error: 'Origen, destino y datos de paquete son requeridos.' });
   }
 
-  // Calculate pricing server-side
   const pricing = calculatePricing({
     serviceType,
     originCity: origin.city || 'Santo Domingo',
@@ -72,7 +65,6 @@ shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), (req: A
     codAmount: Number(codAmount) || 0
   }, orgId);
 
-  // Cryptographic collision-safe tracking number generator with retry
   let trackingNumber = '';
   let attempts = 0;
   while (attempts < 5) {
@@ -106,13 +98,11 @@ shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), (req: A
       pricing.total, pricing.currency, codAmount, codCurrency, now, now
     ]);
 
-    // Initial event
     execute(`
       INSERT INTO shipment_events (id, shipment_id, status, location, description, actor_type, created_at)
       VALUES (?, ?, 'pending', ?, 'Envío creado y registrado en sistema', 'system', ?)
     `, [`evt-${Date.now()}`, shipmentId, origin.city || 'Sede Central', now]);
 
-    // COD Transaction if applicable
     if (codAmount > 0) {
       execute(`
         INSERT INTO cod_transactions (
@@ -141,7 +131,27 @@ shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), (req: A
   return res.status(201).json({ success: true, shipment: newShipment });
 });
 
-// GET /api/v1/shipments/:id (Audited with organization_id isolation)
+shipmentsRouter.patch('/:id/status', authenticate, requireScope('shipments:write'), (req: AuthenticatedRequest, res) => {
+  const orgId = req.organizationId!;
+  const { id } = req.params;
+  const { status, location, description, pod, failureReason, failureNote } = req.body || {};
+  const allowed = new Set(['pending','picked_up','at_branch','in_transit','assigned','out_for_delivery','delivered','failed','cancelled']);
+  if (!allowed.has(status)) return res.status(400).json({ success:false, error:'Estado de envío inválido.' });
+  const row = queryOne<any>(`SELECT * FROM shipments WHERE organization_id=? AND (id=? OR tracking_number=?)`, [orgId,id,id]);
+  if (!row) return res.status(404).json({ success:false, error:'Envío no encontrado en su organización.' });
+  const podJson = pod ? JSON.stringify(pod) : row.pod_json;
+  execute(`UPDATE shipments SET status=?, pod_json=?, updated_at=datetime('now') WHERE id=? AND organization_id=?`, [status,podJson,row.id,orgId]);
+  const extra = failureReason || failureNote ? JSON.stringify({ failureReason, failureNote }) : null;
+  let defaultLocation = '';
+  try { defaultLocation = JSON.parse(row.destination_json || '{}').city || ''; } catch {}
+  const eventLocation = location || defaultLocation;
+  execute(`INSERT INTO shipment_events (id,shipment_id,status,location,description,actor_type,actor_id,extra_json,created_at) VALUES (?,?,?,?,?,?,?,?,?)`, [
+    `evt-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`, row.id, status, eventLocation, description || `Estado actualizado a ${status}`, req.user ? 'user' : 'api_key', req.user?.userId || req.clientId || null, extra, new Date().toISOString()
+  ]);
+  const updated = queryOne(`SELECT * FROM shipments WHERE id=? AND organization_id=?`, [row.id,orgId]);
+  return res.json({ success:true, shipment:serializeShipment(updated) });
+});
+
 shipmentsRouter.get('/:id', authenticate, requireScope('shipments:read'), (req: AuthenticatedRequest, res) => {
   const orgId = req.organizationId!;
   const { id } = req.params;
@@ -159,13 +169,6 @@ shipmentsRouter.get('/:id', authenticate, requireScope('shipments:read'), (req: 
 
   return res.json({
     success: true,
-    shipment: {
-      ...row,
-      origin: JSON.parse(row.origin_json || '{}'),
-      destination: JSON.parse(row.destination_json || '{}'),
-      package: JSON.parse(row.package_json || '{}'),
-      pricing: JSON.parse(row.pricing_json || '{}'),
-      events
-    }
+    shipment: { ...serializeShipment(row), events }
   });
 });
