@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { queryAll, queryOne, execute, transaction } from '../../db/database';
 import { authenticate, AuthenticatedRequest } from '../../auth/middleware';
 import { WitylogixBridge } from '../../integrations/witylogix/witylogix.adapter';
+import { serializeRoute } from '../../utils/serializers';
 
 export const routesRouter = Router();
 
@@ -18,14 +19,12 @@ routesRouter.get('/', authenticate, (req: AuthenticatedRequest, res) => {
 
   const result = routes.map((r) => {
     const stops = queryAll(`SELECT * FROM route_stops WHERE route_id = ? ORDER BY sequence_order ASC`, [r.id]);
-    return {
-      ...r,
-      stops: stops.map((s) => ({
-        ...s,
-        address: JSON.parse(s.address_json || '{}'),
-        pod: s.pod_json ? JSON.parse(s.pod_json) : null
-      }))
-    };
+    const normalizedStops = stops.map((s) => ({
+      ...s,
+      address: JSON.parse(s.address_json || '{}'),
+      pod: s.pod_json ? JSON.parse(s.pod_json) : null
+    }));
+    return serializeRoute(r, normalizedStops);
   });
 
   return res.json({ success: true, routes: result });
