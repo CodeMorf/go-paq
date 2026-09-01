@@ -370,6 +370,21 @@ CREATE TABLE IF NOT EXISTS cod_transactions (
   FOREIGN KEY (shipment_id) REFERENCES shipments(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS branch_cash_closures (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  total_cash REAL DEFAULT 0,
+  total_pos REAL DEFAULT 0,
+  total_transfers REAL DEFAULT 0,
+  grand_total REAL DEFAULT 0,
+  notes TEXT,
+  closed_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS api_keys (
   id TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL,
