@@ -8,6 +8,7 @@ import { decryptSecret } from '../security/secretBox';
 const redisUrl = process.env.REDIS_URL?.trim();
 const REALTIME_CHANNEL = 'gopaq:realtime';
 let publisher: Redis | null = null;
+let publisherConnectPromise: Promise<void> | null = null;
 let workers: Worker[] = [];
 let pumpRunning = false;
 
@@ -17,7 +18,7 @@ function connectionOptions(): RedisOptions {
 
 function redisPublisher() {
   if (!redisUrl) return null;
-  if (!publisher) publisher = new Redis(redisUrl, connectionOptions());
+  if (!publisher) publisher = new Redis(redisUrl, { ...connectionOptions(), lazyConnect: true });
   return publisher;
 }
 
@@ -29,6 +30,13 @@ function parseJson(value: unknown): Record<string, any> {
 async function publishRealtime(event: any) {
   const client = redisPublisher();
   if (!client) return { published: false, error: 'redis_not_configured' };
+  if (client.status !== 'ready') {
+    if (!publisherConnectPromise) {
+      publisherConnectPromise = client.connect().finally(() => { publisherConnectPromise = null; });
+    }
+    await publisherConnectPromise;
+  }
+  if (client.status !== 'ready') throw new Error('redis_not_ready');
   await client.publish(REALTIME_CHANNEL, JSON.stringify({
     organizationId: event.organization_id,
     eventType: event.event_type,
@@ -138,6 +146,7 @@ export async function claimAndEnqueueOutbox() {
         const queue = queueForEvent(event.event_type) as QueueName;
         const target = getQueue(queue);
         if (!target) throw new Error('redis_not_configured');
+        await target.waitUntilReady();
         await target.add('outbox-event', { eventId: event.id }, { jobId: `outbox-${event.id}` });
         queued += 1;
       } catch (error) {
@@ -173,6 +182,7 @@ export async function startWorkers() {
     if (publisher) {
       await publisher.quit().catch(() => publisher?.disconnect());
       publisher = null;
+      publisherConnectPromise = null;
     }
   };
 }
