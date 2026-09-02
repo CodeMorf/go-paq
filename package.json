@@ -10,7 +10,7 @@
     "test": "tsx server/tests/api.test.ts",
     "seed": "tsx -e \"import { runSeeds } from './server/db/seed'; runSeeds();\"",
     "seed:demo": "tsx server/db/seedDemo.ts",
-    "reset:demo": "tsx -e \"import { resetDemoTenant } from './server/db/seed'; resetDemoTenant();\"",
+    "reset:demo": "tsx server/db/resetDemo.ts",
     "seed:production": "tsx server/db/seedProduction.ts",
     "build": "vite build",
     "preview": "vite preview",
