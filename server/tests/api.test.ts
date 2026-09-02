@@ -241,6 +241,11 @@ async function runComprehensiveTestSuite() {
   const repeatedPrealert = await request(app).post('/api/v1/international/prealert').set('Authorization', `Bearer ${demoRes.body.token}`).set('Idempotency-Key', prealertKey).send({ lockerId: demoLockers.body.lockers?.[0]?.id, merchantName: 'Tienda Demo', trackingNumber: prealert.body.package?.trackingNumber || `DEMO-${Date.now()}`, description: 'Paquete de prueba de flujo', declaredValueUsd: 25, weightLbs: 2 });
   assert(demoLockers.status === 200 && prealert.status === 201 && repeatedPrealert.status === 201 && prealert.body.package?.status === 'received_miami', 'INTERNATIONAL PREALERT: client locker ownership, persistence and idempotent replay work through the API');
 
+  const demoCookie = (demoRes.headers['set-cookie'] || []) as string[];
+  const demoLogout = await request(app).post('/api/v1/auth/logout').set('Cookie', demoCookie);
+  const revokedAccess = await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${demoRes.body.token}`);
+  assert(demoLogout.status === 200 && revokedAccess.status === 401, 'SESSION REVOCATION: logout invalidates the access token before its JWT TTL');
+
   console.log(`\n======================================================`);
   console.log(`TEST SUITE RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log(`======================================================\n`);

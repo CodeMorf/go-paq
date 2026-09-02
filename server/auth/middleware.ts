@@ -12,6 +12,45 @@ export interface AuthenticatedRequest extends Request {
   authType?: 'jwt' | 'api_key';
 }
 
+/**
+ * JWT signature validation is not enough for a revocable production session.
+ * Every access token carries the database session id created at login; this
+ * lookup makes logout, password reset and administrative revocation effective
+ * before the nominal access-token TTL expires.
+ */
+export async function validateAccessToken(token: string): Promise<TokenPayload | null> {
+  const decoded = verifyToken(token);
+  if (!decoded?.sessionId) return null;
+
+  const session = await queryOneAsync<{
+    id: string;
+    role: string;
+    branch_id: string | null;
+    client_id: string | null;
+  }>(`
+    SELECT s.id, u.role, u.branch_id, c.id AS client_id
+    FROM sessions s
+    JOIN users u ON u.id = s.user_id AND u.organization_id = s.organization_id
+    JOIN organizations o ON o.id = s.organization_id
+    LEFT JOIN clients c ON c.organization_id = u.organization_id AND c.email = u.email
+    WHERE s.id = ?
+      AND s.user_id = ?
+      AND s.organization_id = ?
+      AND s.revoked_at IS NULL
+      AND s.expires_at > CURRENT_TIMESTAMP
+      AND u.active = 1
+      AND o.active = 1
+  `, [decoded.sessionId, decoded.userId, decoded.organizationId]);
+
+  if (!session) return null;
+  return {
+    ...decoded,
+    role: session.role,
+    branchId: session.branch_id || undefined,
+    clientId: session.client_id || undefined
+  };
+}
+
 export async function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
@@ -44,7 +83,7 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
     // 2. JWT Bearer Token Authentication
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice('Bearer '.length).trim();
-      const decoded = verifyToken(token);
+      const decoded = await validateAccessToken(token);
 
       if (!decoded) return res.status(401).json({ success: false, error: 'Token inválido o expirado.' });
 

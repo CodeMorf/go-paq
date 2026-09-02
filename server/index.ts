@@ -4,7 +4,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { app } from './core/app';
 import { initDatabaseAsync, queryOneAsync, executeAsync } from './db/database';
-import { verifyToken, TokenPayload } from './auth/jwt';
+import { TokenPayload } from './auth/jwt';
+import { validateAccessToken } from './auth/middleware';
 import { normalizeRole } from './auth/roles';
 
 const PORT = Number(process.env.PORT || 4000);
@@ -27,28 +28,32 @@ async function start() {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 
-  server.on('upgrade', (request, socket, head) => {
-    const parsedUrl = url.parse(request.url || '', true);
-    if (parsedUrl.pathname !== '/ws') return socket.destroy();
-    const origin = request.headers.origin;
-    const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map((item) => item.trim()).filter(Boolean);
-    if (origin && allowedOrigins.length > 0 && !allowedOrigins.includes(origin)) return socket.destroy();
+  server.on('upgrade', async (request, socket, head) => {
+    try {
+      const parsedUrl = url.parse(request.url || '', true);
+      if (parsedUrl.pathname !== '/ws') return socket.destroy();
+      const origin = request.headers.origin;
+      const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map((item) => item.trim()).filter(Boolean);
+      if (origin && allowedOrigins.length > 0 && !allowedOrigins.includes(origin)) return socket.destroy();
 
-    // The access token is accepted only for the handshake. It is never logged
-    // and connections without a valid token are rejected before upgrade.
-    // Query-string tokens are accepted only in non-production development. In
-    // production a URL token can leak through browser history, proxies, or logs;
-    // clients must use Sec-WebSocket-Protocol instead.
-    const queryToken = process.env.NODE_ENV === 'production' ? undefined : (typeof parsedUrl.query.token === 'string' ? parsedUrl.query.token : undefined);
-    const protocolToken = String(request.headers['sec-websocket-protocol'] || '').split(',').map((item) => item.trim()).find((item) => item.startsWith('gopaq-bearer.'))?.slice('gopaq-bearer.'.length);
-    const user = verifyToken(protocolToken || queryToken || '');
-    if (!user) return socket.destroy();
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      const authWs = ws as AuthenticatedSocket;
-      authWs.user = user;
-      authWs.organizationId = user.organizationId;
-      wss.emit('connection', authWs, request);
-    });
+      // The access token is accepted only for the handshake. It is never logged
+      // and connections without a valid, non-revoked session are rejected.
+      // Query-string tokens are accepted only in non-production development. In
+      // production a URL token can leak through browser history, proxies, or logs;
+      // clients must use Sec-WebSocket-Protocol instead.
+      const queryToken = process.env.NODE_ENV === 'production' ? undefined : (typeof parsedUrl.query.token === 'string' ? parsedUrl.query.token : undefined);
+      const protocolToken = String(request.headers['sec-websocket-protocol'] || '').split(',').map((item) => item.trim()).find((item) => item.startsWith('gopaq-bearer.'))?.slice('gopaq-bearer.'.length);
+      const user = await validateAccessToken(protocolToken || queryToken || '');
+      if (!user) return socket.destroy();
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        const authWs = ws as AuthenticatedSocket;
+        authWs.user = user;
+        authWs.organizationId = user.organizationId;
+        wss.emit('connection', authWs, request);
+      });
+    } catch {
+      socket.destroy();
+    }
   });
 
   wss.on('connection', (ws: AuthenticatedSocket) => {
