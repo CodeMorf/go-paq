@@ -90,6 +90,11 @@ export function initDatabase() {
     ensureSqliteColumn('clients', 'country', 'TEXT');
     ensureSqliteColumn('clients', 'province', 'TEXT');
     ensureSqliteColumn('clients', 'city', 'TEXT');
+    ensureSqliteColumn('drivers', 'photo_storage_key', 'TEXT');
+    ensureSqliteColumn('drivers', 'photo_uploaded_at', 'TEXT');
+    ensureSqliteColumn('drivers', 'card_number', 'TEXT');
+    ensureSqliteColumn('drivers', 'card_issued_at', 'TEXT');
+    sqliteDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_drivers_org_card_number ON drivers(organization_id, card_number) WHERE card_number IS NOT NULL`);
     sqliteDb.exec(`
       INSERT OR IGNORE INTO schema_migrations (version, applied_at)
       VALUES
@@ -101,7 +106,8 @@ export function initDatabase() {
         ('006_configuration_center', CURRENT_TIMESTAMP),
         ('007_google_maps_credentials', CURRENT_TIMESTAMP),
         ('008_admin_master_data', CURRENT_TIMESTAMP),
-        ('009_geographic_catalog_and_weight_cap', CURRENT_TIMESTAMP)
+        ('009_geographic_catalog_and_weight_cap', CURRENT_TIMESTAMP),
+        ('010_driver_photo_upload_and_cards', CURRENT_TIMESTAMP)
     `);
   }
 }
@@ -150,6 +156,7 @@ export async function runMigrations() {
   const googleMapsCredentialsSql = fs.readFileSync(path.join(migrationsDir, '007_google_maps_credentials.sql'), 'utf8');
   const adminMasterDataSql = fs.readFileSync(path.join(migrationsDir, '008_admin_master_data.sql'), 'utf8');
   const geographicCatalogSql = fs.readFileSync(path.join(migrationsDir, '009_geographic_catalog_and_weight_cap.sql'), 'utf8');
+  const driverPhotoCardsSql = fs.readFileSync(path.join(migrationsDir, '010_driver_photo_upload_and_cards.sql'), 'utf8');
   const lockKey = 7874701;
 
   await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
@@ -197,6 +204,10 @@ export async function runMigrations() {
     if (!applied.has('009_geographic_catalog_and_weight_cap')) {
       await pgPool.query(geographicCatalogSql);
       await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['009_geographic_catalog_and_weight_cap']);
+    }
+    if (!applied.has('010_driver_photo_upload_and_cards')) {
+      await pgPool.query(driverPhotoCardsSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['010_driver_photo_upload_and_cards']);
     }
   } finally {
     await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);

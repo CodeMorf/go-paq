@@ -56,7 +56,9 @@ app.use(cors({
 }));
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(requestId);
-app.use(express.json({ limit: '2mb' }));
+// Driver photo uploads are compressed in the browser and capped at 2 MB after
+// decoding; the small transport headroom avoids rejecting valid base64 data URLs.
+app.use(express.json({ limit: '3mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'GoPaq Core Logistics API', version: process.env.GOPAQ_VERSION || '2.0.0', timestamp: new Date().toISOString() });

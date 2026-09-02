@@ -1,13 +1,61 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { queryAllAsync, queryOneAsync, executeAsync, transactionAsync } from '../../db/database';
+import { isPostgres, queryAllAsync, queryOneAsync, executeAsync, transactionAsync } from '../../db/database';
 import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '../../auth/middleware';
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
-import { storeDataUrl } from '../../storage/storage.adapter';
+import { readStoredFile, removeStoredFile, storeDataUrl } from '../../storage/storage.adapter';
 
 export const driversRouter = Router();
+
+const PHOTO_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
+const DRIVER_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+
+function publicAppUrl(): string {
+  const configured = process.env.GOPAQ_PUBLIC_URL || 'https://gopaq.lat';
+  return configured.replace(/\/+$/, '');
+}
+
+function hashUploadToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function buildPhotoUpload(token: string, expiresAt: string) {
+  return {
+    url: `${publicAppUrl()}/driver-photo-upload?token=${encodeURIComponent(token)}`,
+    expiresAt,
+    expiresInHours: 24
+  };
+}
+
+function driverResponse(driver: any) {
+  if (!driver) return driver;
+  const { photo_storage_key: photoStorageKey, ...safe } = driver;
+  return {
+    ...safe,
+    has_photo: !!photoStorageKey,
+    card_status: photoStorageKey && driver.card_number ? 'issued' : 'pending_photo'
+  };
+}
+
+async function issuePhotoUploadToken(tx: any, organizationId: string, driverId: string, createdBy: string, now: string) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + PHOTO_UPLOAD_TTL_MS).toISOString();
+  await tx.execute(
+    `UPDATE driver_photo_upload_tokens SET revoked_at = ? WHERE organization_id = ? AND driver_id = ? AND used_at IS NULL AND revoked_at IS NULL`,
+    [now, organizationId, driverId]
+  );
+  await tx.execute(
+    `INSERT INTO driver_photo_upload_tokens (id, organization_id, driver_id, token_hash, expires_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [`dpt-${crypto.randomUUID()}`, organizationId, driverId, hashUploadToken(token), expiresAt, createdBy, now]
+  );
+  return buildPhotoUpload(token, expiresAt);
+}
+
+function generateCardNumber(): string {
+  return `GP-${new Date().getUTCFullYear()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+}
 
 const driverCreateSchema = z.object({
   name: z.string().trim().min(2).max(160),
@@ -35,7 +83,7 @@ driversRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMI
 
   const driverId = `drv-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  const driver = await transactionAsync(async (tx) => {
+  const result = await transactionAsync(async (tx) => {
     await tx.execute(`INSERT INTO drivers (id, organization_id, branch_id, user_id, name, email, phone, license_number, vehicle_type, vehicle_plate, status, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 1, ?, ?)`, [
       driverId, organizationId, parsed.data.branchId, parsed.data.userId || null, parsed.data.name, parsed.data.email || null, parsed.data.phone,
       parsed.data.licenseNumber, parsed.data.vehicleType, parsed.data.vehiclePlate, now, now
@@ -47,9 +95,13 @@ driversRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMI
     await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'driver.created', 'driver', ?, ?, 'pending', 0, ?)`, [
       `out-${crypto.randomUUID()}`, organizationId, driverId, JSON.stringify({ driverId, organizationId, branchId: parsed.data.branchId }), now
     ]);
-    return { id: driverId, organization_id: organizationId, branch_id: parsed.data.branchId, user_id: parsed.data.userId || null, name: parsed.data.name, email: parsed.data.email || null, phone: parsed.data.phone, license_number: parsed.data.licenseNumber, vehicle_type: parsed.data.vehicleType, vehicle_plate: parsed.data.vehiclePlate, status: 'available', active: 1, created_at: now, updated_at: now };
+    const photoUpload = await issuePhotoUploadToken(tx, organizationId, driverId, req.user!.userId, now);
+    return {
+      driver: { id: driverId, organization_id: organizationId, branch_id: parsed.data.branchId, user_id: parsed.data.userId || null, name: parsed.data.name, email: parsed.data.email || null, phone: parsed.data.phone, license_number: parsed.data.licenseNumber, vehicle_type: parsed.data.vehicleType, vehicle_plate: parsed.data.vehiclePlate, status: 'available', active: 1, photo_storage_key: null, photo_uploaded_at: null, card_number: null, card_issued_at: null, created_at: now, updated_at: now },
+      photoUpload
+    };
   });
-  return res.status(201).json({ success: true, driver });
+  return res.status(201).json({ success: true, driver: driverResponse(result.driver), photoUpload: result.photoUpload });
 }));
 
 driversRouter.get('/', authenticate, requireScope('drivers:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -59,7 +111,81 @@ driversRouter.get('/', authenticate, requireScope('drivers:read'), asyncHandler(
   const drivers = ownOnly
     ? await queryAllAsync(`SELECT d.*, b.name AS branch_name, u.email AS user_email FROM drivers d LEFT JOIN branches b ON d.branch_id = b.id AND b.organization_id = d.organization_id LEFT JOIN users u ON d.user_id = u.id AND u.organization_id = d.organization_id WHERE d.organization_id = ? AND d.user_id = ? AND d.active = 1`, [orgId, req.user!.userId])
     : await queryAllAsync(`SELECT d.*, b.name AS branch_name, u.email AS user_email FROM drivers d LEFT JOIN branches b ON d.branch_id = b.id AND b.organization_id = d.organization_id LEFT JOIN users u ON d.user_id = u.id AND u.organization_id = d.organization_id WHERE d.organization_id = ? AND d.active = 1 ORDER BY d.name ASC`, [orgId]);
-  return res.json({ success: true, drivers });
+  return res.json({ success: true, drivers: drivers.map(driverResponse) });
+}));
+
+driversRouter.post('/:id/photo-link', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN']), requireScope('drivers:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const organizationId = req.organizationId!;
+  const existing = await queryOneAsync<{ id: string }>('SELECT id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [req.params.id, organizationId]);
+  if (!existing) return res.status(404).json({ success: false, error: 'Conductor no encontrado en esta organización.' });
+  const now = new Date().toISOString();
+  const photoUpload = await transactionAsync(async (tx) => {
+    const upload = await issuePhotoUploadToken(tx, organizationId, req.params.id, req.user!.userId, now);
+    await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, 'driver.photo_link_created', 'driver', ?, 'success', ?, ?, ?)`, [
+      `aud-${crypto.randomUUID()}`, organizationId, req.user!.userId, req.params.id, req.ip, JSON.stringify({ expiresAt: upload.expiresAt }), now
+    ]);
+    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'driver.photo_link_created', 'driver', ?, ?, 'pending', 0, ?)`, [
+      `out-${crypto.randomUUID()}`, organizationId, req.params.id, JSON.stringify({ driverId: req.params.id, organizationId, expiresAt: upload.expiresAt }), now
+    ]);
+    return upload;
+  });
+  return res.status(201).json({ success: true, photoUpload });
+}));
+
+const photoUploadSchema = z.object({ photoDataUrl: z.string().trim().min(1).max(3_000_000) }).strict();
+
+// This endpoint is intentionally token-authenticated instead of JWT-authenticated:
+// the administrator can send the one-time link to a driver who has not logged in yet.
+driversRouter.post('/photo-upload/:token', asyncHandler(async (req, res) => {
+  const token = typeof req.params.token === 'string' ? req.params.token.trim() : '';
+  if (!/^[a-f0-9]{64}$/i.test(token)) return res.status(410).json({ success: false, error: 'El enlace de carga no es válido o ya venció.' });
+  const parsed = photoUploadSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: 'Selecciona una foto válida de máximo 2 MB.' });
+  const storageValue = await storeDataUrl(parsed.data.photoDataUrl, 'driver-photos', DRIVER_PHOTO_MAX_BYTES);
+  if (!storageValue) return res.status(422).json({ success: false, error: 'La foto es obligatoria.' });
+  const now = new Date().toISOString();
+  let committed = false;
+  try {
+    const result = await transactionAsync(async (tx) => {
+      const tokenRow = await tx.queryOne<any>(`SELECT t.id, t.organization_id, t.driver_id, t.expires_at, t.used_at, t.revoked_at, d.name, d.card_number FROM driver_photo_upload_tokens t JOIN drivers d ON d.id = t.driver_id AND d.organization_id = t.organization_id WHERE t.token_hash = ?${isPostgres ? ' FOR UPDATE' : ''}`, [hashUploadToken(token)]);
+      if (!tokenRow || tokenRow.revoked_at || new Date(String(tokenRow.expires_at)).getTime() <= Date.now()) throw Object.assign(new Error('El enlace de carga no es válido o ya venció.'), { statusCode: 410 });
+      if (tokenRow.used_at) throw Object.assign(new Error('El enlace de carga ya fue utilizado.'), { statusCode: 409 });
+      const used = await tx.execute(`UPDATE driver_photo_upload_tokens SET used_at = ? WHERE id = ? AND organization_id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?`, [now, tokenRow.id, tokenRow.organization_id, now]);
+      if (used.changes !== 1) throw Object.assign(new Error('El enlace de carga ya fue utilizado o venció.'), { statusCode: 409 });
+      const cardNumber = tokenRow.card_number || generateCardNumber();
+      const updated = await tx.execute(`UPDATE drivers SET photo_storage_key = ?, photo_uploaded_at = ?, card_number = COALESCE(card_number, ?), card_issued_at = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [storageValue, now, cardNumber, now, now, tokenRow.driver_id, tokenRow.organization_id]);
+      if (updated.changes !== 1) throw Object.assign(new Error('El conductor no está disponible para recibir la foto.'), { statusCode: 409 });
+      await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, NULL, 'driver.photo_uploaded', 'driver', ?, 'success', ?, ?, ?)`, [
+        `aud-${crypto.randomUUID()}`, tokenRow.organization_id, tokenRow.driver_id, req.ip, JSON.stringify({ via: 'one_time_upload_link' }), now
+      ]);
+      await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'driver.photo_uploaded', 'driver', ?, ?, 'pending', 0, ?)`, [
+        `out-${crypto.randomUUID()}`, tokenRow.organization_id, tokenRow.driver_id, JSON.stringify({ driverId: tokenRow.driver_id, organizationId: tokenRow.organization_id, cardNumber }), now
+      ]);
+      return { driverId: tokenRow.driver_id, driverName: tokenRow.name, cardNumber };
+    });
+    committed = true;
+    return res.json({ success: true, card: { ...result, status: 'issued' } });
+  } finally {
+    if (!committed) await removeStoredFile(storageValue);
+  }
+}));
+
+driversRouter.get('/:id/card', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN']), requireScope('drivers:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const card = await queryOneAsync<any>(`SELECT d.id, d.organization_id, d.name, d.email, d.phone, d.license_number, d.vehicle_type, d.vehicle_plate, d.card_number, d.card_issued_at, d.photo_uploaded_at, d.photo_storage_key, b.name AS branch_name, b.code AS branch_code FROM drivers d LEFT JOIN branches b ON b.id = d.branch_id AND b.organization_id = d.organization_id WHERE d.id = ? AND d.organization_id = ? AND d.active = 1`, [req.params.id, req.organizationId]);
+  if (!card) return res.status(404).json({ success: false, error: 'Conductor no encontrado en esta organización.' });
+  return res.json({ success: true, card: { ...driverResponse(card), status: card.photo_storage_key && card.card_number ? 'issued' : 'pending_photo', photoUrl: card.photo_storage_key ? `/api/v1/drivers/${encodeURIComponent(card.id)}/photo` : null } });
+}));
+
+driversRouter.get('/:id/photo', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS', 'DRIVER', 'COURIER']), requireScope('drivers:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const driver = await queryOneAsync<{ photo_storage_key: string | null; user_id: string | null }>('SELECT photo_storage_key, user_id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [req.params.id, req.organizationId]);
+  if (!driver) return res.status(404).end();
+  const role = normalizeRole(req.user?.role);
+  if (['DRIVER', 'COURIER'].includes(role) && driver.user_id !== req.user!.userId) return res.status(403).json({ success: false, error: 'No autorizado para ver la foto de otro conductor.' });
+  if (!driver.photo_storage_key) return res.status(404).end();
+  const file = await readStoredFile(driver.photo_storage_key);
+  if (!file) return res.status(404).end();
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.type(file.mimeType).send(file.buffer);
 }));
 
 const telemetrySchema = z.object({ driverId: z.string().trim().min(1).max(120), lat: z.coerce.number().finite().min(-90).max(90), lng: z.coerce.number().finite().min(-180).max(180), speed: z.coerce.number().finite().min(0).max(300).default(0), heading: z.coerce.number().finite().min(0).max(360).default(0), battery: z.coerce.number().finite().min(0).max(100).default(100) });

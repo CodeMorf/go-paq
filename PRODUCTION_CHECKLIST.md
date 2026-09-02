@@ -17,10 +17,11 @@
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
-- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 61 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 65 pruebas API/seguridad, build Vite y `git diff --check` verificados.
 - [x] Configuración Global: 14 secciones con valores por tenant, API PATCH protegida, control de versión, auditoría, outbox e historial de revisiones.
 - [x] Identidad visual: logo PNG transparente y favicon se guardan mediante API en almacenamiento persistente; colores, favicon y logo se aplican después de confirmación del backend.
 - [x] Maestros operativos: alta real de sucursales y conductores con validación de tenant, sucursal, duplicados, auditoría y outbox.
+- [x] Identidad de conductores: alta genera enlace de foto de un solo uso; la foto se persiste, el token se guarda como hash y el carnet se emite desde la API.
 - [x] Google Maps: credencial de navegador separada de la configuración de negocio, cifrada en PostgreSQL, versionada/auditada y con estado público `NO CONFIGURADO` cuando no existe.
 - [x] El selector cruzado Admin/Portal/Agencia/Driver fue eliminado; cada área permanece en su propia ruta, sesión y guard de backend.
 - [x] Mudanzas y carga pesada: cotización, orden persistida, trabajo unificado, ruta, POD y rastreo canónico verificados en API.

@@ -300,6 +300,23 @@ async function runComprehensiveTestSuite() {
   assert(createdDriver.status === 201 && createdDriverRow?.organization_id === 'org-gopaq' && createdDriverRow?.branch_id === createdBranch.body.branch?.id, 'DRIVER MASTER DATA: admin creates a durable driver assigned to an owned branch');
   assert(clientDriverCreate.status === 403, 'DRIVER MASTER DATA RBAC: client cannot create operational drivers');
 
+  const initialPhotoToken = createdDriver.body.photoUpload?.url ? new URL(createdDriver.body.photoUpload.url).searchParams.get('token') : null;
+  const tokenRow = initialPhotoToken ? await queryOneAsync<{ token_hash: string; used_at: string | null }>('SELECT token_hash, used_at FROM driver_photo_upload_tokens WHERE driver_id = ? AND organization_id = ?', [createdDriver.body.driver?.id, 'org-gopaq']) : null;
+  const reissuedPhotoLink = createdDriver.body.driver?.id ? await request(app).post(`/api/v1/drivers/${createdDriver.body.driver.id}/photo-link`).set('Authorization', `Bearer ${token}`) : { status: 0, body: {} };
+  const reissuedPhotoToken = reissuedPhotoLink.body.photoUpload?.url ? new URL(reissuedPhotoLink.body.photoUpload.url).searchParams.get('token') : null;
+  const revokedUpload = initialPhotoToken ? await request(app).post(`/api/v1/drivers/photo-upload/${initialPhotoToken}`).send({ photoDataUrl: tinyPng }) : { status: 0, body: {} };
+  const uploadedDriverPhoto = reissuedPhotoToken ? await request(app).post(`/api/v1/drivers/photo-upload/${reissuedPhotoToken}`).send({ photoDataUrl: tinyPng }) : { status: 0, body: {} };
+  const repeatedDriverPhoto = reissuedPhotoToken ? await request(app).post(`/api/v1/drivers/photo-upload/${reissuedPhotoToken}`).send({ photoDataUrl: tinyPng }) : { status: 0, body: {} };
+  const driverCard = createdDriver.body.driver?.id ? await request(app).get(`/api/v1/drivers/${createdDriver.body.driver.id}/card`).set('Authorization', `Bearer ${token}`) : { status: 0, body: {} };
+  const driverPhotoAsset = createdDriver.body.driver?.id ? await request(app).get(`/api/v1/drivers/${createdDriver.body.driver.id}/photo`).set('Authorization', `Bearer ${token}`) : { status: 0, headers: {} };
+  const clientDriverCard = createdDriver.body.driver?.id ? await request(app).get(`/api/v1/drivers/${createdDriver.body.driver.id}/card`).set('Authorization', `Bearer ${demoRes.body.token}`) : { status: 0, body: {} };
+  const driverAfterPhoto = createdDriver.body.driver?.id ? await request(app).get('/api/v1/drivers').set('Authorization', `Bearer ${token}`) : { status: 0, body: {} };
+  const persistedPhotoDriver = driverAfterPhoto.body.drivers?.find((driver: any) => driver.id === createdDriver.body.driver?.id);
+  assert(!!initialPhotoToken && !!reissuedPhotoToken && reissuedPhotoLink.status === 201 && tokenRow?.token_hash !== initialPhotoToken && tokenRow?.used_at === null, 'DRIVER IDENTITY: creation and regeneration issue hashed one-time photo links without storing the raw token');
+  assert(revokedUpload.status === 410 && uploadedDriverPhoto.status === 200 && uploadedDriverPhoto.body.card?.status === 'issued' && !!uploadedDriverPhoto.body.card?.cardNumber, 'DRIVER IDENTITY: revoked link is rejected and valid upload persists the photo and issues a carnet');
+  assert(repeatedDriverPhoto.status === 409 && driverCard.status === 200 && driverCard.body.card?.status === 'issued' && driverPhotoAsset.status === 200 && driverPhotoAsset.headers['content-type']?.startsWith('image/'), 'DRIVER IDENTITY: upload is single-use and the private persisted photo/card endpoints return real data');
+  assert(clientDriverCard.status === 403 && persistedPhotoDriver?.card_status === 'issued' && persistedPhotoDriver?.has_photo === true, 'DRIVER IDENTITY RBAC: client cannot read administrative carnet data and the list reflects the persisted issuance state');
+
   const branchLogoUpdate = await request(app)
     .patch(`/api/v1/branches/${createdBranch.body.branch?.id}`)
     .set('Authorization', `Bearer ${token}`)

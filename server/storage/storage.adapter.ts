@@ -14,7 +14,7 @@ function storageRoot() {
  * External S3/MinIO implementations can replace this adapter without changing
  * the shipment or driver domains.
  */
-export type StorageCategory = 'signatures' | 'pod-photos' | 'branding' | 'branch-logos';
+export type StorageCategory = 'signatures' | 'pod-photos' | 'branding' | 'branch-logos' | 'driver-photos';
 
 export async function storeDataUrl(value: string | undefined, category: StorageCategory, maxBytes: number): Promise<string | undefined> {
   if (!value) return undefined;
@@ -48,4 +48,15 @@ export async function readStoredFile(value: string | undefined): Promise<{ buffe
   } catch {
     return null;
   }
+}
+
+/** Removes one previously-created object after a failed database transaction. */
+export async function removeStoredFile(value: string | undefined): Promise<void> {
+  if (!value?.startsWith('storage://')) return;
+  const relative = value.slice('storage://'.length).replaceAll('/', path.sep);
+  if (!relative || relative.includes('..') || path.isAbsolute(relative)) return;
+  const absolute = path.resolve(storageRoot(), relative);
+  const root = path.resolve(storageRoot());
+  if (absolute === root || !absolute.startsWith(`${root}${path.sep}`)) return;
+  try { await fs.unlink(absolute); } catch { /* A missing cleanup object is harmless. */ }
 }

@@ -136,6 +136,10 @@ CREATE TABLE IF NOT EXISTS drivers (
   heading REAL DEFAULT 0,
   battery REAL DEFAULT 100,
   rating REAL DEFAULT 5.0,
+  photo_storage_key TEXT,
+  photo_uploaded_at TEXT,
+  card_number TEXT,
+  card_issued_at TEXT,
   active INTEGER DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -214,6 +218,24 @@ CREATE TABLE IF NOT EXISTS rates_matrix (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS driver_photo_upload_tokens (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  driver_id TEXT NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  revoked_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_driver_photo_tokens_active
+  ON driver_photo_upload_tokens(organization_id, driver_id, expires_at, used_at, revoked_at);
 
 CREATE TABLE IF NOT EXISTS countries (
   id TEXT PRIMARY KEY,

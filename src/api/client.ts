@@ -145,7 +145,20 @@ export class ApiClient {
   static async createRoute(payload: any): Promise<ApiResponse<{ route: any }>> { return this.request<{ route: any }>('/routes', { method: 'POST', body: JSON.stringify(payload) }); }
   static async dispatchRoute(routeId: string, driverId?: string): Promise<ApiResponse<{ message: string }>> { return this.request<{ message: string }>(`/routes/${routeId}/dispatch`, { method: 'POST', body: JSON.stringify({ driverId }) }); }
   static async getDrivers(): Promise<ApiResponse<{ drivers: any[] }>> { return this.request<{ drivers: any[] }>('/drivers'); }
-  static async createDriver(payload: { name: string; email?: string; phone: string; licenseNumber: string; vehicleType: string; vehiclePlate: string; branchId: string; userId?: string }): Promise<ApiResponse<{ driver: any }>> { return this.request<{ driver: any }>('/drivers', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async createDriver(payload: { name: string; email?: string; phone: string; licenseNumber: string; vehicleType: string; vehiclePlate: string; branchId: string; userId?: string }): Promise<ApiResponse<{ driver: any; photoUpload: { url: string; expiresAt: string; expiresInHours: number } }>> { return this.request<{ driver: any; photoUpload: { url: string; expiresAt: string; expiresInHours: number } }>('/drivers', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async generateDriverPhotoLink(driverId: string): Promise<ApiResponse<{ photoUpload: { url: string; expiresAt: string; expiresInHours: number } }>> { return this.request<{ photoUpload: { url: string; expiresAt: string; expiresInHours: number } }>(`/drivers/${encodeURIComponent(driverId)}/photo-link`, { method: 'POST' }); }
+  static async getDriverCard(driverId: string): Promise<ApiResponse<{ card: any }>> { return this.request<{ card: any }>(`/drivers/${encodeURIComponent(driverId)}/card`); }
+  static async uploadDriverPhoto(token: string, photoDataUrl: string): Promise<ApiResponse<{ card: any }>> { return this.request<{ card: any }>(`/drivers/photo-upload/${encodeURIComponent(token)}`, { method: 'POST', body: JSON.stringify({ photoDataUrl }) }, false); }
+  static async getDriverPhoto(driverId: string): Promise<ApiResponse<{ url: string }>> {
+    const token = this.getToken();
+    try {
+      const response = await fetch(`${API_BASE}/drivers/${encodeURIComponent(driverId)}/photo`, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' });
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}` };
+      return { success: true, url: URL.createObjectURL(await response.blob()) };
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'No fue posible cargar la foto del conductor.' };
+    }
+  }
   static async sendDriverTelemetry(payload: { driverId: string; lat: number; lng: number; speed?: number; heading?: number; battery?: number }): Promise<ApiResponse<{ processed: any }>> { return this.request<{ processed: any }>('/drivers/telemetry', { method: 'POST', body: JSON.stringify(payload) }); }
   static async getActiveManifest(driverId?: string): Promise<ApiResponse<{ driver: any; route: any; stops: any[] }>> { return this.request<{ driver: any; route: any; stops: any[] }>(`/drivers/active-manifest?driverId=${driverId || ''}`); }
   static async startRoute(routeId: string): Promise<ApiResponse<{ routeId: string; status: string; startedAt: string }>> { return this.request<{ routeId: string; status: string; startedAt: string }>(`/drivers/routes/${encodeURIComponent(routeId)}/start`, { method: 'POST' }); }

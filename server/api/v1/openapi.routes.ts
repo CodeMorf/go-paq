@@ -189,10 +189,45 @@ openapiRouter.get('/openapi.json', (req, res) => {
       '/drivers': {
         post: {
           summary: 'Crear conductor y asignarlo a una sucursal',
-          description: 'Crea un perfil operativo real, valida la pertenencia de la sucursal y registra auditoría/outbox.',
+          description: 'Crea un perfil operativo real, valida la pertenencia de la sucursal, genera un enlace de foto de un solo uso y registra auditoría/outbox.',
           security: [{ bearerAuth: [] }],
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name', 'phone', 'licenseNumber', 'vehicleType', 'vehiclePlate', 'branchId'], properties: { name: { type: 'string' }, email: { type: 'string', format: 'email' }, phone: { type: 'string' }, licenseNumber: { type: 'string' }, vehicleType: { type: 'string' }, vehiclePlate: { type: 'string' }, branchId: { type: 'string' }, userId: { type: 'string' } } } } } },
-          responses: { '201': { description: 'Conductor persistido' }, '403': { description: 'Rol o scope no autorizado' }, '409': { description: 'Licencia o placa duplicada' }, '422': { description: 'Datos inválidos o sucursal no válida' } }
+          responses: { '201': { description: 'Conductor y enlace temporal persistidos' }, '403': { description: 'Rol o scope no autorizado' }, '409': { description: 'Licencia o placa duplicada' }, '422': { description: 'Datos inválidos o sucursal no válida' } }
+        }
+      },
+      '/drivers/{id}/photo-link': {
+        post: {
+          summary: 'Regenerar enlace temporal para la foto del conductor',
+          description: 'Revoca enlaces anteriores no utilizados y devuelve un enlace de un solo uso con vigencia de 24 horas. El token crudo nunca se guarda.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '201': { description: 'Enlace temporal generado' }, '403': { description: 'Rol o scope no autorizado' }, '404': { description: 'Conductor no encontrado' } }
+        }
+      },
+      '/drivers/photo-upload/{token}': {
+        post: {
+          summary: 'Cargar foto de conductor mediante enlace temporal',
+          description: 'Endpoint público protegido por token aleatorio de un solo uso. La foto se valida, se persiste en almacenamiento y emite el carnet dentro de una transacción.',
+          parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string', minLength: 64, maxLength: 64 } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['photoDataUrl'], properties: { photoDataUrl: { type: 'string', description: 'Imagen data URL JPG, PNG o WEBP de máximo 2 MB decodificados' } } } } } },
+          responses: { '200': { description: 'Foto persistida y carnet emitido' }, '409': { description: 'Enlace ya utilizado' }, '410': { description: 'Enlace vencido o inválido' }, '422': { description: 'Foto inválida' } }
+        }
+      },
+      '/drivers/{id}/card': {
+        get: {
+          summary: 'Consultar carnet persistido del conductor',
+          description: 'Devuelve datos del carnet y un endpoint privado para la foto. Solo roles administrativos del tenant pueden consultarlo.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'Carnet y estado de foto' }, '403': { description: 'Rol o scope no autorizado' }, '404': { description: 'Conductor no encontrado' } }
+        }
+      },
+      '/drivers/{id}/photo': {
+        get: {
+          summary: 'Obtener foto privada del conductor',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'Imagen persistida' }, '403': { description: 'Acceso denegado' }, '404': { description: 'Foto no encontrada' } }
         }
       }
     },

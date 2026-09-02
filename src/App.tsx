@@ -31,6 +31,7 @@ import { CashRegister } from './components/sucursal/CashRegister';
 import { DriverApp } from './components/driver/DriverApp';
 import { ApiDocs } from './components/docs/ApiDocs';
 import { PublicSite } from './components/public/PublicSite';
+import { DriverPhotoUpload } from './components/public/DriverPhotoUpload';
 import { ProductionMassScanPanel, ProductionBranchesAdmin, ProductionClientsAdmin, ProductionDangerZonesAdmin, ProductionRatesAdmin } from './components/super-admin/AdminMasterDataPanels';
 
 type Section = 'super-admin' | 'portal' | 'sucursal' | 'driver';
@@ -220,6 +221,7 @@ export default function App() {
     <Route path="/sucursales" element={<PublicSite />} />
     <Route path="/nosotros" element={<PublicSite />} />
     <Route path="/contacto" element={<PublicSite />} />
+    <Route path="/driver-photo-upload" element={<DriverPhotoUpload />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/super-admin/login" element={<RoleLoginPage area="super-admin" />} />
