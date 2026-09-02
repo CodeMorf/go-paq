@@ -113,7 +113,7 @@ export async function checkDatabase(): Promise<{ ok: boolean; engine: 'postgres'
         `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') AS installed`
       );
       if (extension?.installed) {
-        const postgis = await queryOneAsync<{ version: string }>('SELECT PostGIS_Extension_Version() AS version');
+        const postgis = await queryOneAsync<{ version: string }>('SELECT postgis_full_version() AS version');
         postgisVersion = postgis?.version || undefined;
       }
       return { ok: !!row, engine: 'postgres', postgisVersion };
