@@ -200,7 +200,7 @@ GoPaq/
 ## 🔒 Seguridad y Privacidad
 
 - Variables de entorno sensibles (`.env*`), credenciales de base de datos y certificados privados están permanentemente excluidos mediante `.gitignore`.
-- Las claves y tokens mostrados en la documentación del portal son datos simulados con fines de demostración.
+- La documentación usa el marcador `YOUR_API_KEY`; las claves reales solo se generan desde una sesión autorizada, se almacenan hasheadas y se muestran una sola vez.
 
 ---
 

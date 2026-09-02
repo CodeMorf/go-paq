@@ -16,7 +16,8 @@
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
-- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 26 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 30 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] Mudanzas y carga pesada: cotización, orden persistida, trabajo unificado, ruta, POD y rastreo canónico verificados en API.
 
 ## VPS y despliegue verificados
 
@@ -47,6 +48,7 @@
 - [x] Driver: manifiesto, inicio de ruta, POD, foto/firma desde la app y COD; replay idempotente verificado.
 - [x] COD: `collected_driver → received_branch → reconciled → settled_merchant`, con replay sin doble liquidación.
 - [x] Internacional: casillero, prealerta y replay idempotente; consolidación queda conectada al motor y sin datos inventados.
+- [x] Mudanza/carga pesada: orden real desde panel, asignación a ruta, manifiesto Driver, POD y tracking canónico verificados en API.
 - [x] Reinicio de API/worker y Redis: readiness recuperado y datos persistentes conservados en PostgreSQL.
 
 ## Pendientes reales antes de ampliar tráfico
