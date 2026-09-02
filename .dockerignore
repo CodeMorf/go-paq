@@ -1,0 +1,23 @@
+# Never copy runtime secrets or local environment overrides into an image.
+.env
+.env.*
+!.env.example
+
+# Local/developer-only content.
+.git
+node_modules
+dist
+coverage
+data
+*.sqlite
+*.sqlite-*
+*.db
+*.dump
+*.log
+
+# Editor and operating-system files.
+.vscode
+.idea
+*.swp
+Thumbs.db
+Desktop.ini
