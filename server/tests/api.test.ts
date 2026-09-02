@@ -87,6 +87,24 @@ async function runComprehensiveTestSuite() {
     .send({ name: 'Cliente sin sucursal', email: `missing_branch_${Date.now()}@example.com`, phone: '8095550101' });
   assert(missingClientBranch.status === 422, 'CLIENT OWNERSHIP: administrative client creation requires an active branch');
 
+  // Branch location management: only an authenticated tenant administrator can
+  // persist verified coordinates used by the real public branch map.
+  const branchLocationRes = await request(app)
+    .patch('/api/v1/branches/br-sdq-central/location')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ latitude: 18.4861, longitude: -69.9312 });
+  assert(branchLocationRes.status === 200 && branchLocationRes.body.branch.latitude === 18.4861 && branchLocationRes.body.branch.longitude === -69.9312, 'BRANCH MAP: admin persists verified branch coordinates');
+  const partialBranchLocation = await request(app)
+    .patch('/api/v1/branches/br-sdq-central/location')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ latitude: 18.4861, longitude: null });
+  assert(partialBranchLocation.status === 422, 'BRANCH MAP: partial coordinates are rejected');
+  const clientBranchLocation = await request(app)
+    .patch('/api/v1/branches/br-sdq-central/location')
+    .set('Authorization', `Bearer ${demoRes.body.token}`)
+    .send({ latitude: 18.4861, longitude: -69.9312 });
+  assert(clientBranchLocation.status === 403, 'BRANCH MAP RBAC: client cannot change branch coordinates');
+
   // 5. Security: Unauthenticated access rejected
   const unauthRes = await request(app).get('/api/v1/shipments');
   assert(unauthRes.status === 401, 'GET /api/v1/shipments rejects unauthenticated requests with 401');

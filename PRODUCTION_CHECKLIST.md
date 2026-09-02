@@ -47,6 +47,7 @@
 - [x] Login productivo de Super Admin verificado; su intento de entrar al portal devuelve 403.
 - [x] Las superficies de login no muestran `Acceso de prueba`; el endpoint demo existente permanece aislado en `org-demo` para pruebas internas controladas.
 - [ ] Google Maps público: falta registrar una clave real restringida en `/super-admin/configuracion` y verificar la carga contra Google; sin esa credencial el estado esperado es `NO CONFIGURADO`.
+- [ ] Coordenadas de sucursales: falta confirmar y guardar desde `/super-admin/configuracion` la ubicación exacta de cada sucursal productiva; sin coordenadas el mapa permanece sin pines y no calcula cercanía.
 - [x] Cliente: cotización backend, creación de shipment, persistencia e historial de tracking.
 - [x] Sucursal: recepción/escaneo idempotente e inventario persistido.
 - [x] Dispatcher: creación, asignación y despacho de ruta; Witylogix reporta `provider_unavailable` cuando no hay credenciales.

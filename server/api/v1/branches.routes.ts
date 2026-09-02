@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
+import { isPostgres, queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
 import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '../../auth/middleware';
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
@@ -23,6 +23,53 @@ branchesRouter.get('/', authenticate, requireScope('branches:read'), asyncHandle
     ? await queryAllAsync('SELECT * FROM branches WHERE organization_id = ? AND id = ? AND active = 1 ORDER BY is_hub DESC, name ASC', [orgId, req.user!.branchId])
     : await queryAllAsync('SELECT * FROM branches WHERE organization_id = ? AND active = 1 ORDER BY is_hub DESC, name ASC', [orgId]);
   return res.json({ success: true, branches });
+}));
+
+const locationSchema = z.object({
+  latitude: z.union([z.null(), z.coerce.number().min(-90).max(90)]),
+  longitude: z.union([z.null(), z.coerce.number().min(-180).max(180)])
+}).strict().superRefine((value, context) => {
+  if ((value.latitude === null) !== (value.longitude === null)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'La latitud y la longitud deben guardarse juntas.' });
+  }
+});
+
+// Branch coordinates are operational master data. Only tenant administrators
+// can change them, and every change is persisted together with its audit/outbox
+// records so public maps never depend on browser-only state.
+branchesRouter.patch('/:id/location', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN']), requireScope('branches:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const parsed = locationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: parsed.error.issues[0]?.message || 'Coordenadas inválidas.' });
+
+  const branchId = String(req.params.id || '').trim();
+  const organizationId = req.organizationId!;
+  const now = new Date().toISOString();
+  const branch = await transactionAsync(async (tx) => {
+    const current = await tx.queryOne<any>('SELECT id, code, name, city, address, latitude, longitude FROM branches WHERE id = ? AND organization_id = ? AND active = 1', [branchId, organizationId]);
+    if (!current) throw Object.assign(new Error('Sucursal no encontrada.'), { statusCode: 404 });
+
+    let updated;
+    if (isPostgres && parsed.data.latitude !== null && parsed.data.longitude !== null) {
+      // PostGIS receives longitude first, latitude second (X/Y).
+      updated = await tx.execute(`UPDATE branches SET latitude = ?, longitude = ?, location = ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.latitude, parsed.data.longitude, parsed.data.longitude, parsed.data.latitude, now, branchId, organizationId]);
+    } else {
+      updated = await tx.execute(`UPDATE branches SET latitude = ?, longitude = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.latitude, parsed.data.longitude, now, branchId, organizationId]);
+    }
+    if (updated.changes !== 1) throw Object.assign(new Error('La sucursal cambió mientras se guardaba su ubicación.'), { statusCode: 409 });
+
+    await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, 'branch.location_updated', 'branch', ?, 'success', ?, ?, ?)`, [
+      `aud-${crypto.randomUUID()}`, organizationId, req.user!.userId, branchId, req.ip,
+      JSON.stringify({ latitude: parsed.data.latitude, longitude: parsed.data.longitude, previousLatitude: current.latitude, previousLongitude: current.longitude }), now
+    ]);
+    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'branch.location_updated', 'branch', ?, ?, 'pending', 0, ?)`, [
+      `out-${crypto.randomUUID()}`, organizationId, branchId,
+      JSON.stringify({ branchId, latitude: parsed.data.latitude, longitude: parsed.data.longitude, updatedAt: now }), now
+    ]);
+
+    return { ...current, latitude: parsed.data.latitude, longitude: parsed.data.longitude, updated_at: now };
+  });
+
+  return res.json({ success: true, branch });
 }));
 
 branchesRouter.get('/:id/inventory', authenticate, requireScope('branches:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {

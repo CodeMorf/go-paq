@@ -143,6 +143,16 @@ openapiRouter.get('/openapi.json', (req, res) => {
           security: [{ bearerAuth: [] }],
           responses: { '200': { description: 'Historial de revisiones' } }
         }
+      },
+      '/branches/{id}/location': {
+        patch: {
+          summary: 'Guardar coordenadas verificadas de una sucursal',
+          description: 'Actualiza latitud y longitud del tenant y sincroniza el punto PostGIS cuando PostgreSQL está activo. Latitud y longitud deben enviarse juntas o ambas como null.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['latitude', 'longitude'], properties: { latitude: { type: ['number', 'null'], minimum: -90, maximum: 90 }, longitude: { type: ['number', 'null'], minimum: -180, maximum: 180 } } } } } },
+          responses: { '200': { description: 'Ubicación persistida y publicada para el mapa' }, '403': { description: 'Rol no autorizado' }, '404': { description: 'Sucursal no encontrada' }, '422': { description: 'Coordenadas inválidas o incompletas' } }
+        }
       }
     },
     components: {

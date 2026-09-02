@@ -11,6 +11,7 @@ import {
   HardDrive,
   LockKeyhole,
   MapPinned,
+  MapPin,
   PackageCheck,
   Palette,
   RefreshCw,
@@ -150,6 +151,10 @@ export const GlobalConfiguration: React.FC = () => {
   const [googleMapsKey, setGoogleMapsKey] = useState('');
   const [googleMapsSaving, setGoogleMapsSaving] = useState(false);
   const [googleMapsError, setGoogleMapsError] = useState('');
+  const [branches, setBranches] = useState<any[]>([]);
+  const [branchLocationsLoading, setBranchLocationsLoading] = useState(false);
+  const [branchLocationSaving, setBranchLocationSaving] = useState<string | null>(null);
+  const [branchLocationError, setBranchLocationError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -177,10 +182,21 @@ export const GlobalConfiguration: React.FC = () => {
     if (readiness.success) setReady(readiness);
     if (integrationHealth.success) setIntegrations(integrationHealth);
     if (revisionResult.success) setRevisions(revisionResult.revisions || []);
+    if (activeCategory === 'integrations') await loadBranchLocations();
     setLoading(false);
   };
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => { if (activeCategory === 'integrations' && !branches.length) void loadBranchLocations(); }, [activeCategory]);
+
+  const loadBranchLocations = async () => {
+    setBranchLocationsLoading(true);
+    setBranchLocationError('');
+    const result = await ApiClient.getBranches();
+    if (result.success) setBranches(result.branches || []);
+    else setBranchLocationError(result.error || 'No fue posible cargar las sucursales.');
+    setBranchLocationsLoading(false);
+  };
 
   const activeMeta = useMemo(() => categoryMeta.find((category) => category.key === activeCategory) || categoryMeta[0], [activeCategory]);
   const activeFields = fieldDefinitions[activeCategory];
@@ -224,6 +240,28 @@ export const GlobalConfiguration: React.FC = () => {
     addToast('success', apiKey === null ? 'Google Maps retirado' : 'Google Maps configurado', apiKey === null ? 'La credencial fue retirada del tenant.' : 'La credencial quedó guardada cifrada y versionada en PostgreSQL.');
     const revisionResult = await ApiClient.getConfigurationRevisions(10);
     if (revisionResult.success) setRevisions(revisionResult.revisions || []);
+  };
+
+  const saveBranchLocation = async (branch: any) => {
+    const latitudeValue = String(branch.latitude ?? '').trim();
+    const longitudeValue = String(branch.longitude ?? '').trim();
+    if ((latitudeValue === '') !== (longitudeValue === '')) {
+      setBranchLocationError('Completa latitud y longitud juntas, o retira ambas coordenadas.');
+      return;
+    }
+    const latitude = latitudeValue === '' ? null : Number(latitudeValue);
+    const longitude = longitudeValue === '' ? null : Number(longitudeValue);
+    if ((latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) || (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+      setBranchLocationError('La latitud debe estar entre -90 y 90 y la longitud entre -180 y 180.');
+      return;
+    }
+    setBranchLocationSaving(branch.id);
+    setBranchLocationError('');
+    const result = await ApiClient.updateBranchLocation(branch.id, { latitude, longitude });
+    setBranchLocationSaving(null);
+    if (!result.success) { setBranchLocationError(result.error || 'No fue posible guardar la ubicación.'); return; }
+    setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, ...result.branch } : item));
+    addToast('success', 'Ubicación guardada', `${branch.name} quedó persistida con coordenadas verificadas.`);
   };
 
   const displayValue = (field: Field) => {
@@ -282,6 +320,14 @@ export const GlobalConfiguration: React.FC = () => {
             </div>
             {googleMapsError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{googleMapsError}</p>}
             <p className="mt-3 text-[11px] leading-5 text-slate-500">Usa restricciones HTTP referrer para <code className="font-mono">https://gopaq.lat/*</code> y habilita únicamente Maps JavaScript API/Places si realmente los necesitas. Configurado no significa que Google haya validado la facturación o las restricciones.</p>
+          </Card>
+          <Card className="border-indigo-200 bg-indigo-50/40 dark:border-indigo-900 dark:bg-indigo-950/20">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 shrink-0 text-indigo-700 dark:text-indigo-300" /><div><h3 className="text-sm font-bold text-slate-900 dark:text-white">Ubicación real de sucursales</h3><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 dark:text-slate-300">Guarda las coordenadas exactas de cada sucursal para mostrar pines y calcular la sucursal más cercana. No se geocodifica una dirección genérica ni se inventa una ubicación.</p></div></div>
+              <Button variant="secondary" size="sm" icon={<RefreshCw className={branchLocationsLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />} onClick={() => void loadBranchLocations()} disabled={branchLocationsLoading}>Actualizar sucursales</Button>
+            </div>
+            {branchLocationError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{branchLocationError}</p>}
+            {branchLocationsLoading && !branches.length ? <p className="mt-4 text-xs text-slate-500">Cargando sucursales desde PostgreSQL…</p> : !branches.length ? <p className="mt-4 text-xs text-slate-500">No hay sucursales activas para configurar.</p> : <div className="mt-4 space-y-3">{branches.map((branch) => { const hasCoordinates = branch.latitude !== null && branch.latitude !== undefined && branch.longitude !== null && branch.longitude !== undefined; return <div key={branch.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-900 dark:text-white">{branch.name}</p><p className="mt-1 text-[11px] text-slate-500">{branch.code} · {branch.address} · {branch.city}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${hasCoordinates ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{hasCoordinates ? 'COORDENADAS VERIFICADAS' : 'UBICACIÓN PENDIENTE'}</span></div><div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="block text-xs font-bold">Latitud<input type="number" step="any" min="-90" max="90" value={branch.latitude ?? ''} onChange={(event) => setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, latitude: event.target.value } : item))} placeholder="Ej. 18.4861" className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label><label className="block text-xs font-bold">Longitud<input type="number" step="any" min="-180" max="180" value={branch.longitude ?? ''} onChange={(event) => setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, longitude: event.target.value } : item))} placeholder="Ej. -69.9312" className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label><Button variant="primary" onClick={() => void saveBranchLocation(branch)} disabled={branchLocationSaving === branch.id}>{branchLocationSaving === branch.id ? 'Guardando…' : 'Guardar ubicación'}</Button></div><p className="mt-2 text-[10px] leading-4 text-slate-500">Fuente: coordenadas confirmadas por el administrador. La ubicación se guarda también en PostGIS cuando PostgreSQL está activo.</p></div>; })}</div>}
           </Card>
           <Card><div className="mb-3 flex items-center gap-2"><Wrench className="h-4 w-4 text-indigo-600" /><h3 className="text-sm font-bold">Estado real de proveedores</h3></div><div className="grid gap-2 sm:grid-cols-2"><StatusCard label="Karrio" ok={integrations?.karrio?.status === 'ONLINE'} value={integrations?.karrio?.status || 'NO CONFIGURADO'} /><StatusCard label="Witylogix" ok={integrations?.witylogix?.status === 'ONLINE'} value={integrations?.witylogix?.status || 'NO CONFIGURADO'} /></div><p className="mt-3 text-[11px] leading-5 text-slate-500">Seleccionar un proveedor no crea credenciales ni inventa una conexión. El proveedor solo se considera activo cuando el adaptador del backend confirma el servicio.</p></Card>
         </>}
