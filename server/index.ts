@@ -36,7 +36,10 @@ async function start() {
 
     // The access token is accepted only for the handshake. It is never logged
     // and connections without a valid token are rejected before upgrade.
-    const queryToken = typeof parsedUrl.query.token === 'string' ? parsedUrl.query.token : undefined;
+    // Query-string tokens are accepted only in non-production development. In
+    // production a URL token can leak through browser history, proxies, or logs;
+    // clients must use Sec-WebSocket-Protocol instead.
+    const queryToken = process.env.NODE_ENV === 'production' ? undefined : (typeof parsedUrl.query.token === 'string' ? parsedUrl.query.token : undefined);
     const protocolToken = String(request.headers['sec-websocket-protocol'] || '').split(',').map((item) => item.trim()).find((item) => item.startsWith('gopaq-bearer.'))?.slice('gopaq-bearer.'.length);
     const user = verifyToken(protocolToken || queryToken || '');
     if (!user) return socket.destroy();
@@ -76,8 +79,29 @@ async function start() {
     });
   });
 
+  let realtimeSubscriber: import('ioredis').default | null = null;
+  if (process.env.REDIS_URL) {
+    const Redis = (await import('ioredis')).default;
+    realtimeSubscriber = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableOfflineQueue: false, connectTimeout: 5000 });
+    await realtimeSubscriber.subscribe('gopaq:realtime');
+    realtimeSubscriber.on('message', (channel, message) => {
+      if (channel !== 'gopaq:realtime') return;
+      try {
+        const event = JSON.parse(message);
+        const payload = JSON.stringify({ type: event.eventType, eventId: event.eventId, payload: event.payload });
+        wss.clients.forEach((client) => {
+          const target = client as AuthenticatedSocket;
+          if (target.readyState === WebSocket.OPEN && target.organizationId === event.organizationId) target.send(payload);
+        });
+      } catch (error) {
+        console.error('[GoPaq Realtime] invalid event', error instanceof Error ? error.message : 'invalid_event');
+      }
+    });
+  }
+
   const heartbeat = setInterval(() => { wss.clients.forEach((client) => { const ws = client as AuthenticatedSocket; if (ws.isAlive === false) return ws.terminate(); ws.isAlive = false; ws.ping(); }); }, 30000);
   wss.on('close', () => clearInterval(heartbeat));
+  server.on('close', () => { if (realtimeSubscriber) void realtimeSubscriber.quit(); });
   server.listen(PORT, () => { console.log(`GoPaq API listening on port ${PORT}`); });
 }
 

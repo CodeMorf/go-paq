@@ -1,76 +1,116 @@
-version: '3.8'
-
 services:
   gopaq-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gopaq-core-api
-    restart: always
-    ports:
-      - "${PORT:-4000}:4000"
+    image: gopaq/core:${GOPAQ_VERSION:-production}
+    container_name: gopaq-api
+    restart: unless-stopped
+    env_file:
+      - .env.production
     environment:
-      - NODE_ENV=production
-      - PORT=4000
-      # Leave DATABASE_URL empty for the current production-safe SQLite mode.
-      # PostgreSQL support remains available for the async DB layer but is not enabled
-      # by default until every legacy synchronous route has been migrated.
-      - DATABASE_URL=${DATABASE_URL:-}
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
-      - GOPAQ_PUBLIC_ORG_ID=${GOPAQ_PUBLIC_ORG_ID:-org-gopaq}
-      - KARRIO_API_URL=${KARRIO_API_URL:-}
-      - KARRIO_API_KEY=${KARRIO_API_KEY:-}
-      - WITYLOGIX_SERVICE_URL=${WITYLOGIX_SERVICE_URL:-}
-      - WITYLOGIX_API_TOKEN=${WITYLOGIX_API_TOKEN:-}
-      - WITYLOGIX_TIMEOUT_MS=${WITYLOGIX_TIMEOUT_MS:-8000}
-      - WITYLOGIX_ORDERS_PATH=${WITYLOGIX_ORDERS_PATH:-/api/v4/orders}
-      - WITYLOGIX_DRIVERS_PATH=${WITYLOGIX_DRIVERS_PATH:-/api/v4/drivers}
-      - WITYLOGIX_ROUTES_PATH=${WITYLOGIX_ROUTES_PATH:-/api/v4/routes}
-      - WITYLOGIX_HEALTH_PATH=${WITYLOGIX_HEALTH_PATH:-/health}
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      CORS_ORIGINS: https://gopaq.lat
+      GOPAQ_PUBLIC_ORG_ID: ${GOPAQ_PUBLIC_ORG_ID}
+      GOPAQ_VERSION: ${GOPAQ_VERSION:-production}
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - gopaq_uploads:/app/data/uploads
     depends_on:
+      gopaq-migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
-    volumes:
-      - gopaq_sqlite_data:/app/server/db
-
-  redis:
-    image: redis:7-alpine
-    container_name: gopaq-redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
       timeout: 5s
       retries: 10
+      start_period: 20s
+    networks: [gopaq_private]
 
-  # Optional PostgreSQL/PostGIS target for the ongoing async DB migration.
-  # Start explicitly with: docker compose --profile postgres up -d postgres
+  gopaq-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gopaq/core:${GOPAQ_VERSION:-production}
+    container_name: gopaq-migrate
+    restart: "no"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    command: ["tsx", "server/migrate.ts"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [gopaq_private]
+
+  gopaq-worker:
+    image: gopaq/core:${GOPAQ_VERSION:-production}
+    container_name: gopaq-worker
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      GOPAQ_VERSION: ${GOPAQ_VERSION:-production}
+    command: ["npm", "run", "worker"]
+    depends_on:
+      gopaq-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks: [gopaq_private]
+
   postgres:
-    profiles: ["postgres"]
-    image: postgis/postgis:16-3.4-alpine
+    image: postgis/postgis:18-3.6
     container_name: gopaq-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-gopaq_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gopaq_password}
-      POSTGRES_DB: ${POSTGRES_DB:-gopaq_db}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/18/docker
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gopaq_user} -d ${POSTGRES_DB:-gopaq_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 15
+    networks: [gopaq_private]
+
+  redis:
+    image: redis:8.10.1-alpine3.23
+    container_name: gopaq-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    networks: [gopaq_private]
 
 volumes:
-  gopaq_sqlite_data:
   postgres_data:
+    name: gopaq_postgres_data
   redis_data:
+    name: gopaq_redis_data
+  gopaq_uploads:
+    name: gopaq_uploads
+
+networks:
+  gopaq_private:
+    name: gopaq_private
+    internal: true

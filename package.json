@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "server": "tsx server/index.ts",
+    "worker": "tsx server/worker.ts",
     "test": "tsx server/tests/api.test.ts",
     "seed": "tsx -e \"import { runSeeds } from './server/db/seed'; runSeeds();\"",
     "seed:demo": "tsx -e \"import { runDemoSeeds } from './server/db/seed'; runDemoSeeds();\"",
