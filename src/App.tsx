@@ -43,6 +43,7 @@ import { DriversDispatch } from './components/sucursal/DriversDispatch';
 import { CashRegister } from './components/sucursal/CashRegister';
 import { DriverApp } from './components/driver/DriverApp';
 import { ApiDocs } from './components/docs/ApiDocs';
+import { PublicSite } from './components/public/PublicSite';
 
 type Section = 'super-admin' | 'portal' | 'sucursal' | 'driver';
 
@@ -197,7 +198,7 @@ const AreaContent: React.FC<{ section: Section }> = ({ section }) => {
 const RootRedirect = () => {
   const [target, setTarget] = useState<string | null>(null);
   useEffect(() => {
-    if (!ApiClient.hasSession()) { setTarget('/login'); return; }
+    if (!ApiClient.hasSession()) { setTarget('/'); return; }
     ApiClient.getMe().then(result => setTarget(result.success && result.user ? destinationForRole(result.user.role) : '/login'));
   }, []);
   return target ? <Navigate to={target} replace /> : <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Cargando GoPaq…</div>;
@@ -205,7 +206,13 @@ const RootRedirect = () => {
 
 export default function App() {
   return <ErrorBoundary><AppProvider><BrowserRouter><Routes>
-    <Route path="/" element={<RootRedirect />} />
+    <Route path="/" element={<PublicSite />} />
+    <Route path="/servicios/*" element={<PublicSite />} />
+    <Route path="/rastreo" element={<PublicSite />} />
+    <Route path="/cotizar" element={<PublicSite />} />
+    <Route path="/sucursales" element={<PublicSite />} />
+    <Route path="/nosotros" element={<PublicSite />} />
+    <Route path="/contacto" element={<PublicSite />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/super-admin/login" element={<RoleLoginPage area="super-admin" />} />

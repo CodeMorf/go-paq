@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /super-admin/
+Disallow: /portal/
+Disallow: /sucursal/
+Disallow: /driver/
+Disallow: /api/
+
+Sitemap: https://gopaq.lat/sitemap.xml

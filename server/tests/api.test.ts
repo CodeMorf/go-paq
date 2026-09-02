@@ -206,6 +206,25 @@ async function runComprehensiveTestSuite() {
   const settledRow = queryOne<{ status: string }>('SELECT status FROM cod_transactions WHERE id = ?', [ownCodId]);
   assert(ownSettlement.status === 200 && repeatedSettlement.status === 200 && settledRow?.status === 'settled_merchant', 'COD IDEMPOTENCY: settlement is atomic and a retry does not double-settle');
 
+  // 19. Driver manifest -> route start -> POD/COD, all in one transaction
+  const driverLogin = await request(app).post('/api/v1/auth/login').send({ email: 'driver@gopaq.local', password: 'GoPaq123!', area: 'driver' });
+  const driverToken = driverLogin.body.token;
+  const driverRouteId = `rt-driver-test-${Date.now()}`;
+  const driverStopId = `stp-driver-test-${Date.now()}`;
+  const createdShipmentId = createShpRes.body.shipment.id;
+  execute(`INSERT INTO routes (id, organization_id, branch_id, driver_id, name, date, status, total_stops, created_at, updated_at) VALUES (?, 'org-gopaq', 'br-sdq-central', 'drv-01', 'Ruta de prueba API', CURRENT_DATE, 'draft', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, [driverRouteId]);
+  execute(`INSERT INTO route_stops (id, route_id, shipment_id, sequence_order, type, address_json, contact_name, contact_phone, status) VALUES (?, ?, ?, 1, 'delivery', ?, 'Cliente B', NULL, 'pending')`, [driverStopId, driverRouteId, createdShipmentId, JSON.stringify({ name: 'Cliente B', city: 'Santo Domingo', address: 'Calle Sol #20' })]);
+  execute(`UPDATE shipments SET assigned_route_id = ?, assigned_driver_id = 'drv-01' WHERE id = ? AND organization_id = 'org-gopaq'`, [driverRouteId, createdShipmentId]);
+  const startRouteRes = await request(app).post(`/api/v1/drivers/routes/${driverRouteId}/start`).set('Authorization', `Bearer ${driverToken}`);
+  const podKey = `pod-test-${Date.now()}`;
+  const completePodRes = await request(app).post(`/api/v1/drivers/stops/${driverStopId}/complete`).set('Authorization', `Bearer ${driverToken}`).set('Idempotency-Key', podKey).send({ pod: { recipientName: 'Cliente B', signatureUrl: 'storage://test-signature' }, collectedCod: 2500, codMethod: 'cash' });
+  const repeatedPodRes = await request(app).post(`/api/v1/drivers/stops/${driverStopId}/complete`).set('Authorization', `Bearer ${driverToken}`).set('Idempotency-Key', podKey).send({ pod: { recipientName: 'Cliente B', signatureUrl: 'storage://test-signature' }, collectedCod: 2500, codMethod: 'cash' });
+  const completedShipment = queryOne<{ status: string; cod_collected: number }>('SELECT status, cod_collected FROM shipments WHERE id = ?', [createdShipmentId]);
+  assert(driverLogin.status === 200 && startRouteRes.status === 200 && completePodRes.status === 200 && repeatedPodRes.status === 200 && completedShipment?.status === 'delivered' && Number(completedShipment.cod_collected) === 1, 'DRIVER FLOW: authenticated route start, POD, COD collection and idempotent replay persist atomically');
+
+  const publicBranches = await request(app).get('/api/v1/branches/public');
+  assert(publicBranches.status === 200 && Array.isArray(publicBranches.body.branches), 'PUBLIC GATEWAY: branch directory returns only active public records');
+
   console.log(`\n======================================================`);
   console.log(`TEST SUITE RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log(`======================================================\n`);

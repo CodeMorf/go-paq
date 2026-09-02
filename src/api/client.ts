@@ -10,11 +10,19 @@ export type ApiResponse<T = Record<string, any>> =
   | ({ success: false; error: string } & Partial<T>);
 
 export class ApiClient {
+  private static readonly tokenStorageKey = 'gopaq_access_token';
+
   private static getToken(): string | null {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem('gopaq_token') : null;
+    return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(this.tokenStorageKey) : null;
   }
 
-  private static async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+  private static setToken(token: string | null) {
+    if (typeof sessionStorage === 'undefined') return;
+    if (token) sessionStorage.setItem(this.tokenStorageKey, token);
+    else sessionStorage.removeItem(this.tokenStorageKey);
+  }
+
+  private static async request<T = any>(endpoint: string, options: RequestInit = {}, allowRefresh = true): Promise<ApiResponse<T>> {
     const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -24,9 +32,14 @@ export class ApiClient {
     if (token) headers.Authorization = `Bearer ${token}`;
 
     try {
-      const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+      const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, credentials: 'include' });
       const data = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+      if (res.status === 401 && allowRefresh && !endpoint.startsWith('/auth/')) {
+        const refreshed = await this.request<{ token: string; user: any }>('/auth/refresh', { method: 'POST' }, false);
+        if (refreshed.success && refreshed.token) return this.request<T>(endpoint, options, false);
+      }
       if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}` } as ApiResponse<T>;
+      if (endpoint === '/auth/refresh' && data.success && data.token) this.setToken(data.token);
       return data as ApiResponse<T>;
     } catch (err: any) {
       return { success: false, error: err.message || 'Error de conexión con el servidor GoPaq' } as ApiResponse<T>;
@@ -34,17 +47,31 @@ export class ApiClient {
   }
 
   static hasSession() { return !!this.getToken(); }
-  static logout() { if (typeof localStorage !== 'undefined') localStorage.removeItem('gopaq_token'); }
+  static async logout() { await this.request('/auth/logout', { method: 'POST' }, false); this.setToken(null); }
 
-  static async login(email: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> {
-    const data = await this.request<{ token: string; user: any }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-    if (data.success && data.token && typeof localStorage !== 'undefined') localStorage.setItem('gopaq_token', data.token);
+  static async login(email: string, password: string, area?: 'super-admin' | 'portal' | 'sucursal' | 'driver'): Promise<ApiResponse<{ token: string; user: any }>> {
+    const data = await this.request<{ token: string; user: any }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, area }) }, false);
+    if (data.success && data.token) this.setToken(data.token);
     return data;
+  }
+
+  static async demo(area: 'super-admin' | 'portal' | 'sucursal' | 'driver'): Promise<ApiResponse<{ token: string; user: any; demo: boolean }>> {
+    const data = await this.request<{ token: string; user: any; demo: boolean }>('/auth/demo', { method: 'POST', body: JSON.stringify({ area }) }, false);
+    if (data.success && data.token) this.setToken(data.token);
+    return data;
+  }
+
+  static async requestPasswordReset(email: string): Promise<ApiResponse<{ status: string }>> {
+    return this.request<{ status: string }>('/auth/password/forgot', { method: 'POST', body: JSON.stringify({ email }) }, false);
+  }
+
+  static async resetPassword(token: string, password: string): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>('/auth/password/reset', { method: 'POST', body: JSON.stringify({ token, password }) }, false);
   }
 
   static async register(payload: { email: string; password: string; name: string; phone?: string; companyName?: string; organizationId?: string; tenantSlug?: string }): Promise<ApiResponse<{ token: string; user: any }>> {
     const data = await this.request<{ token: string; user: any }>('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
-    if (data.success && data.token && typeof localStorage !== 'undefined') localStorage.setItem('gopaq_token', data.token);
+    if (data.success && data.token) this.setToken(data.token);
     return data;
   }
 
@@ -60,7 +87,11 @@ export class ApiClient {
   static async getDrivers(): Promise<ApiResponse<{ drivers: any[] }>> { return this.request<{ drivers: any[] }>('/drivers'); }
   static async sendDriverTelemetry(payload: { driverId: string; lat: number; lng: number; speed?: number; heading?: number; battery?: number }): Promise<ApiResponse<{ processed: any }>> { return this.request<{ processed: any }>('/drivers/telemetry', { method: 'POST', body: JSON.stringify(payload) }); }
   static async getActiveManifest(driverId?: string): Promise<ApiResponse<{ driver: any; route: any; stops: any[] }>> { return this.request<{ driver: any; route: any; stops: any[] }>(`/drivers/active-manifest?driverId=${driverId || ''}`); }
+  static async startRoute(routeId: string): Promise<ApiResponse<{ routeId: string; status: string; startedAt: string }>> { return this.request<{ routeId: string; status: string; startedAt: string }>(`/drivers/routes/${encodeURIComponent(routeId)}/start`, { method: 'POST' }); }
+  static async completeDriverStop(stopId: string, payload: any, idempotencyKey?: string): Promise<ApiResponse<{ stopId: string; shipmentId: string; trackingNumber: string; status: string; codStatus: string }>> { return this.request<{ stopId: string; shipmentId: string; trackingNumber: string; status: string; codStatus: string }>(`/drivers/stops/${encodeURIComponent(stopId)}/complete`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
+  static async failDriverStop(stopId: string, payload: { reason: string; notes?: string }, idempotencyKey?: string): Promise<ApiResponse<{ stopId: string; status: string; failedAt: string }>> { return this.request<{ stopId: string; status: string; failedAt: string }>(`/drivers/stops/${encodeURIComponent(stopId)}/fail`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
   static async getBranches(): Promise<ApiResponse<{ branches: any[] }>> { return this.request<{ branches: any[] }>('/branches'); }
+  static async getPublicBranches(): Promise<ApiResponse<{ branches: any[] }>> { return this.request<{ branches: any[] }>('/branches/public'); }
   static async getBranchInventory(branchId: string): Promise<ApiResponse<{ count: number; inventory: any[] }>> { return this.request<{ count: number; inventory: any[] }>(`/branches/${branchId}/inventory`); }
   static async closeBranchCash(branchId: string, payload: any): Promise<ApiResponse<{ message: string; summary: any }>> { return this.request<{ message: string; summary: any }>(`/branches/${branchId}/cash-close`, { method: 'POST', body: JSON.stringify(payload) }); }
   static async getClients(): Promise<ApiResponse<{ clients: any[] }>> { return this.request<{ clients: any[] }>('/clients'); }

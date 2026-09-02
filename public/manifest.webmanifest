@@ -1,0 +1,11 @@
+{
+  "name": "GoPaq Logística",
+  "short_name": "GoPaq",
+  "description": "Cotiza, rastrea y coordina tus operaciones logísticas.",
+  "lang": "es-DO",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#f97316"
+}
