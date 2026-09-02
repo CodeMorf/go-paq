@@ -19,7 +19,7 @@ import { Button, Card } from '../ui/DesignSystem';
 
 export const ApiDocs: React.FC = () => {
   const navigate = useNavigate();
-  const { setCurrentSection, addToast } = useApp();
+  const { addToast } = useApp();
   const [selectedEndpoint, setSelectedEndpoint] = useState('create_shipment');
   const [activeLang, setActiveLang] = useState<'curl' | 'node' | 'python'>('curl');
   const [testResponse, setTestResponse] = useState<string | null>(null);
@@ -110,7 +110,7 @@ export const ApiDocs: React.FC = () => {
       <header className="h-16 px-6 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { setCurrentSection('super-admin'); navigate('/super-admin/dashboard'); }}
+            onClick={() => navigate('/super-admin/dashboard')}
             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex items-center gap-2 text-xs font-bold"
           >
             <ArrowLeft className="w-4 h-4" />

@@ -160,7 +160,35 @@ async function runComprehensiveTestSuite() {
   const healthRes = await request(app).get('/api/v1/integrations/health').set('Authorization', `Bearer ${token}`);
   assert(healthRes.status === 200 && healthRes.body.witylogix && healthRes.body.karrio, 'GET /api/v1/integrations/health returns protected diagnostics for Witylogix & Karrio');
 
-  // 14. Real Quotes & Pricing Engine
+  // 14. Global configuration center: tenant scope, RBAC and optimistic versioning
+  const configurationRes = await request(app).get('/api/v1/configuration').set('Authorization', `Bearer ${token}`);
+  const portalConfigurationRes = await request(app).get('/api/v1/configuration').set('Authorization', `Bearer ${demoRes.body.token}`);
+  assert(configurationRes.status === 200 && configurationRes.body.categories?.includes('organization') && configurationRes.body.categories?.includes('developer') && configurationRes.body.settings?.services, 'CONFIGURATION: admin receives the complete tenant-scoped configuration center');
+  assert(portalConfigurationRes.status === 403, 'CONFIGURATION RBAC: client cannot access global tenant configuration');
+  const configurationUpdate = await request(app)
+    .patch('/api/v1/configuration/operations')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: configurationRes.body.version, settings: { maxRouteStops: 75 }, reason: 'Prueba de configuración versionada' });
+  const configurationConflict = await request(app)
+    .patch('/api/v1/configuration/operations')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: configurationRes.body.version, settings: { maxRouteStops: 76 } });
+  const disableLocalService = await request(app)
+    .patch('/api/v1/configuration/services')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: configurationUpdate.body.version, settings: { local: false } });
+  const disabledServiceQuote = await request(app)
+    .post('/api/v1/quotes')
+    .send({ serviceType: 'local', originCity: 'Santo Domingo', destCity: 'Santo Domingo', weightKg: 1, lengthCm: 20, widthCm: 15, heightCm: 10 });
+  const enableLocalService = await request(app)
+    .patch('/api/v1/configuration/services')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: disableLocalService.body.version, settings: { local: true } });
+  assert(configurationUpdate.status === 200 && configurationUpdate.body.version === Number(configurationRes.body.version) + 1 && configurationUpdate.body.settings.operations.maxRouteStops === 75, 'CONFIGURATION: operation policy persists with version and backend validation');
+  assert(configurationConflict.status === 409, 'CONFIGURATION CONCURRENCY: stale version cannot overwrite newer settings');
+  assert(disableLocalService.status === 200 && disabledServiceQuote.status === 409 && enableLocalService.status === 200, 'CONFIGURATION EFFECTIVE POLICY: disabling a service blocks its real quote until re-enabled');
+
+  // 15. Real Quotes & Pricing Engine
   const quoteRes = await request(app)
     .post('/api/v1/quotes')
     .send({ serviceType: 'nacional', originCity: 'Santo Domingo', destCity: 'Santiago', weightKg: 5, lengthCm: 40, widthCm: 30, heightCm: 20 });

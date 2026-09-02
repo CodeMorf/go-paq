@@ -49,15 +49,19 @@ GoPaq está estructurado en **5 Grandes Ecosistemas** interconectados en tiempo 
 | **Conciliación COD (Cash on Delivery)** | `cod` | Liquidación automatizada de pagos contra entrega y transferencias a comercios. |
 | **Motor de Tarifas Dinámicas** | `tarifas` | Matrices de precios por peso, volumen, zona geográfica y tipo de servicio. |
 | **Equipo & RBAC** | `equipo` | Control de acceso basado en roles con permisos granulares por módulo. |
-| **Configuración Global del Sistema** | `configuracion` | Centro de control maestro con **11 Pestañas de Ajustes**: |
+| **Configuración Global del Sistema** | `configuracion` | Centro de control maestro con **14 Secciones de Ajustes**: |
 | | ↳ *Branding & Identidad* | Logo, paleta de colores y personalización corporativa. |
 | | ↳ *Localización & Divisas* | Moneda base (`DOP`, `USD`, `EUR`), impuestos y formatos regionales. |
+| | ↳ *Servicios* | Capacidades activas de paquetería, última milla, mudanzas, carga y COD. |
 | | ↳ *Aduanas & Casilleros* | Tarifas arancelarias, direcciones físicas en Miami/Madrid y límites. |
 | | ↳ *Operaciones & Despacho* | Parámetros de SLA, tolerancias de tiempo y radios de cobertura. |
 | | ↳ *Facturación Fiscal* | Comprobantes fiscales (NCF), secuencias numéricas e impuestos. |
 | | ↳ *Pagos & Pasarelas COD* | Comisiones de recaudo, métodos de pago y transferencias. |
 | | ↳ *Notificaciones & Alertas* | Plantillas para SMS, Push, WhatsApp y correos transaccionales. |
 | | ↳ *Automatización IA* | Integración con Gemini AI, modelos OCR y prompts del sistema. |
+| | ↳ *Driver y Sincronización* | Intervalos GPS, modo offline y requisitos de evidencia de entrega. |
+| | ↳ *Almacenamiento* | Proveedor de archivos, URLs firmadas y retención de POD/documentos. |
+| | ↳ *Integraciones* | Selección de carriers, routing, geocoding y tracking externo. |
 | | ↳ *Base de Datos & Redis* | Estado de conexiones, sincronización de caché y réplicas. |
 | | ↳ *Seguridad & 2FA* | Políticas de contraseñas, sesiones activas y listas de IP permitidas. |
 | | ↳ *Desarrolladores & Webhooks* | Endpoints, logs de webhooks y tokens de integración. |

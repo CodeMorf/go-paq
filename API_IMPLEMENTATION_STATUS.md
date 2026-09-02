@@ -1,4 +1,4 @@
-# 📑 GoPaq — Estado de Implementación de la API REST v1.4
+# 📑 GoPaq — Estado de Implementación de la API REST v1.6
 
 Todos los endpoints listados a continuación están implementados y activos en el backend GoPaq Core API (`http://localhost:4000/api/v1`).
 
@@ -36,6 +36,12 @@ Todos los endpoints listados a continuación están implementados y activos en e
 ## 💵 Conciliación COD
 - `GET /api/v1/cod/ledger`: Libro contable de cobros contra entrega y saldos pendientes.
 - `POST /api/v1/cod/settle`: Liquidación bancaria de fondos a comercios.
+
+## ⚙️ Configuración Global por Tenant
+- `GET /api/v1/configuration`: Configuración efectiva de la organización autenticada, con valores predeterminados explícitos y sin secretos.
+- `PATCH /api/v1/configuration/:category`: Actualización validada por categoría, tenant, rol y versión esperada; genera revisión, auditoría y outbox.
+- `GET /api/v1/configuration/revisions`: Historial de cambios de configuración de la organización.
+- Las categorías cubren organización, localización, servicios, operaciones, internacional, finanzas, fiscal, notificaciones, automatización, seguridad, Driver, almacenamiento, integraciones y desarrolladores.
 
 ## ✈️ Courier Internacional
 - `GET /api/v1/international/lockers`: Casilleros asignados en Miami, Madrid, Milán y RD.

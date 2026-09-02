@@ -22,7 +22,7 @@ export const CommandPalette: React.FC = () => {
     drivers, 
     branches, 
     setSelectedTracking,
-    setCurrentSection,
+    currentSection,
     setActiveSubView
   } = useApp();
 
@@ -52,7 +52,7 @@ export const CommandPalette: React.FC = () => {
         { type: 'action', title: 'Operación en Vivo', subtitle: 'Ver mapa de flota en tiempo real', section: 'super-admin', view: 'operaciones-vivo', icon: <Truck className="w-4 h-4 text-emerald-500" /> },
         { type: 'action', title: 'Recepción Mostrador', subtitle: 'Ingreso persistido de paquetes', section: 'sucursal', view: 'mostrador-pos', icon: <Building2 className="w-4 h-4 text-blue-500" /> },
         { type: 'action', title: 'Casillero Internacional', subtitle: 'Consultar paquetes registrados', section: 'portal', view: 'casilleros', icon: <Layers className="w-4 h-4 text-purple-500" /> }
-      ];
+      ].filter((item) => item.section === currentSection);
     }
 
     const q = search.toLowerCase();
@@ -121,17 +121,17 @@ export const CommandPalette: React.FC = () => {
       }
     });
 
-    return list;
-  }, [search, shipments, drivers, branches]);
+    return list.filter((item) => !item.section || item.section === currentSection);
+  }, [search, shipments, drivers, branches, currentSection]);
 
   const handleSelect = (item: any) => {
     if (item.entityId) {
       setSelectedTracking(item.entityId);
-      setCurrentSection('portal');
-      setActiveSubView('tracking');
+      if (currentSection === 'portal') setActiveSubView('tracking');
+      if (currentSection === 'super-admin') setActiveSubView('rastreo');
+      if (currentSection === 'sucursal') setActiveSubView('inventario');
     } else if (item.section) {
-      setCurrentSection(item.section);
-      if (item.view) setActiveSubView(item.view);
+      if (item.section === currentSection && item.view) setActiveSubView(item.view);
     }
     setCommandPaletteOpen(false);
     setSearch('');

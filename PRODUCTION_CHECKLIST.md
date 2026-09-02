@@ -16,7 +16,9 @@
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
-- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 30 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 35 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] Configuración Global: 14 secciones con valores por tenant, API PATCH protegida, control de versión, auditoría, outbox e historial de revisiones.
+- [x] El selector cruzado Admin/Portal/Agencia/Driver fue eliminado; cada área permanece en su propia ruta, sesión y guard de backend.
 - [x] Mudanzas y carga pesada: cotización, orden persistida, trabajo unificado, ruta, POD y rastreo canónico verificados en API.
 
 ## VPS y despliegue verificados

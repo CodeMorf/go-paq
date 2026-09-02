@@ -52,7 +52,13 @@ export function initDatabase() {
     ensureSqliteColumn('route_stops', 'job_id', 'TEXT');
     sqliteDb.exec(`
       INSERT OR IGNORE INTO schema_migrations (version, applied_at)
-      VALUES ('001_initial', CURRENT_TIMESTAMP), ('002_production_foundations', CURRENT_TIMESTAMP)
+      VALUES
+        ('001_initial', CURRENT_TIMESTAMP),
+        ('002_production_foundations', CURRENT_TIMESTAMP),
+        ('003_postgis', CURRENT_TIMESTAMP),
+        ('004_cod_state_machine', CURRENT_TIMESTAMP),
+        ('005_logistics_jobs', CURRENT_TIMESTAMP),
+        ('006_configuration_center', CURRENT_TIMESTAMP)
     `);
   }
 }
@@ -97,6 +103,7 @@ export async function runMigrations() {
   const postgisSql = fs.readFileSync(path.join(migrationsDir, '003_postgis.sql'), 'utf8');
   const codAndInternationalSql = fs.readFileSync(path.join(migrationsDir, '004_cod_state_machine.sql'), 'utf8');
   const logisticsJobsSql = fs.readFileSync(path.join(migrationsDir, '005_logistics_jobs.sql'), 'utf8');
+  const configurationCenterSql = fs.readFileSync(path.join(migrationsDir, '006_configuration_center.sql'), 'utf8');
   const lockKey = 7874701;
 
   await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
@@ -128,6 +135,10 @@ export async function runMigrations() {
     if (!applied.has('005_logistics_jobs')) {
       await pgPool.query(logisticsJobsSql);
       await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['005_logistics_jobs']);
+    }
+    if (!applied.has('006_configuration_center')) {
+      await pgPool.query(configurationCenterSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['006_configuration_center']);
     }
   } finally {
     await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);
@@ -406,6 +417,26 @@ CREATE INDEX IF NOT EXISTS idx_jobs_org_driver_status ON logistics_jobs(organiza
 CREATE INDEX IF NOT EXISTS idx_jobs_org_route ON logistics_jobs(organization_id, assigned_route_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_org_client ON logistics_jobs(organization_id, client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_job_events_org_job_created ON logistics_job_events(organization_id, job_id, created_at);
+CREATE TABLE IF NOT EXISTS organization_settings (
+  organization_id TEXT PRIMARY KEY,
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  version INTEGER NOT NULL DEFAULT 0,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS organization_setting_revisions (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  settings_json TEXT NOT NULL,
+  changed_by TEXT,
+  change_reason TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (organization_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_org_settings_updated ON organization_settings(updated_at);
+CREATE INDEX IF NOT EXISTS idx_org_setting_revisions_org_created ON organization_setting_revisions(organization_id, created_at);
 `;
 
 function ensureSqliteColumn(tableName: string, columnName: string, definition: string) {

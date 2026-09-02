@@ -8,13 +8,14 @@ import { ApiClient } from './api/client';
 import { LoginPage, RegisterPage, RoleLoginPage, destinationForRole } from './components/auth/AuthPages';
 import { UserRole } from './types';
 import { SuperAdminLayout } from './components/super-admin/SuperAdminLayout';
-import { ProductionAdminDashboard, ProductionOperationsConsole, ProductionFleetPanel, ProductionBranchScanner, ProductionUnavailablePanel, ProductionSettingsPanel, ProductionClientRegistration, ProductionQuotePanel, ProductionBranchNetwork, ProductionClientDirectory, ProductionShipmentsManager } from './components/super-admin/ProductionAdminPanels';
+import { ProductionAdminDashboard, ProductionOperationsConsole, ProductionFleetPanel, ProductionBranchScanner, ProductionUnavailablePanel, ProductionClientRegistration, ProductionQuotePanel, ProductionBranchNetwork, ProductionClientDirectory, ProductionShipmentsManager } from './components/super-admin/ProductionAdminPanels';
 import { InternationalCourier } from './components/super-admin/InternationalCourier';
 import { RoutesDispatcher } from './components/super-admin/RoutesDispatcher';
 import { MovingHeavyCargo } from './components/super-admin/MovingHeavyCargo';
 import { DriversFleet } from './components/super-admin/DriversFleet';
 import { CodReconciliation } from './components/super-admin/CodReconciliation';
 import { TeamRbac } from './components/super-admin/TeamRbac';
+import { GlobalConfiguration } from './components/super-admin/GlobalConfiguration';
 import { PortalLayout } from './components/portal/PortalLayout';
 import { PortalDashboard } from './components/portal/PortalDashboard';
 import { TrackingSearch } from './components/portal/TrackingSearch';
@@ -148,8 +149,8 @@ const AreaContent: React.FC<{ section: Section; user?: any }> = ({ section, user
     {activeSubView === 'cod' && <CodReconciliation />}
     {activeSubView === 'tarifas' && <ProductionQuotePanel />}
     {activeSubView === 'equipo' && <TeamRbac />}
-    {activeSubView === 'configuracion' && <ProductionSettingsPanel />}
-    {!['dashboard','operaciones-vivo','zernio-omnichannel','ia-eventos','escaneo-masivo','mapa-flota','envios','courier-intl','rutas','mudanzas-carga','drivers','sucursales','registro-sucursal-matcher','clientes','zonas-peligrosas','cod','tarifas','equipo','configuracion'].includes(activeSubView) && <ProductionAdminDashboard />}
+    {activeSubView === 'configuracion' && <GlobalConfiguration />}
+    {!['dashboard','operaciones-vivo','zernio-omnichannel','ia-eventos','escaneo-masivo','mapa-flota','envios','rastreo','courier-intl','rutas','mudanzas-carga','drivers','sucursales','registro-sucursal-matcher','clientes','zonas-peligrosas','cod','tarifas','equipo','configuracion'].includes(activeSubView) && <ProductionAdminDashboard />}
   </SuperAdminLayout>;
 
   if (section === 'portal') body = <PortalLayout>

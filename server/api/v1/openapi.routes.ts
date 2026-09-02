@@ -7,7 +7,7 @@ openapiRouter.get('/openapi.json', (req, res) => {
     openapi: '3.1.0',
     info: {
       title: 'GoPaq Core Logistics REST API',
-      version: '1.5.0',
+      version: '1.6.0',
       description: 'API Pública de Logística, Courier Internacional, Despacho de Última Milla y Conciliación COD para GoPaq.',
       contact: { name: 'Soporte GoPaq API' }
     },
@@ -103,6 +103,35 @@ openapiRouter.get('/openapi.json', (req, res) => {
       '/heavy-cargo/orders': {
         get: { summary: 'Listar órdenes de carga pesada del tenant', responses: { '200': { description: 'Órdenes persistidas' } } },
         post: { summary: 'Crear orden de carga pesada', parameters: [{ name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } }], responses: { '201': { description: 'Orden y trabajo unificado persistidos' } } }
+      },
+      '/configuration': {
+        get: {
+          summary: 'Consultar configuración efectiva del tenant',
+          description: 'Devuelve valores de negocio por organización y estado de versionado. Nunca devuelve secretos de infraestructura.',
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: 'Configuración efectiva' }, '403': { description: 'Rol no autorizado' } }
+        }
+      },
+      '/configuration/{category}': {
+        patch: {
+          summary: 'Actualizar una sección de configuración',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'category', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['settings', 'expectedVersion'], properties: { settings: { type: 'object', additionalProperties: true }, expectedVersion: { type: 'integer', minimum: 0 }, reason: { type: 'string' } } } } } },
+          responses: { '200': { description: 'Configuración persistida y versionada' }, '409': { description: 'Versión desactualizada' }, '422': { description: 'Configuración inválida' } }
+        }
+      },
+      '/configuration/revisions': {
+        get: {
+          summary: 'Consultar historial de configuración',
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: 'Historial de revisiones' } }
+        }
+      }
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }
       }
     }
   };

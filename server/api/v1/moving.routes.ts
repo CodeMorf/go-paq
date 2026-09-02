@@ -5,6 +5,7 @@ import { queryAllAsync, queryOneAsync, transactionAsync } from '../../db/databas
 import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/middleware';
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
+import { assertServiceEnabled } from '../../modules/configuration/configuration.service';
 
 export const movingRouter = Router();
 
@@ -57,6 +58,7 @@ function calculateMovingQuote(input: z.infer<typeof quoteSchema>) {
 movingRouter.post('/quote', asyncHandler(async (req, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de cotización de mudanza inválidos.' });
+  await assertServiceEnabled(process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq', 'mudanza');
   return res.json({ success: true, quote: calculateMovingQuote(parsed.data) });
 }));
 
@@ -64,6 +66,7 @@ movingRouter.post('/orders', authenticate, requireScope('moving:write'), asyncHa
   const parsed = orderSchema.safeParse(req.body);
   if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de reserva de mudanza inválidos.' });
   const orgId = req.organizationId!;
+  await assertServiceEnabled(orgId, 'mudanza');
   const idempotencyKey = req.header('idempotency-key')?.trim();
   if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 200)) return res.status(400).json({ success: false, error: 'Idempotency-Key inválida.' });
   const requestHash = crypto.createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex');

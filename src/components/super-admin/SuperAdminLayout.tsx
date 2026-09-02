@@ -44,7 +44,6 @@ export const SuperAdminLayout: React.FC<{ children: React.ReactNode }> = ({ chil
   const { 
     activeSubView, 
     setActiveSubView, 
-    setCurrentSection, 
     darkMode, 
     setDarkMode, 
     currency, 
@@ -128,43 +127,6 @@ export const SuperAdminLayout: React.FC<{ children: React.ReactNode }> = ({ chil
             aria-label="Cerrar menú"
           >
             <X className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Global Area Switcher Ribbon */}
-      <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 border-b border-slate-200/80 dark:border-slate-800">
-        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-          Cambiar Entorno:
-        </label>
-        <div className="grid grid-cols-4 gap-1 text-[11px] font-semibold">
-          <button
-            onClick={() => { setCurrentSection('super-admin'); setActiveSubView('dashboard'); setIsMobileDrawerOpen(false); }}
-            className="p-2 md:p-1.5 rounded-lg bg-indigo-600 text-white text-center shadow-xs"
-            title="Super Admin"
-          >
-            Admin
-          </button>
-          <button
-            onClick={() => { setCurrentSection('portal'); setActiveSubView('dashboard'); setIsMobileDrawerOpen(false); }}
-            className="p-2 md:p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 text-center"
-            title="Portal Cliente"
-          >
-            Portal
-          </button>
-          <button
-            onClick={() => { setCurrentSection('sucursal'); setActiveSubView('dashboard'); setIsMobileDrawerOpen(false); }}
-            className="p-2 md:p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 text-center"
-            title="Sucursal Operating System"
-          >
-            Agencia
-          </button>
-          <button
-            onClick={() => { setCurrentSection('driver'); setIsMobileDrawerOpen(false); }}
-            className="p-2 md:p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 text-center"
-            title="App Móvil Driver"
-          >
-            Driver
           </button>
         </div>
       </div>

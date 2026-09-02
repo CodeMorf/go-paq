@@ -1,4 +1,5 @@
 import { queryOneAsync } from '../../db/database';
+import { assertServiceEnabled, getOrganizationConfiguration } from '../configuration/configuration.service';
 
 export interface QuoteInput {
   serviceType: 'local' | 'nacional' | 'internacional' | 'express' | 'mudanza' | 'carga_pesada';
@@ -31,6 +32,16 @@ export interface QuoteResult {
 }
 
 export async function calculatePricing(input: QuoteInput, organizationId: string = 'org-gopaq'): Promise<QuoteResult> {
+  await assertServiceEnabled(organizationId, input.serviceType);
+  const configuration = await getOrganizationConfiguration(organizationId);
+  const finance = configuration.settings.finance;
+  const taxRate = Number(configuration.settings.localization.taxRate ?? 18);
+
+  if (input.codAmount && input.codAmount > 0) {
+    if (finance.codEnabled === false) throw Object.assign(new Error('El pago contra entrega está deshabilitado para esta organización.'), { statusCode: 409 });
+    if (input.codAmount > Number(finance.maxCodAmount ?? Number.MAX_SAFE_INTEGER)) throw Object.assign(new Error('El monto COD supera el límite configurado para esta organización.'), { statusCode: 422 });
+  }
+
   // Volumetric weight formula: (L * W * H) / 5000 (IATA standard)
   const volWeight = (input.lengthCm * input.widthCm * input.heightCm) / 5000;
   const billableWeight = Math.max(input.weightKg, volWeight);
@@ -60,14 +71,14 @@ export async function calculatePricing(input: QuoteInput, organizationId: string
     if (dz) dangerousZoneSurcharge = dz.surcharge_amount;
   }
 
-  // COD fee: 2% of COD amount with minimum of RD$ 50
+  // COD fee is a tenant policy; the default preserves the existing 2% rule.
   let codFee = 0;
   if (input.codAmount && input.codAmount > 0) {
-    codFee = Math.max(50, Math.round(input.codAmount * 0.02));
+    codFee = Math.max(50, Math.round(input.codAmount * (Number(finance.codCommissionRate ?? 2) / 100)));
   }
 
   const subtotal = Math.max(rate.min_charge, base + weightCost + fragileSurcharge + insuranceCost + dangerousZoneSurcharge + codFee);
-  const tax = Math.round(subtotal * 0.18 * 100) / 100; // 18% ITBIS
+  const tax = Math.round(subtotal * (taxRate / 100) * 100) / 100;
   const total = subtotal + tax;
 
   let estimatedDays = '1 día hábil (24 horas)';
