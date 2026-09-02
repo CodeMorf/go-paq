@@ -234,7 +234,7 @@ export const GlobalConfiguration: React.FC = () => {
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h2 className="flex items-center gap-2 text-xl font-extrabold text-slate-900 dark:text-white"><ServerCog className="h-6 w-6 text-indigo-600" />Configuración Global</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500 dark:text-slate-400">Centro maestro del tenant actual. Los valores de negocio se guardan por organización; los secretos de infraestructura y proveedores nunca se muestran ni se editan desde el navegador.</p></div>
+      <div><h2 className="flex items-center gap-2 text-xl font-extrabold text-slate-900 dark:text-white"><ServerCog className="h-6 w-6 text-indigo-600" />Configuración Global</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500 dark:text-slate-400">Centro maestro del tenant actual. Los valores de negocio se guardan por organización; los secretos de infraestructura y proveedores del servidor permanecen fuera del navegador. Las credenciales restringidas para el navegador, como Google Maps, tienen un control separado y nunca se vuelven a mostrar completas.</p></div>
       <Button variant="secondary" size="sm" icon={<RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />} onClick={() => void load()} disabled={loading}>Actualizar</Button>
     </div>
     {error && <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><XCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
