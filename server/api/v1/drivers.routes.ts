@@ -5,6 +5,7 @@ import { queryAllAsync, queryOneAsync, executeAsync, transactionAsync } from '..
 import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/middleware';
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
+import { storeDataUrl } from '../../storage/storage.adapter';
 
 export const driversRouter = Router();
 
@@ -97,6 +98,8 @@ driversRouter.post('/stops/:stopId/complete', authenticate, requireScope('driver
 
   const role = normalizeRole(req.user?.role);
   const now = new Date().toISOString();
+  const storedSignatureUrl = await storeDataUrl(parsed.data.pod.signatureUrl, 'signatures', 800_000);
+  const storedPhotoUrl = await storeDataUrl(parsed.data.pod.photoUrl, 'pod-photos', 2_000_000);
   const response = await transactionAsync(async (tx) => {
     const stop = await tx.queryOne<any>(`SELECT rs.*, r.organization_id, r.driver_id, r.status AS route_status, s.tracking_number, s.cod_amount, s.cod_currency FROM route_stops rs JOIN routes r ON r.id = rs.route_id AND r.organization_id = ? LEFT JOIN shipments s ON s.id = rs.shipment_id AND s.organization_id = r.organization_id WHERE rs.id = ?`, [orgId, req.params.stopId]);
     if (!stop) throw Object.assign(new Error('Parada no encontrada en esta organización.'), { statusCode: 404 });
@@ -108,7 +111,7 @@ driversRouter.post('/stops/:stopId/complete', authenticate, requireScope('driver
     const codAmount = Number(stop.cod_amount || 0);
     if (codAmount > 0 && Math.abs(Number(parsed.data.collectedCod) - codAmount) > 0.01) throw Object.assign(new Error('El monto COD cobrado debe coincidir con el monto de la guía.'), { statusCode: 409 });
 
-    const pod = { ...parsed.data.pod, deliveredAt: now, actorId: req.user!.userId, codAmountCollected: parsed.data.collectedCod };
+    const pod = { ...parsed.data.pod, signatureUrl: storedSignatureUrl, photoUrl: storedPhotoUrl, deliveredAt: now, actorId: req.user!.userId, codAmountCollected: parsed.data.collectedCod };
     const stopUpdated = await tx.execute(`UPDATE route_stops SET status = 'completed', completed_at = ?, pod_json = ?, notes = ? WHERE id = ? AND route_id = ? AND status IN ('pending', 'arrived')`, [now, JSON.stringify(pod), parsed.data.pod.notes || null, stop.id, stop.route_id]);
     if (stopUpdated.changes !== 1) throw Object.assign(new Error('La parada cambió mientras se registraba el POD.'), { statusCode: 409 });
     const shipmentUpdated = await tx.execute(`UPDATE shipments SET status = 'delivered', pod_json = ?, cod_collected = ?, payment_status = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status NOT IN ('delivered', 'cancelled')`, [JSON.stringify(pod), codAmount > 0 ? 1 : 0, codAmount > 0 ? 'collected' : 'not_applicable', now, stop.shipment_id, orgId]);

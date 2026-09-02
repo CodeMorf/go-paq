@@ -3,6 +3,7 @@ import { Worker, Job } from 'bullmq';
 import Redis, { RedisOptions } from 'ioredis';
 import { executeAsync, queryAllAsync, queryOneAsync, transactionAsync } from '../db/database';
 import { getQueue, QUEUE_NAMES, QueueName, isQueueConfigured, queueForEvent } from './queues';
+import { decryptSecret } from '../security/secretBox';
 
 const redisUrl = process.env.REDIS_URL?.trim();
 const REALTIME_CHANNEL = 'gopaq:realtime';
@@ -62,7 +63,7 @@ async function deliverWebhooks(event: any) {
     if (previous?.status === 'delivered') continue;
 
     const body = JSON.stringify({ id: event.id, type: event.event_type, data: payload, occurredAt: event.created_at });
-    const signature = crypto.createHmac('sha256', String(webhook.secret_key)).update(body).digest('hex');
+    const signature = crypto.createHmac('sha256', decryptSecret(String(webhook.secret_key))).update(body).digest('hex');
     let status = 'failed';
     let responseCode: number | null = null;
     let responseBody = '';

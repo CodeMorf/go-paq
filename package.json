@@ -11,6 +11,7 @@
     "seed": "tsx -e \"import { runSeeds } from './server/db/seed'; runSeeds();\"",
     "seed:demo": "tsx -e \"import { runDemoSeeds } from './server/db/seed'; runDemoSeeds();\"",
     "reset:demo": "tsx -e \"import { resetDemoTenant } from './server/db/seed'; resetDemoTenant();\"",
+    "seed:production": "tsx server/db/seedProduction.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

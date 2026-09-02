@@ -31,35 +31,10 @@ import {
   AutomationTriggerEventType 
 } from '../types/aiAutomationTypes';
 import { 
-  INITIAL_AUTOMATION_RULES, 
-  INITIAL_AI_EXECUTION_LOGS 
-} from '../data/mockAutomationRules';
-import { 
   SyncTransaction, 
   SyncHealthMetrics 
 } from '../types/syncHealthTypes';
-import { 
-  initialSyncTransactions, 
-  calculateSyncHealthMetrics 
-} from '../utils/syncHealthService';
-import { 
-  MOCK_SHIPMENTS, 
-  MOCK_NOTIFICATIONS, 
-  MOCK_ROUTE, 
-  MOCK_ROUTES,
-  MOCK_INTERNATIONAL_PACKAGES, 
-  MOCK_DRIVERS, 
-  MOCK_VEHICLES,
-  MOCK_BRANCHES,
-  MOCK_DANGEROUS_ZONES,
-  MOCK_COVERAGE_ZONES,
-  MOCK_ZERNIO_CONFIG,
-  MOCK_PUSHER_CONFIG,
-  MOCK_ZERNIO_MESSAGES,
-  MOCK_ZERNIO_CALLS,
-  MOCK_SOCIAL_OAUTH_CONNECTIONS,
-  MOCK_CLIENT_PROFILES
-} from '../data/mockData';
+import { calculateSyncHealthMetrics } from '../utils/syncHealthService';
 import { ApiClient } from '../api/client';
 import confetti from 'canvas-confetti';
 
@@ -413,7 +388,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNewShipmentModalOpen, setIsNewShipmentModalOpen] = useState<boolean>(false);
   
   // Notifications & Toasts
-  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Apply dark mode class to html element and save in localStorage
@@ -440,7 +415,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const addToast = (type: Toast['type'], title: string, message: string) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const id = `toast-${crypto.randomUUID()}`;
     setToasts((prev) => [...prev, { id, type, title, message }]);
     setTimeout(() => {
       removeToast(id);
@@ -504,7 +479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         package: newShp.package,
         codAmount: newShp.codAmount || 0,
         codCurrency: newShp.codCurrency || 'DOP',
-        clientId: 'cli-techstore'
+        clientId: newShp.clientId
       });
 
       if (!res.success || !res.shipment) {

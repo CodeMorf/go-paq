@@ -58,7 +58,7 @@ quotesRouter.post('/', asyncHandler(async (req, res) => {
     dangerousZoneId
   } = parsed.data;
 
-  const quote = calculatePricing({
+  const quote = await calculatePricing({
     serviceType,
     originCity,
     destCity,
@@ -70,7 +70,7 @@ quotesRouter.post('/', asyncHandler(async (req, res) => {
     isFragile,
     codAmount,
     dangerousZoneId
-  });
+  }, process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq');
 
   const needsCarrierRates = serviceType === 'internacional' || String(originCountry).toUpperCase() !== String(destinationCountry).toUpperCase();
   if (!needsCarrierRates) return res.json({ success: true, quote, carrierRates: null });

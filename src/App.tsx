@@ -136,10 +136,10 @@ const ProtectedArea: React.FC<{ section: Section }> = ({ section }) => {
   if (state.invalid) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   const allowed = sectionForRole(state.user?.role);
   if (allowed !== section) return <Navigate to={destinationForRole(state.user?.role)} replace />;
-  return <AreaContent section={section} />;
+  return <AreaContent section={section} user={state.user} />;
 };
 
-const AreaContent: React.FC<{ section: Section }> = ({ section }) => {
+const AreaContent: React.FC<{ section: Section; user?: any }> = ({ section, user }) => {
   const { activeSubView, isNewShipmentModalOpen, setIsNewShipmentModalOpen, activeLabelShipment, setActiveLabelShipment } = useApp();
   let body: React.ReactNode = null;
 
@@ -189,6 +189,7 @@ const AreaContent: React.FC<{ section: Section }> = ({ section }) => {
   if (section === 'driver') body = <DriverApp />;
 
   return <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors duration-150">
+    {user?.isDemo && <div className="sticky top-0 z-[100] bg-amber-400 px-4 py-2 text-center text-xs font-black tracking-wide text-amber-950">ENTORNO DEMO · Datos aislados · No se ejecutan pagos ni comunicaciones externas</div>}
     {body}<ToastContainer /><CommandPalette />
     {activeLabelShipment && <ThermalLabelModal shipment={activeLabelShipment} isOpen={!!activeLabelShipment} onClose={() => setActiveLabelShipment(null)} />}
     <Modal isOpen={isNewShipmentModalOpen} onClose={() => setIsNewShipmentModalOpen(false)} title="Crear Nuevo Envío" description="Wizard guiado para cotizar, registrar y generar guía de entrega." maxWidth="2xl"><ShipmentCreator /></Modal>

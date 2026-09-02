@@ -9,14 +9,11 @@ openapiRouter.get('/openapi.json', (req, res) => {
       title: 'GoPaq Core Logistics REST API',
       version: '1.4.0',
       description: 'API Pública de Logística, Courier Internacional, Despacho de Última Milla y Conciliación COD para GoPaq.',
-      contact: {
-        name: 'Soporte GoPaq API',
-        email: 'api@gopaq.com'
-      }
+      contact: { name: 'Soporte GoPaq API' }
     },
     servers: [
-      { url: 'http://localhost:3000/api/v1', description: 'Servidor Localhost de Desarrollo' },
-      { url: 'https://api.gopaq.com/v1', description: 'Servidor de Producción' }
+      { url: 'https://gopaq.lat/api/v1', description: 'API pública de GoPaq' },
+      { url: 'http://localhost:4000/api/v1', description: 'Servidor local' }
     ],
     paths: {
       '/auth/login': {
@@ -29,8 +26,9 @@ openapiRouter.get('/openapi.json', (req, res) => {
                 schema: {
                   type: 'object',
                   properties: {
-                    email: { type: 'string', example: 'admin@gopaq.local' },
-                    password: { type: 'string', example: 'GoPaq123!' }
+                    email: { type: 'string' },
+                    password: { type: 'string', format: 'password' },
+                    area: { type: 'string', enum: ['super-admin', 'portal', 'sucursal', 'driver'] }
                   }
                 }
               }

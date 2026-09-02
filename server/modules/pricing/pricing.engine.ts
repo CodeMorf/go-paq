@@ -1,4 +1,4 @@
-import { queryOne } from '../../db/database';
+import { queryOneAsync } from '../../db/database';
 
 export interface QuoteInput {
   serviceType: 'local' | 'nacional' | 'internacional' | 'express' | 'mudanza' | 'carga_pesada';
@@ -30,23 +30,20 @@ export interface QuoteResult {
   estimatedDays: string;
 }
 
-export function calculatePricing(input: QuoteInput, organizationId: string = 'org-gopaq'): QuoteResult {
+export async function calculatePricing(input: QuoteInput, organizationId: string = 'org-gopaq'): Promise<QuoteResult> {
   // Volumetric weight formula: (L * W * H) / 5000 (IATA standard)
   const volWeight = (input.lengthCm * input.widthCm * input.heightCm) / 5000;
   const billableWeight = Math.max(input.weightKg, volWeight);
 
   // Fetch rate matrix from DB
-  const rate = queryOne(`
+  const rate = await queryOneAsync<any>(`
     SELECT * FROM rates_matrix 
     WHERE organization_id = ? AND service_type = ?
+    AND active = 1
+    ORDER BY created_at DESC
     LIMIT 1
-  `, [organizationId, input.serviceType]) || {
-    base_rate: 175,
-    per_kg_rate: 25,
-    per_vol_rate: 30,
-    min_charge: 175,
-    currency: 'DOP'
-  };
+  `, [organizationId, input.serviceType]);
+  if (!rate) throw Object.assign(new Error('La tarifa de este servicio no está configurada.'), { statusCode: 503 });
 
   const base = rate.base_rate;
   const weightExcess = Math.max(0, billableWeight - 1);
@@ -59,7 +56,7 @@ export function calculatePricing(input: QuoteInput, organizationId: string = 'or
 
   let dangerousZoneSurcharge = 0;
   if (input.dangerousZoneId) {
-    const dz = queryOne<{ surcharge_amount: number }>('SELECT surcharge_amount FROM dangerous_zones WHERE id = ?', [input.dangerousZoneId]);
+    const dz = await queryOneAsync<{ surcharge_amount: number }>('SELECT surcharge_amount FROM dangerous_zones WHERE id = ? AND organization_id = ? AND active = 1', [input.dangerousZoneId, organizationId]);
     if (dz) dangerousZoneSurcharge = dz.surcharge_amount;
   }
 

@@ -1,0 +1,83 @@
+# GoPaq: operación de producción
+
+## Arquitectura vigente
+
+El despliegue usa Docker Compose en una red privada (`gopaq_private`) con:
+
+- `gopaq-api`: API Node/Express y build Vite servido por el mismo proceso.
+- `gopaq-worker`: colas BullMQ, outbox, realtime Redis y webhooks.
+- `gopaq-migrate`: migraciones explícitas antes de iniciar API/worker.
+- `postgres`: `postgis/postgis:18-3.6`, PostgreSQL 18 con PostGIS 3.6.
+- `redis`: Redis con contraseña, AOF, sin puerto publicado al host.
+- Nginx/aaPanel existente: único punto público para `80` y `443`, con proxy hacia `127.0.0.1:4000`.
+
+PostgreSQL es la fuente persistente de verdad. Redis se usa para colas, locks, rate limiting y realtime; no contiene el estado definitivo de envíos, POD, COD o pagos.
+
+## Directorios y secretos
+
+- Aplicación: `/opt/gopaq`.
+- Variables privadas: `/opt/gopaq/.env.production`, modo `0600`, nunca en Git.
+- Evidencia POD: volumen Docker `gopaq_uploads`, montado en `/app/data/uploads`.
+- Datos PostgreSQL: volumen Docker `gopaq_postgres_data`.
+- Datos Redis: volumen Docker `gopaq_redis_data`.
+- Backups: `/var/backups/gopaq`, modo `0700`, con retención de 14 días.
+
+Variables críticas: `DATABASE_URL` (generada por Compose), `REDIS_URL` (generada por Compose), `JWT_SECRET`, `SESSION_SECRET`, `WEBHOOK_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `CORS_ORIGINS`, `DEMO_ACCESS_ENABLED` y `GOPAQ_PUBLIC_ORG_ID`.
+
+No se registran contraseñas, tokens JWT completos ni secretos de proveedores.
+
+## Migraciones y bootstrap
+
+```bash
+cd /opt/gopaq
+docker compose --env-file .env.production up -d postgres redis
+docker compose --env-file .env.production run --rm gopaq-migrate
+docker compose --env-file .env.production run --rm \
+  -e GOPAQ_BOOTSTRAP_CONFIRM=I_UNDERSTAND \
+  -e GOPAQ_BOOTSTRAP_ADMIN_EMAIL='correo-admin-real' \
+  -e GOPAQ_BOOTSTRAP_ADMIN_NAME='Nombre del administrador' \
+  -e GOPAQ_BOOTSTRAP_ADMIN_PASSWORD='contraseña efímera de al menos 16 caracteres' \
+  gopaq-migrate npm run seed:production
+docker compose --env-file .env.production run --rm gopaq-migrate npm run seed:demo
+docker compose --env-file .env.production up -d gopaq-api gopaq-worker
+```
+
+El bootstrap es idempotente y no reemplaza la contraseña existente. `seed:demo` solo afecta `org-demo`; no se ejecuta automáticamente al arrancar.
+
+## URLs y comprobaciones
+
+- Web: `https://gopaq.lat/`
+- Health: `https://gopaq.lat/api/health`
+- Readiness: `https://gopaq.lat/api/ready`
+- API: `https://gopaq.lat/api/v1/`
+- OpenAPI: `https://gopaq.lat/api/v1/docs/openapi.json`
+- Logins: `/super-admin/login`, `/portal/login`, `/sucursal/login`, `/driver/login`.
+
+El proxy debe redirigir HTTP a HTTPS, soportar `Upgrade` para `/ws` y no publicar `5432`, `6379`, workers ni servicios auxiliares.
+
+## Backups y restore
+
+El backup usa formato custom de `pg_dump` y no detiene la aplicación:
+
+```bash
+/opt/gopaq/infra/backup-postgres.sh
+/opt/gopaq/infra/test-restore.sh /var/backups/gopaq/gopaq-<timestamp>.dump
+```
+
+El restore de prueba crea una base temporal, restaura el dump, valida tablas y la elimina al terminar. Las copias en el mismo volumen son una protección local; falta configurar un destino externo de backups (S3/R2/otro) con credenciales del propietario de la cuenta.
+
+## Operación diaria
+
+```bash
+docker compose --env-file .env.production ps
+docker compose --env-file .env.production logs --tail=200 gopaq-api
+docker compose --env-file .env.production logs --tail=200 gopaq-worker
+docker compose --env-file .env.production restart gopaq-api gopaq-worker
+docker compose --env-file .env.production up -d --remove-orphans
+```
+
+Una migración nueva debe ser compatible hacia atrás antes de cambiar la imagen. Ante un fallo de health/smoke se conserva la imagen anterior y se revierte el cambio de Compose; no se ejecutan `DROP`, `TRUNCATE` ni resets automáticos.
+
+## Integraciones externas
+
+Karrio, WhatsApp, SMS, email, IA y proveedores de geocodificación/routing se manejan por adaptadores. Cuando no hay credenciales, el estado es `NO CONFIGURADO`/`provider_unavailable`; no se presenta una conexión exitosa. La única acción externa pendiente para activar cada proveedor es entregar y validar sus credenciales sandbox/producción, además de sus webhooks y políticas de cuenta.

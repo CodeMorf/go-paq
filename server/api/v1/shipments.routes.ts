@@ -102,7 +102,7 @@ shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), asyncHa
     if (!client) return res.status(422).json({ success: false, error: 'Cliente inválido para esta organización.' });
   }
 
-  const pricing = calculatePricing({
+  const pricing = await calculatePricing({
     serviceType: input.serviceType,
     originCity: String(input.origin.city || 'Santo Domingo'),
     destCity: String(input.destination.city || 'Santo Domingo'),

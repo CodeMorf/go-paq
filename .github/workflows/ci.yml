@@ -2,29 +2,32 @@ name: GoPaq CI
 
 on:
   push:
-    branches: [main, codex/finish-gopaq-v2]
+    branches: [main, 'Morf/**']
   pull_request:
-    branches: [main]
+
+concurrency:
+  group: gopaq-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  validate:
+  check-test-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Install
-        run: npm ci
-      - name: TypeScript
-        run: npm run lint
-      - name: Tests
-        run: npm test
-      - name: Build
-        run: npm run build
-      - name: Validate Docker Compose
-        run: docker compose -f docker-compose.yml -f docker-compose.oss.yml config >/dev/null
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Compose syntax and security review
+        run: |
+          cp .env.example .env.production
+          docker compose --env-file .env.production config --quiet
+          if docker compose --env-file .env.production config | grep -Eq '"?(5432|6379):'; then
+            echo 'Database or Redis port is publicly published.'
+            exit 1
+          fi
+      - run: npm audit --audit-level=high

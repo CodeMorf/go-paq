@@ -5,6 +5,7 @@ import { queryAllAsync, queryOneAsync, transactionAsync } from '../../db/databas
 import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/middleware';
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
+import { encryptSecret } from '../../security/secretBox';
 
 export const webhooksRouter = Router();
 
@@ -30,9 +31,15 @@ webhooksRouter.post('/', authenticate, requireScope('webhooks:write'), asyncHand
   if (clientId && !(await queryOneAsync('SELECT id FROM clients WHERE id = ? AND organization_id = ? AND active = 1', [clientId, orgId]))) return res.status(422).json({ success: false, error: 'Cliente inválido para esta organización.' });
   const webhookId = `whk-${crypto.randomUUID()}`;
   const secretKey = `whsec_${crypto.randomBytes(32).toString('hex')}`;
+  let storedSecret: string;
+  try {
+    storedSecret = encryptSecret(secretKey);
+  } catch (error) {
+    return res.status(503).json({ success: false, error: 'El cifrado de secretos no está configurado en este entorno.' });
+  }
   const now = new Date().toISOString();
   await transactionAsync(async (tx) => {
-    await tx.execute(`INSERT INTO webhooks (id, organization_id, client_id, target_url, secret_key, events, active, failure_count, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?)`, [webhookId, orgId, clientId, target.href, secretKey, parsed.data.events.join(','), now]);
+    await tx.execute(`INSERT INTO webhooks (id, organization_id, client_id, target_url, secret_key, events, active, failure_count, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?)`, [webhookId, orgId, clientId, target.href, storedSecret, parsed.data.events.join(','), now]);
     await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, metadata_json, created_at) VALUES (?, ?, ?, 'webhook.created', 'webhook', ?, 'success', ?, ?)`, [`aud-${crypto.randomUUID()}`, orgId, req.user?.userId || null, webhookId, JSON.stringify({ events: parsed.data.events }), now]);
   });
   return res.status(201).json({ success: true, message: 'Webhook guardado. El secreto solo se muestra una vez.', webhook: { id: webhookId, targetUrl: target.href, secretKey, events: parsed.data.events, active: true, createdAt: now } });
