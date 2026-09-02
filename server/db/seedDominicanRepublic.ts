@@ -1,4 +1,4 @@
-import { closeDatabase, initDatabaseAsync, isPostgres, queryOneAsync, transactionAsync } from './database';
+import { closeDatabase, initDatabaseAsync, isPostgres, queryOne, queryOneAsync, transactionAsync } from './database';
 
 type Province = { code: string; name: string; capital: string };
 
