@@ -1,4 +1,4 @@
-import { closeDatabase, initDatabaseAsync, isPostgres, queryOne, queryOneAsync, transactionAsync } from './database';
+import { closeDatabase, initDatabaseAsync, isPostgres, queryOneAsync, transactionAsync } from './database';
 
 type Province = { code: string; name: string; capital: string };
 
@@ -146,7 +146,7 @@ async function main() {
   const country = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM countries WHERE iso2 = 'DO' AND active = TRUE`);
   const provinceCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM provinces WHERE country_id = 'country-do' AND active = TRUE`);
   const zoneCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM service_zones z JOIN provinces p ON p.id = z.province_id WHERE p.country_id = 'country-do' AND z.active = TRUE`);
-  const configuredRate = await queryOne<{ id: string }>(`SELECT id FROM rates_matrix WHERE organization_id = ? AND rule_code = ? AND active = TRUE`, [organizationId, nationalPoundRate.ruleCode]);
+  const configuredRate = await queryOneAsync<{ id: string }>(`SELECT id FROM rates_matrix WHERE organization_id = ? AND rule_code = ? AND active = TRUE`, [organizationId, nationalPoundRate.ruleCode]);
   console.log(JSON.stringify({
     success: true,
     country: Number(country?.count || 0),
