@@ -32,35 +32,63 @@ export const ApiDocs: React.FC = () => {
       method: 'POST',
       path: '/v1/shipments',
       title: 'Crear Envío (Local / Nacional)',
-      desc: 'Genera una nueva guía de transporte con cálculo de tarifa automático y opción de cobro COD.'
+      desc: 'Genera una nueva guía de transporte con cálculo de tarifa automático y opción de cobro COD.',
+      auth: true,
+      requestExample: '{"serviceType":"local","origin":{"name":"Remitente","address":"Calle 1","city":"Santo Domingo","country":"DO"},"destination":{"name":"Destinatario","address":"Calle 2","city":"Santiago","country":"DO"},"package":{"weightKg":2,"lengthCm":20,"widthCm":15,"heightCm":10}}'
     },
     {
       id: 'get_tracking',
       method: 'GET',
-      path: '/v1/shipments/{trackingNumber}',
+      path: '/v1/tracking/{trackingNumber}',
       title: 'Consultar Trazabilidad de Guía',
-      desc: 'Obtiene el estado actual, geolocalización del conductor y el historial de eventos.'
+      desc: 'Obtiene el estado actual y el historial canónico de eventos registrados por GoPaq.',
+      auth: false,
+      requestExample: ''
     },
     {
       id: 'quote_rate',
       method: 'POST',
-      path: '/v1/rates/calculate',
+      path: '/v1/quotes',
       title: 'Cotizar Tarifa en Tiempo Real',
-      desc: 'Calcula el costo del flete considerando peso volumétrico, distancia y combustible.'
+      desc: 'Calcula el costo del flete considerando peso real, peso volumétrico y la matriz de tarifas activa.',
+      auth: false,
+      requestExample: '{"serviceType":"local","originCity":"Santo Domingo","destCity":"Santiago","weightKg":2,"lengthCm":20,"widthCm":15,"heightCm":10}'
     },
     {
       id: 'get_locker_packages',
       method: 'GET',
-      path: '/v1/lockers/{lockerCode}/packages',
+      path: '/v1/international/packages',
       title: 'Listar Paquetes en Casillero',
-      desc: 'Retorna los paquetes recibidos en almacenes de Miami, Madrid o Milán.'
+      desc: 'Retorna los paquetes internacionales autorizados para la organización o cuenta cliente.',
+      auth: true,
+      requestExample: ''
     },
     {
       id: 'consolidate',
       method: 'POST',
-      path: '/v1/lockers/consolidate',
+      path: '/v1/international/consolidate',
       title: 'Consolidar Paquetes Internacionales',
-      desc: 'Agrupa dos o más paquetes en una sola caja máster para ahorrar en el flete aéreo.'
+      desc: 'Agrupa dos o más paquetes recibidos en una consolidación persistida.',
+      auth: true,
+      requestExample: '{"packageIds":["pkg-1","pkg-2"]}'
+    },
+    {
+      id: 'moving_quote',
+      method: 'POST',
+      path: '/v1/moving/quote',
+      title: 'Cotizar Mudanza',
+      desc: 'Calcula una cotización de mudanza con volumen, pisos, ayudantes y distancia.',
+      auth: false,
+      requestExample: '{"volumeM3":15,"floors":2,"hasElevator":false,"crewCount":3,"distanceKm":10}'
+    },
+    {
+      id: 'heavy_quote',
+      method: 'POST',
+      path: '/v1/heavy-cargo/quote',
+      title: 'Cotizar Carga Pesada',
+      desc: 'Calcula una cotización con pallets, peso, dimensiones y equipo requerido.',
+      auth: false,
+      requestExample: '{"palletsCount":2,"totalWeightKg":1500,"lengthM":2,"widthM":1.2,"heightM":1.4,"equipmentRequired":"Montacargas"}'
     }
   ];
 
@@ -95,7 +123,7 @@ export const ApiDocs: React.FC = () => {
               GoPaq DEVELOPER API REFERENCE
             </span>
             <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
-              v1.4 OpenAPI 3.0
+              v1.5 OpenAPI 3.1
             </span>
           </div>
         </div>
@@ -173,10 +201,7 @@ export const ApiDocs: React.FC = () => {
                 <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Headers Requeridos</h4>
                   <div className="font-mono text-xs text-slate-300 space-y-1.5">
-                    <div className="flex justify-between">
-                      <span className="text-amber-400">Authorization:</span>
-                      <span>Bearer YOUR_API_KEY</span>
-                    </div>
+                    {current.auth ? <div className="flex justify-between"><span className="text-amber-400">X-API-Key:</span><span>YOUR_API_KEY</span></div> : <div className="text-slate-500">Este endpoint público no requiere autenticación.</div>}
                     <div className="flex justify-between">
                       <span className="text-amber-400">Content-Type:</span>
                       <span>application/json</span>
@@ -215,24 +240,21 @@ export const ApiDocs: React.FC = () => {
                   </div>
 
                   <pre className="p-4 text-xs font-mono text-amber-300 font-medium overflow-x-auto">
-{activeLang === 'curl' ? `curl -X ${current.method} "${window.location.origin}/api${current.path}" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"recipient_name": "<required>", "weight_kg": 2.5}'` :
+{activeLang === 'curl' ? `curl -X ${current.method} "${window.location.origin}/api${current.path}"${current.auth ? ' \\\n  -H "X-API-Key: YOUR_API_KEY"' : ''}${current.method === 'POST' ? ` \\\n  -H "Content-Type: application/json" \\\n  -d '${current.requestExample}'` : ''}` :
 activeLang === 'node' ? `const response = await fetch("${window.location.origin}/api${current.path}", {
   method: "${current.method}",
   headers: {
-    "Authorization": "Bearer YOUR_API_KEY",
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({ recipient_name: "<required>", weight_kg: 2.5 })
+    ${current.auth ? '"X-API-Key": "YOUR_API_KEY",' : ''}
+    ${current.method === 'POST' ? '"Content-Type": "application/json"' : ''}
+  }${current.method === 'POST' ? `,
+  body: JSON.stringify(${current.requestExample})` : ''}
 });
 const data = await response.json();` :
 `import requests
 
 url = "${window.location.origin}/api${current.path}"
-headers = {"Authorization": "Bearer YOUR_API_KEY"}
-response = requests.${current.method.toLowerCase()}(url, headers=headers, json={"weight_kg": 2.5})`}
+headers = {${current.auth ? '"X-API-Key": "YOUR_API_KEY"' : ''}${current.auth && current.method === 'POST' ? ', ' : ''}${current.method === 'POST' ? '"Content-Type": "application/json"' : ''}}
+response = requests.${current.method.toLowerCase()}(url, headers=headers${current.method === 'POST' ? `, json=${current.requestExample}` : ''})`}
                   </pre>
                 </div>
 
