@@ -23,10 +23,10 @@ export const ShipmentCreator: React.FC = () => {
   const { formatMoney, addToast, setActiveSubView, setSelectedTracking } = useApp();
 
   const [serviceType, setServiceType] = useState<ServiceType>('local');
-  const [originName, setOriginName] = useState('TechStore Caribe');
-  const [originAddress, setOriginAddress] = useState('Av. Winston Churchill #1099, Piantini');
+  const [originName, setOriginName] = useState('');
+  const [originAddress, setOriginAddress] = useState('');
   const [originCity, setOriginCity] = useState('Santo Domingo');
-  const [originPhone, setOriginPhone] = useState('809-555-0144');
+  const [originPhone, setOriginPhone] = useState('');
 
   const [destName, setDestName] = useState('');
   const [destAddress, setDestAddress] = useState('');
@@ -66,8 +66,8 @@ export const ShipmentCreator: React.FC = () => {
       lengthCm,
       widthCm,
       heightCm,
-      declaredValueUsd: 120,
-      isFragile: true,
+      declaredValueUsd: 0,
+      isFragile: false,
       codAmount: enableCod ? codAmount : 0
     }).then(result => {
       if (!active) return;
@@ -84,13 +84,13 @@ export const ShipmentCreator: React.FC = () => {
     setWeightKg(data.weightKg);
     setCategory(data.category);
     setIsScannerOpen(false);
-    addToast('success', 'Escaneo IA Exitoso', 'Las medidas y peso fueron calculados automáticamente.');
+    addToast('info', 'Medidas capturadas', 'Verifica las medidas y el peso; el precio será confirmado por el motor de tarifas del servidor.');
   };
 
   const handleCreateShipment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!destName || !destAddress) {
-      addToast('error', 'Campos Incompletos', 'Por favor completa el nombre y dirección del destinatario.');
+    if (!originName || !originAddress || !originPhone || !destName || !destAddress || !destPhone) {
+      addToast('error', 'Campos Incompletos', 'Completa los datos reales de remitente y destinatario, incluidos sus teléfonos.');
       return;
     }
 
@@ -121,8 +121,8 @@ export const ShipmentCreator: React.FC = () => {
         widthCm,
         heightCm,
         category,
-        declaredValueUsd: 120,
-        isFragile: true
+        declaredValueUsd: 0,
+        isFragile: false
       },
       codAmount: enableCod ? codAmount : 0,
       codCurrency: 'DOP'

@@ -12,9 +12,18 @@ export const routesRouter = Router();
 routesRouter.get('/', authenticate, requireScope('routes:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const orgId = req.organizationId!;
   const role = normalizeRole(req.user?.role);
-  const ownFilter = ['DRIVER', 'COURIER'].includes(role) ? ' AND r.driver_id IN (SELECT id FROM drivers WHERE user_id = ? AND organization_id = ?)' : '';
-  const routeParams = ownFilter ? [orgId, req.user!.userId, orgId] : [orgId];
-  const routes = await queryAllAsync(`SELECT r.*, d.name AS driver_name, d.phone AS driver_phone, b.name AS branch_name FROM routes r LEFT JOIN drivers d ON r.driver_id = d.id AND d.organization_id = r.organization_id LEFT JOIN branches b ON r.branch_id = b.id AND b.organization_id = r.organization_id WHERE r.organization_id = ?${ownFilter} ORDER BY r.created_at DESC`, routeParams);
+  const filters = ['r.organization_id = ?'];
+  const routeParams: any[] = [orgId];
+  if (['DRIVER', 'COURIER'].includes(role)) {
+    filters.push('r.driver_id IN (SELECT id FROM drivers WHERE user_id = ? AND organization_id = ?)');
+    routeParams.push(req.user!.userId, orgId);
+  }
+  if (['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role)) {
+    if (!req.user?.branchId) return res.status(403).json({ success: false, error: 'La cuenta de sucursal no tiene una sucursal asignada.' });
+    filters.push('r.branch_id = ?');
+    routeParams.push(req.user.branchId);
+  }
+  const routes = await queryAllAsync(`SELECT r.*, d.name AS driver_name, d.phone AS driver_phone, b.name AS branch_name FROM routes r LEFT JOIN drivers d ON r.driver_id = d.id AND d.organization_id = r.organization_id LEFT JOIN branches b ON r.branch_id = b.id AND b.organization_id = r.organization_id WHERE ${filters.join(' AND ')} ORDER BY r.created_at DESC`, routeParams);
   const result = [];
   for (const route of routes) {
     const stops = await queryAllAsync('SELECT * FROM route_stops WHERE route_id = ? ORDER BY sequence_order ASC', [route.id]);
@@ -30,6 +39,8 @@ routesRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN
   if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de ruta inválidos.' });
   const orgId = req.organizationId!;
   const input = parsed.data;
+  const role = normalizeRole(req.user?.role);
+  if (['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role) && req.user?.branchId !== input.branchId) return res.status(403).json({ success: false, error: 'La cuenta solo puede crear rutas de su sucursal.' });
   if (!(await queryOneAsync('SELECT id FROM branches WHERE id = ? AND organization_id = ? AND active = 1', [input.branchId, orgId]))) return res.status(422).json({ success: false, error: 'Sucursal inválida para esta organización.' });
   if (input.driverId && !(await queryOneAsync('SELECT id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [input.driverId, orgId]))) return res.status(422).json({ success: false, error: 'Driver inválido para esta organización.' });
   if (input.vehicleId && !(await queryOneAsync('SELECT id FROM vehicles WHERE id = ? AND organization_id = ?', [input.vehicleId, orgId]))) return res.status(422).json({ success: false, error: 'Vehículo inválido para esta organización.' });
@@ -61,6 +72,8 @@ routesRouter.post('/:id/dispatch', authenticate, requireRole(['SUPER_ADMIN', 'OW
   const driverId = typeof req.body?.driverId === 'string' ? req.body.driverId : undefined;
   const route = await queryOneAsync<any>('SELECT * FROM routes WHERE id = ? AND organization_id = ?', [id, orgId]);
   if (!route) return res.status(404).json({ success: false, error: 'Ruta no encontrada.' });
+  const role = normalizeRole(req.user?.role);
+  if (['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role) && req.user?.branchId !== route.branch_id) return res.status(403).json({ success: false, error: 'La cuenta solo puede despachar rutas de su sucursal.' });
   const effectiveDriverId = driverId || route.driver_id;
   if (!effectiveDriverId) return res.status(422).json({ success: false, error: 'La ruta necesita un driver asignado antes de despachar.' });
   if (!(await queryOneAsync('SELECT id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [effectiveDriverId, orgId]))) return res.status(422).json({ success: false, error: 'Driver inválido para esta organización.' });

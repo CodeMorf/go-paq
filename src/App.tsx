@@ -8,26 +8,13 @@ import { ApiClient } from './api/client';
 import { LoginPage, RegisterPage, RoleLoginPage, destinationForRole } from './components/auth/AuthPages';
 import { UserRole } from './types';
 import { SuperAdminLayout } from './components/super-admin/SuperAdminLayout';
-import { SuperAdminDashboard } from './components/super-admin/SuperAdminDashboard';
-import { LiveConsole } from './components/super-admin/LiveConsole';
-import { ShipmentsManager } from './components/super-admin/ShipmentsManager';
+import { ProductionAdminDashboard, ProductionOperationsConsole, ProductionFleetPanel, ProductionBranchScanner, ProductionUnavailablePanel, ProductionSettingsPanel, ProductionClientRegistration, ProductionQuotePanel, ProductionBranchNetwork, ProductionClientDirectory, ProductionShipmentsManager } from './components/super-admin/ProductionAdminPanels';
 import { InternationalCourier } from './components/super-admin/InternationalCourier';
 import { RoutesDispatcher } from './components/super-admin/RoutesDispatcher';
 import { MovingHeavyCargo } from './components/super-admin/MovingHeavyCargo';
 import { DriversFleet } from './components/super-admin/DriversFleet';
-import { BranchesWarehouses } from './components/super-admin/BranchesWarehouses';
-import { ClientsManager } from './components/super-admin/ClientsManager';
 import { CodReconciliation } from './components/super-admin/CodReconciliation';
-import { RatesEngine } from './components/super-admin/RatesEngine';
 import { TeamRbac } from './components/super-admin/TeamRbac';
-import { SystemSettings } from './components/super-admin/SystemSettings';
-import { DangerousZonesManager } from './components/super-admin/DangerousZonesManager';
-import { ZernioOmnichannelCenter } from './components/super-admin/ZernioOmnichannelCenter';
-import { AiEventAutomationStudio } from './components/super-admin/AiEventAutomationStudio';
-import { BulkScanner } from './components/operations/BulkScanner';
-import { LiveFleetMap } from './components/operations/LiveFleetMap';
-import { ClientRegistrationAndBranchMatcher } from './components/clients/ClientRegistrationAndBranchMatcher';
-import { ThermalLabelModal } from './components/ui/ThermalLabelModal';
 import { PortalLayout } from './components/portal/PortalLayout';
 import { PortalDashboard } from './components/portal/PortalDashboard';
 import { TrackingSearch } from './components/portal/TrackingSearch';
@@ -39,7 +26,6 @@ import { SucursalLayout } from './components/sucursal/SucursalLayout';
 import { SucursalDashboard } from './components/sucursal/SucursalDashboard';
 import { CounterPOS } from './components/sucursal/CounterPOS';
 import { BranchInventory } from './components/sucursal/BranchInventory';
-import { DriversDispatch } from './components/sucursal/DriversDispatch';
 import { CashRegister } from './components/sucursal/CashRegister';
 import { DriverApp } from './components/driver/DriverApp';
 import { ApiDocs } from './components/docs/ApiDocs';
@@ -140,30 +126,30 @@ const ProtectedArea: React.FC<{ section: Section }> = ({ section }) => {
 };
 
 const AreaContent: React.FC<{ section: Section; user?: any }> = ({ section, user }) => {
-  const { activeSubView, isNewShipmentModalOpen, setIsNewShipmentModalOpen, activeLabelShipment, setActiveLabelShipment } = useApp();
+  const { activeSubView, isNewShipmentModalOpen, setIsNewShipmentModalOpen } = useApp();
   let body: React.ReactNode = null;
 
   if (section === 'super-admin') body = <SuperAdminLayout>
-    {activeSubView === 'dashboard' && <SuperAdminDashboard />}
-    {activeSubView === 'operaciones-vivo' && <LiveConsole />}
-    {activeSubView === 'zernio-omnichannel' && <ZernioOmnichannelCenter />}
-    {activeSubView === 'ia-eventos' && <AiEventAutomationStudio />}
-    {activeSubView === 'escaneo-masivo' && <BulkScanner />}
-    {activeSubView === 'mapa-flota' && <LiveFleetMap />}
-    {activeSubView === 'envios' && <ShipmentsManager />}
+    {activeSubView === 'dashboard' && <ProductionAdminDashboard />}
+    {activeSubView === 'operaciones-vivo' && <ProductionOperationsConsole />}
+    {activeSubView === 'zernio-omnichannel' && <ProductionUnavailablePanel title="Omnicanal y WhatsApp" description="No existe un proveedor externo configurado para mensajería omnicanal en este entorno." provider="WhatsApp / Zernio" />}
+    {activeSubView === 'ia-eventos' && <ProductionUnavailablePanel title="Automatizaciones e IA" description="No hay un motor de IA o automatizaciones externas configurado y persistido para esta organización." provider="IA / automatizaciones" />}
+    {activeSubView === 'escaneo-masivo' && <ProductionBranchScanner />}
+    {activeSubView === 'mapa-flota' && <ProductionFleetPanel />}
+    {activeSubView === 'envios' && <ProductionShipmentsManager />}
     {activeSubView === 'courier-intl' && <InternationalCourier />}
     {activeSubView === 'rutas' && <RoutesDispatcher />}
     {activeSubView === 'mudanzas-carga' && <MovingHeavyCargo />}
     {activeSubView === 'drivers' && <DriversFleet />}
-    {activeSubView === 'sucursales' && <BranchesWarehouses />}
-    {activeSubView === 'registro-sucursal-matcher' && <ClientRegistrationAndBranchMatcher />}
-    {activeSubView === 'clientes' && <ClientsManager />}
-    {activeSubView === 'zonas-peligrosas' && <DangerousZonesManager />}
+    {activeSubView === 'sucursales' && <ProductionBranchNetwork />}
+    {activeSubView === 'registro-sucursal-matcher' && <ProductionClientRegistration />}
+    {activeSubView === 'clientes' && <ProductionClientDirectory />}
+    {activeSubView === 'zonas-peligrosas' && <ProductionUnavailablePanel title="Zonas peligrosas" description="El backend aún no expone un CRUD persistente para zonas de riesgo y geofencing en esta organización." provider="PostGIS / geofencing" />}
     {activeSubView === 'cod' && <CodReconciliation />}
-    {activeSubView === 'tarifas' && <RatesEngine />}
+    {activeSubView === 'tarifas' && <ProductionQuotePanel />}
     {activeSubView === 'equipo' && <TeamRbac />}
-    {activeSubView === 'configuracion' && <SystemSettings />}
-    {!['dashboard','operaciones-vivo','zernio-omnichannel','ia-eventos','escaneo-masivo','mapa-flota','envios','courier-intl','rutas','mudanzas-carga','drivers','sucursales','registro-sucursal-matcher','clientes','zonas-peligrosas','cod','tarifas','equipo','configuracion'].includes(activeSubView) && <SuperAdminDashboard />}
+    {activeSubView === 'configuracion' && <ProductionSettingsPanel />}
+    {!['dashboard','operaciones-vivo','zernio-omnichannel','ia-eventos','escaneo-masivo','mapa-flota','envios','courier-intl','rutas','mudanzas-carga','drivers','sucursales','registro-sucursal-matcher','clientes','zonas-peligrosas','cod','tarifas','equipo','configuracion'].includes(activeSubView) && <ProductionAdminDashboard />}
   </SuperAdminLayout>;
 
   if (section === 'portal') body = <PortalLayout>
@@ -181,7 +167,7 @@ const AreaContent: React.FC<{ section: Section; user?: any }> = ({ section, user
     {activeSubView === 'dashboard' && <SucursalDashboard />}
     {activeSubView === 'mostrador-pos' && <CounterPOS />}
     {activeSubView === 'inventario' && <BranchInventory />}
-    {activeSubView === 'despacho' && <DriversDispatch />}
+    {activeSubView === 'despacho' && <ProductionOperationsConsole />}
     {activeSubView === 'caja' && <CashRegister />}
     {!['dashboard','mostrador-pos','inventario','despacho','caja'].includes(activeSubView) && <SucursalDashboard />}
   </SucursalLayout>;
@@ -191,7 +177,6 @@ const AreaContent: React.FC<{ section: Section; user?: any }> = ({ section, user
   return <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors duration-150">
     {user?.isDemo && <div className="sticky top-0 z-[100] bg-amber-400 px-4 py-2 text-center text-xs font-black tracking-wide text-amber-950">ENTORNO DEMO · Datos aislados · No se ejecutan pagos ni comunicaciones externas</div>}
     {body}<ToastContainer /><CommandPalette />
-    {activeLabelShipment && <ThermalLabelModal shipment={activeLabelShipment} isOpen={!!activeLabelShipment} onClose={() => setActiveLabelShipment(null)} />}
     <Modal isOpen={isNewShipmentModalOpen} onClose={() => setIsNewShipmentModalOpen(false)} title="Crear Nuevo Envío" description="Wizard guiado para cotizar, registrar y generar guía de entrega." maxWidth="2xl"><ShipmentCreator /></Modal>
   </div>;
 };

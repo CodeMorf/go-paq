@@ -4,6 +4,9 @@ import { initDatabase, initDatabaseAsync, execute, queryOne, executeAsync, query
 import { hashPassword } from '../auth/jwt';
 
 export function runSeeds() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('El seed histórico solo está permitido para desarrollo/pruebas. Producción usa seed:production y nunca carga datos fixture.');
+  }
   initDatabase();
 
   const orgCount = queryOne<{ count: number }>('SELECT COUNT(*) as count FROM organizations');

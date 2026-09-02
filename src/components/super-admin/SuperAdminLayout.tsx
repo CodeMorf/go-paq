@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { 
   LayoutDashboard, 
@@ -39,6 +40,7 @@ import { Button } from '../ui/DesignSystem';
 import { GoPaqLogo } from '../ui/GoPaqLogo';
 
 export const SuperAdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const navigate = useNavigate();
   const { 
     activeSubView, 
     setActiveSubView, 
@@ -207,7 +209,7 @@ export const SuperAdminLayout: React.FC<{ children: React.ReactNode }> = ({ chil
       {/* API Docs link at bottom */}
       <div className="p-3 border-t border-slate-200/80 dark:border-slate-800 pb-safe">
         <button
-          onClick={() => { setCurrentSection('docs'); setIsMobileDrawerOpen(false); }}
+          onClick={() => { navigate('/docs/api'); setIsMobileDrawerOpen(false); }}
           className="w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
         >
           <div className="flex items-center gap-2">
@@ -309,20 +311,11 @@ export const SuperAdminLayout: React.FC<{ children: React.ReactNode }> = ({ chil
             {/* Notification Center Bell */}
             <NotificationCenter />
 
-            {/* User Profile Avatar */}
             <div className="flex items-center gap-2 pl-1 sm:pl-2 border-l border-slate-200 dark:border-slate-800">
-              <img
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80"
-                alt="Alejandro Tavares"
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-indigo-500/40"
-              />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-black text-[10px] flex items-center justify-center border border-indigo-500/40">GP</div>
               <div className="hidden xl:block text-left text-xs">
-                <span className="font-bold text-slate-900 dark:text-white block leading-tight">
-                  Ing. Alejandro Tavares
-                </span>
-                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
-                  Super Admin
-                </span>
+                <span className="font-bold text-slate-900 dark:text-white block leading-tight">Sesión autenticada</span>
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">{currentRole}</span>
               </div>
             </div>
           </div>

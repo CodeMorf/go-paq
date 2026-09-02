@@ -153,10 +153,10 @@ export const SucursalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
           </div>
           <div>
             <span className="font-bold text-slate-900 dark:text-white block">
-              Operador de Mostrador
+              Sesión autenticada
             </span>
             <span className="text-[10px] text-slate-400 font-mono">
-              Caja #01 • Turno Activo
+              {selectedBranch?.code || 'Sucursal sin seleccionar'}
             </span>
           </div>
         </div>
@@ -211,7 +211,7 @@ export const SucursalLayout: React.FC<{ children: React.ReactNode }> = ({ childr
 
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="sm:hidden text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg">
-              {selectedBranch?.code || 'SDQ'}
+              {selectedBranch?.code || '—'}
             </div>
 
             <button

@@ -110,8 +110,7 @@ GoPaq está estructurado en **5 Grandes Ecosistemas** interconectados en tiempo 
 
 ### 🖨️ Componentes y Modales Globales
 - **Command Palette (`Ctrl+K`):** Buscador rápido universal para navegación instantánea.
-- **Modal de Impresión Térmica:** Generador e impresión directa de etiquetas estándar (4x6").
-- **Modal Global de Creación de Envíos:** Accesible desde cualquier vista del sistema.
+- **Modal Global de Creación de Envíos:** Accesible desde las áreas autenticadas y conectado al motor de cotización/envíos.
 
 
 ---
@@ -122,8 +121,8 @@ GoPaq está estructurado en **5 Grandes Ecosistemas** interconectados en tiempo 
 |---|---|
 | **Frontend Core** | React 19, TypeScript, Vite |
 | **Estilos & UI** | Tailwind CSS v4, Motion (Framer Motion), Lucide Icons |
-| **Realtime & Mensajería** | Pusher JS, Webhooks, Audio Alerts API |
-| **Inteligencia & OCR** | Google GenAI SDK, Canvas Confetti |
+| **Realtime & Mensajería** | WebSockets autenticados, Redis Pub/Sub y Webhooks por outbox |
+| **Inteligencia & OCR** | Adaptadores de proveedor; sin proveedor activo se informa `NO CONFIGURADO` |
 | **Herramientas de Build** | Bun / Node.js, PostCSS, Autoprefixer |
 
 ---
@@ -143,9 +142,8 @@ GoPaq/
 │   │   ├── super-admin/     # Panel de administración maestro
 │   │   └── ui/              # Componentes de diseño, modales y widgets
 │   ├── context/             # Estado global (AppContext)
-│   ├── data/                # Mock data y reglas de automatización
 │   ├── types/               # Definiciones de tipos TypeScript
-│   ├── utils/               # Servicios de sincronización, audio y push
+│   ├── utils/               # Utilidades de interfaz y estado de sincronización
 │   ├── App.tsx              # Ruteo principal y switch de módulos
 │   ├── main.tsx             # Punto de entrada de la aplicación
 │   └── index.css            # Estilos globales y Tailwind CSS

@@ -10,6 +10,15 @@ export const codRouter = Router();
 
 codRouter.get('/ledger', authenticate, requireScope('cod:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const orgId = req.organizationId!;
+  const role = normalizeRole(req.user?.role);
+  const branchScoped = ['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role);
+  if (branchScoped && !req.user?.branchId) return res.status(403).json({ success: false, error: 'La cuenta de sucursal no tiene una sucursal asignada.' });
+  const clientScoped = ['CLIENT', 'CUSTOMER'].includes(role) || req.authType === 'api_key';
+  if (clientScoped && !req.clientId) return res.status(403).json({ success: false, error: 'La cuenta de cliente no tiene un cliente asignado.' });
+  const branchFilter = branchScoped ? ' AND c.branch_id = ?' : '';
+  const clientFilter = clientScoped ? ' AND c.client_id = ?' : '';
+  const branchParams = branchScoped ? [orgId, req.user!.branchId] : [orgId];
+  if (clientScoped) branchParams.push(req.clientId);
   const transactions = await queryAllAsync(`
     SELECT c.*, s.tracking_number, d.name AS driver_name, b.name AS branch_name, cl.company_name AS client_name
     FROM cod_transactions c
@@ -17,16 +26,16 @@ codRouter.get('/ledger', authenticate, requireScope('cod:read'), asyncHandler(as
     LEFT JOIN drivers d ON c.driver_id = d.id AND d.organization_id = c.organization_id
     LEFT JOIN branches b ON c.branch_id = b.id AND b.organization_id = c.organization_id
     LEFT JOIN clients cl ON c.client_id = cl.id AND cl.organization_id = c.organization_id
-    WHERE c.organization_id = ?
+    WHERE c.organization_id = ?${branchFilter}${clientFilter}
     ORDER BY c.created_at DESC
-  `, [orgId]);
+  `, branchParams);
   const summary = await queryOneAsync(`
     SELECT SUM(CASE WHEN status = 'pending_collection' THEN amount ELSE 0 END) AS pending_collection,
            SUM(CASE WHEN status IN ('collected_driver', 'received_branch', 'reconciled') THEN amount ELSE 0 END) AS in_custody,
            SUM(CASE WHEN status = 'settled_merchant' THEN amount ELSE 0 END) AS settled_total,
            COUNT(*) AS total_transactions
-    FROM cod_transactions WHERE organization_id = ?
-  `, [orgId]);
+    FROM cod_transactions WHERE organization_id = ?${branchScoped ? ' AND branch_id = ?' : ''}${clientScoped ? ' AND client_id = ?' : ''}
+  `, branchParams);
   return res.json({ success: true, summary, transactions });
 }));
 

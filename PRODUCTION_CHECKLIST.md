@@ -1,35 +1,61 @@
 # Checklist de producción GoPaq
 
-## Verificado en código y CI
+Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. El núcleo persistente está activo en `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
 
-- [x] Cuatro superficies de login con validación de rol en backend.
-- [x] JWT corto, refresh rotatorio en cookie HttpOnly, logout y auditoría.
-- [x] Aislamiento por `organization_id` en endpoints críticos.
-- [x] Idempotencia para shipment, entrega/POD y liquidación COD.
-- [x] Transacción atómica de entrega, tracking, COD y outbox.
-- [x] Migraciones explícitas, advisory lock y PostGIS.
-- [x] Outbox + BullMQ + retries/backoff + failed jobs.
-- [x] Driver móvil React con GPS del navegador, POD y cola offline confirmada por servidor.
-- [x] Build, TypeScript, API tests y flujo de aislamiento tenant local: 24/24.
-- [x] Compose sin publicación de PostgreSQL/Redis.
-- [x] Evidencia POD fuera de PostgreSQL como clave de storage en volumen persistente.
-- [x] Secretos de webhook cifrados en reposo cuando `WEBHOOK_ENCRYPTION_KEY` está configurada.
+## Código, seguridad y CI local
 
-## Verificación en VPS pendiente de evidencia final
+- [x] Cuatro superficies de login: `/super-admin/login`, `/portal/login`, `/sucursal/login` y `/driver/login`.
+- [x] El backend comprueba área, rol, organización, permisos y propiedad del recurso; no depende de ocultar botones.
+- [x] JWT de corta duración, refresh rotatorio en cookie HttpOnly, logout, expiración y auditoría de acceso.
+- [x] Registro de clientes limitado a la organización pública configurada; el formulario no puede elegir tenants internos.
+- [x] Tenant demo `org-demo` aislado, reseteable y con restricciones sandbox.
+- [x] Aislamiento por `organization_id` en envíos, rutas, sucursales, clientes, COD, internacional y API keys.
+- [x] Idempotencia para creación de envíos, POD, COD, escaneos, prealertas y operaciones de integración.
+- [x] Entrega/POD + tracking + COD + outbox en transacción atómica.
+- [x] Migraciones explícitas con historial y advisory lock; PostGIS se valida durante readiness.
+- [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
+- [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
+- [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 26 pruebas API/seguridad, build Vite y `git diff --check` verificados.
 
-- [ ] Pull de imágenes y confirmación de PostgreSQL 18.6/PostGIS 3.6.4.
-- [ ] Migración desde base vacía y readiness público.
-- [ ] Bootstrap de administrador real y tenant demo aislado.
-- [ ] Nginx/Cloudflare: HTTPS público sin 526 y WebSocket activo.
-- [ ] Smoke de los cuatro logins desde `gopaq.lat`.
-- [ ] Smoke cliente: cotización, envío persistido y tracking.
-- [ ] Smoke sucursal: inventario, escaneo y cierre de caja.
-- [ ] Smoke dispatcher: ruta, asignación y despacho.
-- [ ] Smoke driver: ruta, GPS, POD, COD y replay idempotente.
-- [ ] Backup y restore en base temporal.
-- [ ] Reinicio de API, worker, Redis y VPS con persistencia comprobada.
-- [ ] Medición p50/p95/p99, queries lentas, cola y frontend.
-- [ ] Copia de backup fuera del volumen principal.
-- [ ] Credenciales reales de proveedores externos y webhooks verificados; si faltan, UI `NO CONFIGURADO`.
+## VPS y despliegue verificados
 
-Mientras alguno de estos puntos no tenga evidencia, el estado correcto es **Validando**, no “GoPaq está en producción”.
+- [x] Rama desplegada: `Morf/production-hardening`.
+- [x] Ubuntu 26.04 LTS; 4 vCPU; 7.8 GiB RAM; aproximadamente 109 GiB libres en el volumen raíz al auditar.
+- [x] Docker Engine y Compose activos; servicios con `restart: unless-stopped`.
+- [x] PostgreSQL 18.6 verificado desde la base en ejecución.
+- [x] PostGIS 3.6.4 verificado mediante `postgis_full_version()`.
+- [x] Redis 8.10.1 Alpine activo, con AOF y contraseña, dentro de la red Docker privada.
+- [x] API publicada únicamente en `127.0.0.1:4000`; PostgreSQL y Redis no tienen puertos publicados al host.
+- [x] Nginx/aaPanel existente integrado sin reemplazar ni modificar los sitios co-alojados.
+- [x] HTTP redirige a HTTPS; Cloudflare dejó de devolver 526; `/api/health` y `/api/ready` responden correctamente.
+- [x] WebSocket `/ws` queda detrás del proxy con autenticación y validación de origen.
+- [x] Bootstrap de administrador productivo ejecutado de forma idempotente sin guardar la contraseña en Git.
+- [x] Demo seed/reset ejecutados explícitamente; no se ejecutan seeds demo al iniciar la aplicación.
+- [x] Backup local programado en `/etc/cron.d/gopaq-backup`, con archivos `0600` y retención configurada.
+- [x] Restore probado en una base temporal con el dump más reciente; se validaron 2 organizaciones y el proceso eliminó la base temporal.
+
+## Smoke real desde el dominio
+
+- [x] `https://gopaq.lat/` responde HTTP 200 y sirve el build compilado.
+- [x] Logo oficial GoPaq usado en menú, portada, logins y áreas.
+- [x] Login productivo de Super Admin verificado; su intento de entrar al portal devuelve 403.
+- [x] Botón `Acceso de prueba` verificado en las cuatro áreas; cada sesión usa `org-demo` y el rol correspondiente.
+- [x] Cliente: cotización backend, creación de shipment, persistencia e historial de tracking.
+- [x] Sucursal: recepción/escaneo idempotente e inventario persistido.
+- [x] Dispatcher: creación, asignación y despacho de ruta; Witylogix reporta `provider_unavailable` cuando no hay credenciales.
+- [x] Driver: manifiesto, inicio de ruta, POD, foto/firma desde la app y COD; replay idempotente verificado.
+- [x] COD: `collected_driver → received_branch → reconciled → settled_merchant`, con replay sin doble liquidación.
+- [x] Internacional: casillero, prealerta y replay idempotente; consolidación queda conectada al motor y sin datos inventados.
+- [x] Reinicio de API/worker y Redis: readiness recuperado y datos persistentes conservados en PostgreSQL.
+
+## Pendientes reales antes de ampliar tráfico
+
+- [ ] Copia de backups fuera del VPS (S3/R2/otro destino). No se configuró porque no hay credenciales de almacenamiento externo entregadas.
+- [ ] Credenciales y pruebas de proveedores externos: Karrio/carriers, Witylogix, WhatsApp/SMS/email, pagos, IA, Photon/Valhalla y object storage. La UI muestra `NO CONFIGURADO`/`provider_unavailable` mientras falten.
+- [ ] Suite Playwright E2E completa y pruebas de viewport móvil en un pipeline CI dedicado; las pruebas API y smoke ejecutadas no sustituyen esa cobertura.
+- [ ] Métricas p50/p95/p99, carga sostenida, profundidad de cola y TTFB de una ventana representativa de tráfico real.
+- [ ] Reinicio completo del VPS y comprobación del kernel pendiente de actualización. No se reinició el host para no interrumpir los servicios co-alojados durante esta sesión.
+- [ ] Verificación de backups remotos y prueba de restore fuera del volumen principal.
+
+Mientras alguno de estos límites carezca de evidencia, el estado correcto es **Validando**, no “GoPaq está completamente terminado para producción a escala”.

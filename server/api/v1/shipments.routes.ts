@@ -57,6 +57,11 @@ shipmentsRouter.get('/', authenticate, requireScope('shipments:read'), asyncHand
     sql += ` AND client_id = ?`;
     params.push(req.clientId);
   }
+  if (['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role)) {
+    if (!req.user?.branchId) return res.status(403).json({ success: false, error: 'La cuenta de sucursal no tiene una sucursal asignada.' });
+    sql += ` AND branch_id = ?`;
+    params.push(req.user.branchId);
+  }
   if (status && typeof status === 'string') { sql += ` AND status = ?`; params.push(status); }
   if (search && typeof search === 'string') { sql += ` AND (tracking_number LIKE ? OR destination_json LIKE ?)`; params.push(`%${search}%`, `%${search}%`); }
   sql += ` ORDER BY created_at DESC LIMIT ?`;
@@ -82,10 +87,11 @@ shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), asyncHa
   const role = normalizeRole(req.user?.role);
   const clientScoped = !!req.clientId && (!req.user || ['CLIENT', 'CUSTOMER'].includes(role) || req.authType === 'api_key');
   const clientId = clientScoped ? req.clientId : input.clientId || null;
-  const branchId = input.branchId || null;
+  const branchId = input.branchId || (['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role) ? req.user?.branchId || null : null);
   const idempotencyKey = req.header('idempotency-key')?.trim();
 
   if (clientScoped && input.clientId && input.clientId !== req.clientId) return res.status(403).json({ success: false, error: 'No puedes crear un envío para otro cliente.' });
+  if (['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role) && req.user?.branchId && branchId && branchId !== req.user.branchId) return res.status(403).json({ success: false, error: 'La cuenta solo puede crear envíos de su sucursal.' });
   if (idempotencyKey) {
     if (idempotencyKey.length < 8 || idempotencyKey.length > 200) return res.status(400).json({ success: false, error: 'Idempotency-Key inválida.' });
     const previous = await existingIdempotent(orgId, idempotencyKey, req.body);

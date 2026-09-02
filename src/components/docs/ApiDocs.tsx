@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { 
   Code, 
@@ -17,10 +18,12 @@ import {
 import { Button, Card } from '../ui/DesignSystem';
 
 export const ApiDocs: React.FC = () => {
+  const navigate = useNavigate();
   const { setCurrentSection, addToast } = useApp();
   const [selectedEndpoint, setSelectedEndpoint] = useState('create_shipment');
   const [activeLang, setActiveLang] = useState<'curl' | 'node' | 'python'>('curl');
   const [testResponse, setTestResponse] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
   const endpoints = [
@@ -61,50 +64,16 @@ export const ApiDocs: React.FC = () => {
     }
   ];
 
-  const handleTestEndpoint = () => {
+  const handleTestEndpoint = async () => {
     setLoading(true);
-    setTimeout(() => {
-      if (selectedEndpoint === 'create_shipment') {
-        setTestResponse(JSON.stringify({
-          status: "success",
-          data: {
-            tracking_number: "GP-88291044",
-            service_type: "local",
-            status: "confirmed",
-            shipping_cost_dop: 285.00,
-            cod_amount_dop: 3500.00,
-            label_url: "https://api.gopaq.com.do/v1/labels/GP-88291044.pdf",
-            estimated_delivery: "2026-02-28T18:00:00Z"
-          }
-        }, null, 2));
-      } else if (selectedEndpoint === 'get_tracking') {
-        setTestResponse(JSON.stringify({
-          status: "success",
-          data: {
-            tracking_number: "GP-99238411",
-            current_status: "out_for_delivery",
-            driver: {
-              name: "Carlos Méndez",
-              phone: "809-555-0144",
-              vehicle: "Toyota Hilux G-449102"
-            },
-            timeline_events_count: 5
-          }
-        }, null, 2));
-      } else {
-        setTestResponse(JSON.stringify({
-          status: "success",
-          rate_quote: {
-            base_dop: 180,
-            distance_dop: 75,
-            fuel_surcharge_dop: 22.50,
-            total_dop: 277.50
-          }
-        }, null, 2));
-      }
-      setLoading(false);
-      addToast('success', 'Petición Completada', 'Respuesta HTTP 200 OK recibida de la API.');
-    }, 600);
+    setTestResponse(null);
+    setTestStatus(null);
+    const response = await fetch('/api/ready', { credentials: 'include' });
+    const body = await response.json().catch(() => ({ success: false, error: `HTTP ${response.status}` }));
+    setTestStatus(response.status);
+    setTestResponse(JSON.stringify(body, null, 2));
+    setLoading(false);
+    addToast(response.ok ? 'info' : 'error', response.ok ? 'API verificada' : 'API no disponible', `La comprobación de solo lectura devolvió HTTP ${response.status}.`);
   };
 
   return (
@@ -113,7 +82,7 @@ export const ApiDocs: React.FC = () => {
       <header className="h-16 px-6 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setCurrentSection('super-admin')}
+            onClick={() => { setCurrentSection('super-admin'); navigate('/super-admin/dashboard'); }}
             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex items-center gap-2 text-xs font-bold"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -193,7 +162,7 @@ export const ApiDocs: React.FC = () => {
                       {current.method}
                     </span>
                     <h2 className="text-xl font-bold font-mono text-white">
-                      https://api.gopaq.com.do{current.path}
+                      {window.location.origin}/api{current.path}
                     </h2>
                   </div>
                   <h3 className="text-base font-bold text-amber-400 mt-2">{current.title}</h3>
@@ -206,7 +175,7 @@ export const ApiDocs: React.FC = () => {
                   <div className="font-mono text-xs text-slate-300 space-y-1.5">
                     <div className="flex justify-between">
                       <span className="text-amber-400">Authorization:</span>
-                      <span>Bearer YOUR_API_SECRET_KEY</span>
+                      <span>Bearer YOUR_API_KEY</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-amber-400">Content-Type:</span>
@@ -241,28 +210,28 @@ export const ApiDocs: React.FC = () => {
                       loading={loading}
                       onClick={handleTestEndpoint}
                     >
-                      Probar Endpoint (Try It Out)
+                      Comprobar API (solo lectura)
                     </Button>
                   </div>
 
                   <pre className="p-4 text-xs font-mono text-amber-300 font-medium overflow-x-auto">
-{activeLang === 'curl' ? `curl -X ${current.method} "https://api.gopaq.com.do${current.path}" \\
-  -H "Authorization: Bearer gp_live_sec_991204" \\
+{activeLang === 'curl' ? `curl -X ${current.method} "${window.location.origin}/api${current.path}" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"recipient_name": "Carlos Gomez", "weight_kg": 2.5}'` :
-activeLang === 'node' ? `const response = await fetch("https://api.gopaq.com.do${current.path}", {
+  -d '{"recipient_name": "<required>", "weight_kg": 2.5}'` :
+activeLang === 'node' ? `const response = await fetch("${window.location.origin}/api${current.path}", {
   method: "${current.method}",
   headers: {
-    "Authorization": "Bearer gp_live_sec_991204",
+    "Authorization": "Bearer YOUR_API_KEY",
     "Content-Type": "application/json"
   },
-  body: JSON.stringify({ recipient_name: "Carlos Gomez", weight_kg: 2.5 })
+  body: JSON.stringify({ recipient_name: "<required>", weight_kg: 2.5 })
 });
 const data = await response.json();` :
 `import requests
 
-url = "https://api.gopaq.com.do${current.path}"
-headers = {"Authorization": "Bearer gp_live_sec_991204"}
+url = "${window.location.origin}/api${current.path}"
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
 response = requests.${current.method.toLowerCase()}(url, headers=headers, json={"weight_kg": 2.5})`}
                   </pre>
                 </div>
@@ -271,8 +240,8 @@ response = requests.${current.method.toLowerCase()}(url, headers=headers, json={
                 {testResponse && (
                   <div className="bg-slate-950 border border-emerald-500/40 rounded-2xl overflow-hidden space-y-2 p-4">
                     <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="text-emerald-400 font-bold">Response: 200 OK</span>
-                      <span className="text-slate-500">Latency: 142ms</span>
+                      <span className={testStatus && testStatus < 400 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>Response: HTTP {testStatus}</span>
+                      <span className="text-slate-500">Respuesta real de /api/ready</span>
                     </div>
                     <pre className="text-xs font-mono text-emerald-300 overflow-x-auto bg-slate-900/80 p-3 rounded-xl">
                       {testResponse}

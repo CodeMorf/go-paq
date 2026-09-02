@@ -1,100 +1,14 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Clock, CreditCard, DollarSign, RefreshCw } from 'lucide-react';
+import { ApiClient } from '../../api/client';
 import { useApp } from '../../context/AppContext';
-import { CreditCard, DollarSign, Download, ArrowUpRight, CheckCircle2, Clock } from 'lucide-react';
-import { MetricCard, Card, Button } from '../ui/DesignSystem';
+import { Button, Card, MetricCard } from '../ui/DesignSystem';
 
+const statusLabel: Record<string, string> = { pending_collection: 'Pendiente de cobro', collected_driver: 'Cobrado por driver', received_branch: 'Recibido en sucursal', reconciled: 'Conciliado', settled_merchant: 'Liquidado' };
 export const ClientBilling: React.FC = () => {
-  const { formatMoney } = useApp();
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <CreditCard className="w-6 h-6 text-indigo-600" />
-            <span>Estado de Cuenta & Balances COD</span>
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Resumen de cobros contra entrega recaudados por los drivers y facturación de fletes
-          </p>
-        </div>
-
-        <Button variant="primary" size="sm" icon={<Download className="w-4 h-4" />}>
-          Descargar Estado de Cuenta (PDF)
-        </Button>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricCard
-          title="Balance COD a tu Favor"
-          value={formatMoney(42500)}
-          subtitle="Próxima liquidación: Viernes"
-          icon={<DollarSign className="w-5 h-5" />}
-          accent="emerald"
-        />
-        <MetricCard
-          title="Línea de Crédito Fletes"
-          value={formatMoney(150000)}
-          subtitle="Consumo del mes: RD$ 34,800"
-          icon={<CreditCard className="w-5 h-5" />}
-          accent="indigo"
-        />
-        <MetricCard
-          title="Facturas por Pagar"
-          value={formatMoney(0)}
-          subtitle="Cuenta al día"
-          icon={<CheckCircle2 className="w-5 h-5" />}
-          accent="blue"
-        />
-      </div>
-
-      {/* Invoices and Transfers Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-4 shadow-xs">
-        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-          Historial de Transferencias Bancarias & Liquidaciones COD
-        </h4>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-950/80 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase">
-              <tr>
-                <th className="py-3 px-4">Referencia ACH</th>
-                <th className="py-3 px-4">Concepto</th>
-                <th className="py-3 px-4">Banco Destino</th>
-                <th className="py-3 px-4">Fecha</th>
-                <th className="py-3 px-4 text-right">Monto Liquidado</th>
-                <th className="py-3 px-4 text-center">Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-              <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                <td className="py-3.5 px-4 font-mono font-bold text-slate-900 dark:text-white">
-                  ACH-BPD-99214
-                </td>
-                <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">
-                  Liquidación Semanal COD (18 entregas)
-                </td>
-                <td className="py-3.5 px-4 text-slate-500">
-                  Banco Popular Dominicano •••• 4091
-                </td>
-                <td className="py-3.5 px-4 font-mono text-slate-500">
-                  18 Feb 2026
-                </td>
-                <td className="py-3.5 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                  {formatMoney(68450)}
-                </td>
-                <td className="py-3.5 px-4 text-center">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                    Completado
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
+  const { formatMoney } = useApp(); const [transactions, setTransactions] = useState<any[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const load = async () => { setLoading(true); const result = await ApiClient.getCodLedger(); if (result.success) { setTransactions(result.transactions || []); setError(''); } else setError(result.error); setLoading(false); };
+  useEffect(() => { void load(); }, []);
+  const total = useMemo(() => transactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0), [transactions]); const pending = useMemo(() => transactions.filter((tx) => ['pending_collection', 'collected_driver', 'received_branch', 'reconciled'].includes(tx.status)).reduce((sum, tx) => sum + Number(tx.amount || 0), 0), [transactions]); const settled = useMemo(() => transactions.filter((tx) => tx.status === 'settled_merchant').reduce((sum, tx) => sum + Number(tx.amount || 0), 0), [transactions]);
+  return <div className="space-y-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="flex items-center gap-2 text-xl font-extrabold"><CreditCard className="h-6 w-6 text-indigo-600" />Estado de cuenta COD</h2><p className="mt-1 text-xs text-slate-500">Montos consultados del libro financiero de tu cuenta. No se muestran facturas ni liquidaciones que no existan en el servidor.</p></div><Button variant="secondary" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => void load()}>Actualizar</Button></div>{error && <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}<div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><MetricCard title="COD en curso" value={formatMoney(pending)} subtitle="Pendiente de liquidación" icon={<DollarSign className="h-5 w-5" />} accent="amber" /><MetricCard title="Liquidado" value={formatMoney(settled)} subtitle="Estado final registrado" icon={<CheckCircle2 className="h-5 w-5" />} accent="emerald" /><MetricCard title="Movimientos" value={String(transactions.length)} subtitle={`Total histórico: ${formatMoney(total)}`} icon={<Clock className="h-5 w-5" />} accent="indigo" /></div><Card className="overflow-hidden p-0"><div className="border-b border-slate-200 p-4 text-sm font-bold dark:border-slate-800">Movimientos COD de tu organización</div>{loading ? <p className="p-6 text-sm text-slate-500">Consultando libro financiero…</p> : !transactions.length ? <p className="p-6 text-sm text-slate-500">No hay movimientos COD registrados.</p> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{transactions.map((tx) => <div key={tx.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-xs"><div><p className="font-mono font-bold">{tx.tracking_number || tx.shipment_id}</p><p className="mt-1 text-slate-500">{statusLabel[tx.status] || tx.status}</p></div><span className="font-mono font-bold text-emerald-700">{formatMoney(Number(tx.amount || 0), tx.currency)}</span></div>)}</div>}</Card></div>;
 };

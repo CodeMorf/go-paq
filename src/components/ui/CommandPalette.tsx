@@ -48,10 +48,10 @@ export const CommandPalette: React.FC = () => {
   const results = useMemo(() => {
     if (!search.trim()) {
       return [
-        { type: 'action', title: 'Crear Nuevo Envío', subtitle: 'Lanzar wizard con escáner IA', section: 'portal', view: 'nuevo-envio', icon: <Sparkles className="w-4 h-4 text-indigo-500" /> },
+        { type: 'action', title: 'Crear Nuevo Envío', subtitle: 'Cotizar y registrar mediante la API', section: 'portal', view: 'crear-envio', icon: <Sparkles className="w-4 h-4 text-indigo-500" /> },
         { type: 'action', title: 'Operación en Vivo', subtitle: 'Ver mapa de flota en tiempo real', section: 'super-admin', view: 'operaciones-vivo', icon: <Truck className="w-4 h-4 text-emerald-500" /> },
-        { type: 'action', title: 'Recepción Mostrador', subtitle: 'Ingreso rápido de paquetes', section: 'sucursal', view: 'recepcion', icon: <Building2 className="w-4 h-4 text-blue-500" /> },
-        { type: 'action', title: 'Casillero Internacional', subtitle: 'Gestionar paquetes Miami / Madrid', section: 'portal', view: 'casillero', icon: <Layers className="w-4 h-4 text-purple-500" /> }
+        { type: 'action', title: 'Recepción Mostrador', subtitle: 'Ingreso persistido de paquetes', section: 'sucursal', view: 'mostrador-pos', icon: <Building2 className="w-4 h-4 text-blue-500" /> },
+        { type: 'action', title: 'Casillero Internacional', subtitle: 'Consultar paquetes registrados', section: 'portal', view: 'casilleros', icon: <Layers className="w-4 h-4 text-purple-500" /> }
       ];
     }
 
@@ -69,30 +69,34 @@ export const CommandPalette: React.FC = () => {
 
     // Shipments
     shipments.forEach((s) => {
-      if (
-        s.trackingNumber.toLowerCase().includes(q) ||
-        s.destination.name.toLowerCase().includes(q) ||
-        s.origin.name.toLowerCase().includes(q) ||
-        s.destination.city.toLowerCase().includes(q)
-      ) {
+      const trackingNumber = String(s.tracking_number || s.trackingNumber || '');
+      const destination = s.destination || {};
+      const origin = s.origin || {};
+      const destinationName = String(destination.name || s.recipient_name || '');
+      const originName = String(origin.name || s.sender_name || '');
+      const destinationCity = String(destination.city || s.destination_city || '');
+      if ([trackingNumber, destinationName, originName, destinationCity].some(value => value.toLowerCase().includes(q))) {
         list.push({
           type: 'shipment',
-          title: s.trackingNumber,
-          subtitle: `${s.destination.name} • ${s.destination.city}`,
-          entityId: s.trackingNumber,
+          title: trackingNumber,
+          subtitle: `${destinationName || 'Destinatario no indicado'} • ${destinationCity || 'Ciudad no indicada'}`,
+          entityId: trackingNumber,
           icon: <Package className="w-4 h-4 text-indigo-600" />,
-          badge: <StatusBadge status={s.status} size="sm" />
+          badge: <StatusBadge status={s.status || 'pending'} size="sm" />
         });
       }
     });
 
     // Drivers
     drivers.forEach((d) => {
-      if (d.name.toLowerCase().includes(q) || d.licensePlate.toLowerCase().includes(q) || d.phone.includes(q)) {
+      const name = String(d.name || '');
+      const licensePlate = String(d.license_plate || d.licensePlate || d.vehicle_plate || '');
+      const phone = String(d.phone || '');
+      if ([name, licensePlate, phone].some(value => value.toLowerCase().includes(q))) {
         list.push({
           type: 'driver',
-          title: d.name,
-          subtitle: `${d.vehicleName} (${d.licensePlate}) • ${d.status === 'busy' ? 'En Ruta' : 'Disponible'}`,
+          title: name,
+          subtitle: `${d.vehicle_name || d.vehicleName || 'Vehículo no indicado'} (${licensePlate || 'placa no indicada'}) • ${d.status || 'estado no indicado'}`,
           section: 'super-admin',
           view: 'drivers',
           icon: <User className="w-4 h-4 text-emerald-600" />
@@ -102,11 +106,14 @@ export const CommandPalette: React.FC = () => {
 
     // Branches
     branches.forEach((b) => {
-      if (b.name.toLowerCase().includes(q) || b.city.toLowerCase().includes(q) || b.code.toLowerCase().includes(q)) {
+      const name = String(b.name || '');
+      const city = String(b.city || '');
+      const code = String(b.code || '');
+      if ([name, city, code].some(value => value.toLowerCase().includes(q))) {
         list.push({
           type: 'branch',
-          title: b.name,
-          subtitle: `${b.city} • Código ${b.code}`,
+          title: name,
+          subtitle: `${city} • Código ${code}`,
           section: 'super-admin',
           view: 'sucursales',
           icon: <Building2 className="w-4 h-4 text-amber-600" />

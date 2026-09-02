@@ -76,6 +76,16 @@ export class ApiClient {
   }
 
   static async getMe(): Promise<ApiResponse<{ user: any }>> { return this.request<{ user: any }>('/auth/me'); }
+  static async getReadiness(): Promise<ApiResponse<{ status: string; database: any; redis: any; migrations: boolean }>> {
+    try {
+      const res = await fetch('/api/ready', { credentials: 'include' });
+      const data = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+      if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}` } as ApiResponse<{ status: string; database: any; redis: any; migrations: boolean }>;
+      return data as ApiResponse<{ status: string; database: any; redis: any; migrations: boolean }>;
+    } catch (err: any) {
+      return { success: false, error: err.message || 'No fue posible consultar la preparación del servicio.' };
+    }
+  }
   static async getUsers(): Promise<ApiResponse<{ users: any[] }>> { return this.request<{ users: any[] }>('/auth/users'); }
   static async getShipments(params?: { status?: string; search?: string }): Promise<ApiResponse<{ count: number; shipments: any[] }>> { const query = new URLSearchParams(params as any).toString(); return this.request<{ count: number; shipments: any[] }>(`/shipments?${query}`); }
   static async getShipment(id: string): Promise<ApiResponse<{ shipment: any }>> { return this.request<{ shipment: any }>(`/shipments/${id}`); }
@@ -98,6 +108,8 @@ export class ApiClient {
   static async closeBranchCash(branchId: string, payload: any): Promise<ApiResponse<{ message: string; summary: any }>> { return this.request<{ message: string; summary: any }>(`/branches/${branchId}/cash-close`, { method: 'POST', body: JSON.stringify(payload) }); }
   static async getClients(): Promise<ApiResponse<{ clients: any[] }>> { return this.request<{ clients: any[] }>('/clients'); }
   static async createClient(payload: any): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>('/clients', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async getApiKeys(): Promise<ApiResponse<{ keys: any[] }>> { return this.request<{ keys: any[] }>('/api-keys'); }
+  static async createApiKey(payload: any): Promise<ApiResponse<{ apiKey: any }>> { return this.request<{ apiKey: any }>('/api-keys', { method: 'POST', body: JSON.stringify(payload) }); }
   static async getCodLedger(): Promise<ApiResponse<{ summary: any; transactions: any[] }>> { return this.request<{ summary: any; transactions: any[] }>('/cod/ledger'); }
   static async receiveCod(transactionIds: string[], branchId?: string, notes?: string, idempotencyKey?: string): Promise<ApiResponse<{ status: string; transactionIds: string[]; processedAt: string }>> { return this.request<{ status: string; transactionIds: string[]; processedAt: string }>('/cod/receive', { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify({ transactionIds, branchId, notes }) }); }
   static async reconcileCod(transactionIds: string[], branchId?: string, notes?: string, idempotencyKey?: string): Promise<ApiResponse<{ status: string; transactionIds: string[]; processedAt: string }>> { return this.request<{ status: string; transactionIds: string[]; processedAt: string }>('/cod/reconcile', { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify({ transactionIds, branchId, notes }) }); }
