@@ -5,8 +5,11 @@ import { AuthenticatedRequest, authenticate, requireRole } from '../../auth/midd
 import {
   CONFIGURATION_CATEGORIES,
   ConfigurationCategory,
+  getGoogleMapsConfiguration,
   getConfigurationRevisions,
+  getPublicGoogleMapsConfiguration,
   getOrganizationConfiguration,
+  updateGoogleMapsConfiguration,
   updateOrganizationConfiguration
 } from '../../modules/configuration/configuration.service';
 import { normalizeRole } from '../../auth/roles';
@@ -35,12 +38,25 @@ function canWrite(role: string | undefined, category: ConfigurationCategory) {
 
 configurationRouter.get('/', authenticate, requireRole(readRoles), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const configuration = await getOrganizationConfiguration(req.organizationId!);
+  const googleMaps = await getGoogleMapsConfiguration(req.organizationId!);
   return res.json({
     success: true,
     organizationId: req.organizationId,
     categories: CONFIGURATION_CATEGORIES,
-    ...configuration
+    ...configuration,
+    googleMaps
   });
+}));
+
+// This endpoint intentionally returns only a restricted Google Maps browser
+// key to the public map client. It never exposes any other tenant settings.
+configurationRouter.get('/maps', asyncHandler(async (_req, res) => {
+  const organizationId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const googleMaps = await getPublicGoogleMapsConfiguration(organizationId);
+  if (googleMaps.status === 'provider_unavailable') {
+    return res.status(503).json({ success: false, error: 'Google Maps no está disponible en este momento.' });
+  }
+  return res.json({ success: true, provider: 'google_maps', ...googleMaps });
 }));
 
 configurationRouter.get('/revisions', authenticate, requireRole(readRoles), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -54,6 +70,27 @@ const updateSchema = z.object({
   expectedVersion: z.number().int().min(0),
   reason: z.string().trim().max(240).optional()
 }).strict();
+
+const googleMapsUpdateSchema = z.object({
+  apiKey: z.union([z.string().trim().min(20).max(500), z.null()]),
+  expectedVersion: z.number().int().min(0),
+  reason: z.string().trim().max(240).optional()
+}).strict();
+
+configurationRouter.patch('/google-maps', authenticate, requireRole(fullWriteRoles), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const parsed = googleMapsUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: 'La clave de Google Maps o la versión de configuración es inválida.' });
+
+  const updated = await updateGoogleMapsConfiguration({
+    organizationId: req.organizationId!,
+    userId: req.user!.userId,
+    apiKey: parsed.data.apiKey,
+    expectedVersion: parsed.data.expectedVersion,
+    reason: parsed.data.reason,
+    ipAddress: req.ip
+  });
+  return res.json({ success: true, organizationId: req.organizationId, ...updated });
+}));
 
 configurationRouter.patch('/:category', authenticate, requireRole(readRoles), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const categoryParam = String(req.params.category || '');

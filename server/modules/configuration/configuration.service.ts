@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { isPostgres, queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
+import { decryptSecret, encryptSecret } from '../../security/secretBox';
 
 export const CONFIGURATION_CATEGORIES = [
   'organization',
@@ -20,6 +21,14 @@ export const CONFIGURATION_CATEGORIES = [
 ] as const;
 
 export type ConfigurationCategory = typeof CONFIGURATION_CATEGORIES[number];
+
+const GOOGLE_MAPS_PROVIDER = 'google_maps';
+
+export type GoogleMapsConfiguration = {
+  configured: boolean;
+  keyHint: string | null;
+  updatedAt: string | null;
+};
 
 const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Debe ser un color hexadecimal válido.');
 
@@ -300,6 +309,121 @@ export async function getOrganizationConfiguration(organizationId: string) {
     updatedBy: row?.updated_by || null,
     updatedAt: row?.updated_at || null
   };
+}
+
+/**
+ * Google Maps browser keys are provider credentials, not business settings.
+ * They are encrypted at rest and never included in the generic settings JSON.
+ * The public endpoint may expose the decrypted browser key only because Google
+ * Maps requires it in the browser; the key must be restricted by referrer/API
+ * in Google Cloud before it is used in production.
+ */
+export async function getGoogleMapsConfiguration(organizationId: string): Promise<GoogleMapsConfiguration> {
+  const row = await queryOneAsync<{ key_hint: string | null; updated_at: string | null }>(
+    'SELECT key_hint, updated_at FROM organization_integration_credentials WHERE organization_id = ? AND provider = ?',
+    [organizationId, GOOGLE_MAPS_PROVIDER]
+  );
+  return {
+    configured: !!row,
+    keyHint: row?.key_hint || null,
+    updatedAt: row?.updated_at || null
+  };
+}
+
+export async function getPublicGoogleMapsConfiguration(organizationId: string) {
+  const row = await queryOneAsync<{ encrypted_value: string }>(
+    'SELECT encrypted_value FROM organization_integration_credentials WHERE organization_id = ? AND provider = ?',
+    [organizationId, GOOGLE_MAPS_PROVIDER]
+  );
+  if (!row) return { configured: false, status: 'NO CONFIGURADO' as const };
+  try {
+    const apiKey = decryptSecret(row.encrypted_value);
+    if (!apiKey.trim()) return { configured: false, status: 'provider_unavailable' as const };
+    return { configured: true, status: 'CONFIGURADO' as const, apiKey };
+  } catch {
+    return { configured: false, status: 'provider_unavailable' as const };
+  }
+}
+
+export async function updateGoogleMapsConfiguration(input: {
+  organizationId: string;
+  userId: string;
+  apiKey: string | null;
+  expectedVersion: number;
+  reason?: string;
+  ipAddress?: string;
+}) {
+  let encryptedValue: string | null = null;
+  let keyHint: string | null = null;
+  if (input.apiKey !== null) {
+    try {
+      encryptedValue = encryptSecret(input.apiKey);
+    } catch {
+      throw Object.assign(new Error('La protección de credenciales no está configurada en este entorno.'), { statusCode: 503 });
+    }
+    keyHint = `••••${input.apiKey.slice(-4)}`;
+  }
+
+  return transactionAsync(async (tx) => {
+    const existing = await tx.queryOne<{ settings_json: string; version: number }>(
+      `SELECT settings_json, version FROM organization_settings WHERE organization_id = ?${isPostgres ? ' FOR UPDATE' : ''}`,
+      [input.organizationId]
+    );
+    const currentVersion = existing ? Number(existing.version) : 0;
+    if (currentVersion !== input.expectedVersion) {
+      throw Object.assign(new Error('La configuración cambió mientras editabas. Actualiza la vista y vuelve a intentar.'), { statusCode: 409 });
+    }
+
+    const nextVersion = currentVersion + 1;
+    const now = new Date().toISOString();
+    const settingsJson = JSON.stringify(mergeWithDefaults(parseSettings(existing?.settings_json)));
+    if (existing) {
+      await tx.execute(
+        'UPDATE organization_settings SET version = ?, updated_by = ?, updated_at = ? WHERE organization_id = ? AND version = ?',
+        [nextVersion, input.userId, now, input.organizationId, currentVersion]
+      );
+    } else {
+      await tx.execute(
+        'INSERT INTO organization_settings (organization_id, settings_json, version, updated_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [input.organizationId, settingsJson, nextVersion, input.userId, now, now]
+      );
+    }
+
+    if (encryptedValue === null) {
+      await tx.execute(
+        'DELETE FROM organization_integration_credentials WHERE organization_id = ? AND provider = ?',
+        [input.organizationId, GOOGLE_MAPS_PROVIDER]
+      );
+    } else {
+      await tx.execute(`
+        INSERT INTO organization_integration_credentials (organization_id, provider, encrypted_value, key_hint, updated_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (organization_id, provider) DO UPDATE SET encrypted_value = excluded.encrypted_value, key_hint = excluded.key_hint, updated_by = excluded.updated_by, updated_at = excluded.updated_at
+      `, [input.organizationId, GOOGLE_MAPS_PROVIDER, encryptedValue, keyHint, input.userId, now, now]);
+    }
+
+    await tx.execute(
+      'INSERT INTO organization_setting_revisions (id, organization_id, version, settings_json, changed_by, change_reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [`cfg-rev-${crypto.randomUUID()}`, input.organizationId, nextVersion, settingsJson, input.userId, input.reason || 'Actualización de credencial Google Maps', now]
+    );
+    await tx.execute(
+      `INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at)
+       VALUES (?, ?, ?, 'configuration.google_maps_updated', 'organization_integration_credentials', ?, 'success', ?, ?, ?)`,
+      [`aud-${crypto.randomUUID()}`, input.organizationId, input.userId, input.organizationId, input.ipAddress || null, JSON.stringify({ provider: GOOGLE_MAPS_PROVIDER, configured: encryptedValue !== null, version: nextVersion }), now]
+    );
+    await tx.execute(
+      `INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at)
+       VALUES (?, ?, 'configuration.google_maps_updated', 'organization_integration_credentials', ?, ?, 'pending', 0, ?)`,
+      [`out-${crypto.randomUUID()}`, input.organizationId, input.organizationId, JSON.stringify({ organizationId: input.organizationId, provider: GOOGLE_MAPS_PROVIDER, configured: encryptedValue !== null, version: nextVersion }), now]
+    );
+
+    return {
+      version: nextVersion,
+      updatedBy: input.userId,
+      updatedAt: now,
+      googleMaps: { configured: encryptedValue !== null, keyHint, updatedAt: now }
+    };
+  });
 }
 
 export async function updateOrganizationConfiguration(input: {

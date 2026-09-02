@@ -12,6 +12,7 @@ async function runComprehensiveTestSuite() {
   // Seed DB
   runSeeds();
   process.env.DEMO_ACCESS_ENABLED = 'true';
+  if (!process.env.WEBHOOK_ENCRYPTION_KEY) process.env.WEBHOOK_ENCRYPTION_KEY = crypto.randomBytes(32).toString('hex');
   await runDemoSeeds();
 
   let passed = 0;
@@ -187,6 +188,34 @@ async function runComprehensiveTestSuite() {
   assert(configurationUpdate.status === 200 && configurationUpdate.body.version === Number(configurationRes.body.version) + 1 && configurationUpdate.body.settings.operations.maxRouteStops === 75, 'CONFIGURATION: operation policy persists with version and backend validation');
   assert(configurationConflict.status === 409, 'CONFIGURATION CONCURRENCY: stale version cannot overwrite newer settings');
   assert(disableLocalService.status === 200 && disabledServiceQuote.status === 409 && enableLocalService.status === 200, 'CONFIGURATION EFFECTIVE POLICY: disabling a service blocks its real quote until re-enabled');
+
+  // 14b. Google Maps credential boundary: encrypted storage, RBAC and public browser contract
+  const mapsClientWrite = await request(app)
+    .patch('/api/v1/configuration/google-maps')
+    .set('Authorization', `Bearer ${demoRes.body.token}`)
+    .send({ expectedVersion: enableLocalService.body.version, apiKey: 'test-only-google-maps-key' });
+  assert(mapsClientWrite.status === 403, 'GOOGLE MAPS RBAC: client cannot change the organization credential');
+  const invalidMapsKey = await request(app)
+    .patch('/api/v1/configuration/google-maps')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: enableLocalService.body.version, apiKey: 'invalid' });
+  assert(invalidMapsKey.status === 422, 'GOOGLE MAPS VALIDATION: malformed key is rejected before persistence');
+  const testMapsKey = `test-only-${crypto.randomBytes(24).toString('hex')}`;
+  const mapsUpdate = await request(app)
+    .patch('/api/v1/configuration/google-maps')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: enableLocalService.body.version, apiKey: testMapsKey, reason: 'Prueba de credencial cifrada' });
+  const mapsAdminRead = await request(app).get('/api/v1/configuration').set('Authorization', `Bearer ${token}`);
+  const publicMapsRead = await request(app).get('/api/v1/configuration/maps');
+  assert(mapsUpdate.status === 200 && mapsUpdate.body.googleMaps?.configured === true, 'GOOGLE MAPS: admin can persist a credential through the versioned backend');
+  assert(mapsAdminRead.status === 200 && mapsAdminRead.body.googleMaps?.keyHint && !mapsAdminRead.body.googleMaps?.apiKey && !mapsAdminRead.body.googleMaps?.encrypted_value, 'GOOGLE MAPS SECRET: authenticated configuration never returns the full key or ciphertext');
+  assert(publicMapsRead.status === 200 && publicMapsRead.body.configured === true && publicMapsRead.body.apiKey === testMapsKey, 'GOOGLE MAPS PUBLIC CONTRACT: only the configured browser key is exposed to the public map client');
+  const mapsClear = await request(app)
+    .patch('/api/v1/configuration/google-maps')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: mapsUpdate.body.version, apiKey: null, reason: 'Limpieza de fixture de pruebas' });
+  const publicMapsAfterClear = await request(app).get('/api/v1/configuration/maps');
+  assert(mapsClear.status === 200 && publicMapsAfterClear.status === 200 && publicMapsAfterClear.body.status === 'NO CONFIGURADO' && !publicMapsAfterClear.body.apiKey, 'GOOGLE MAPS RESET: retirar la credencial deja el proveedor en NO CONFIGURADO');
 
   // 15. Real Quotes & Pricing Engine
   const quoteRes = await request(app)

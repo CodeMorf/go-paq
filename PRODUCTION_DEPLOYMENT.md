@@ -26,6 +26,8 @@ Variables críticas: `DATABASE_URL` (generada por Compose), `REDIS_URL` (generad
 
 No se registran contraseñas, tokens JWT completos ni secretos de proveedores.
 
+La credencial de navegador de Google Maps se configura desde `/super-admin/configuracion`, no se compila dentro de Vite ni se guarda en Git. Se almacena cifrada en `organization_integration_credentials` con el protector de `WEBHOOK_ENCRYPTION_KEY`; el panel solo muestra una pista enmascarada. El endpoint público `/api/v1/configuration/maps` entrega esa clave únicamente al mapa público del tenant configurado, por lo que la clave debe tener restricciones HTTP referrer para `https://gopaq.lat/*` y solo las APIs necesarias. Si no existe una clave guardada, el estado correcto es `NO CONFIGURADO`.
+
 ## Migraciones y bootstrap
 
 ```bash
@@ -42,7 +44,7 @@ docker compose --env-file .env.production run --rm gopaq-migrate npm run seed:de
 docker compose --env-file .env.production up -d gopaq-api gopaq-worker
 ```
 
-El bootstrap es idempotente y no reemplaza la contraseña existente. `seed:demo` solo afecta `org-demo`; no se ejecuta automáticamente al arrancar.
+El bootstrap es idempotente y no reemplaza la contraseña existente. `seed:demo` solo afecta `org-demo`; no se ejecuta automáticamente al arrancar. La migración `007_google_maps_credentials` se aplica después de la migración `006_configuration_center` bajo el mismo advisory lock.
 
 ## URLs y comprobaciones
 
@@ -52,6 +54,7 @@ El bootstrap es idempotente y no reemplaza la contraseña existente. `seed:demo`
 - API: `https://gopaq.lat/api/v1/`
 - OpenAPI: `https://gopaq.lat/api/v1/docs/openapi.json`
 - Logins: `/super-admin/login`, `/portal/login`, `/sucursal/login`, `/driver/login`.
+- Configuración Google Maps: `/super-admin/configuracion` (solo `SUPER_ADMIN` y `OWNER` pueden guardar o retirar la credencial).
 
 El proxy debe redirigir HTTP a HTTPS, soportar `Upgrade` para `/ws` y no publicar `5432`, `6379`, workers ni servicios auxiliares.
 

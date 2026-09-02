@@ -16,8 +16,9 @@
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
-- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 35 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 41 pruebas API/seguridad, build Vite y `git diff --check` verificados.
 - [x] Configuración Global: 14 secciones con valores por tenant, API PATCH protegida, control de versión, auditoría, outbox e historial de revisiones.
+- [x] Google Maps: credencial de navegador separada de la configuración de negocio, cifrada en PostgreSQL, versionada/auditada y con estado público `NO CONFIGURADO` cuando no existe.
 - [x] El selector cruzado Admin/Portal/Agencia/Driver fue eliminado; cada área permanece en su propia ruta, sesión y guard de backend.
 - [x] Mudanzas y carga pesada: cotización, orden persistida, trabajo unificado, ruta, POD y rastreo canónico verificados en API.
 
@@ -44,6 +45,7 @@
 - [x] Logo oficial GoPaq usado en menú, portada, logins y áreas.
 - [x] Login productivo de Super Admin verificado; su intento de entrar al portal devuelve 403.
 - [x] Botón `Acceso de prueba` verificado en las cuatro áreas; cada sesión usa `org-demo` y el rol correspondiente.
+- [ ] Google Maps público: falta registrar una clave real restringida en `/super-admin/configuracion` y verificar la carga contra Google; sin esa credencial el estado esperado es `NO CONFIGURADO`.
 - [x] Cliente: cotización backend, creación de shipment, persistencia e historial de tracking.
 - [x] Sucursal: recepción/escaneo idempotente e inventario persistido.
 - [x] Dispatcher: creación, asignación y despacho de ruta; Witylogix reporta `provider_unavailable` cuando no hay credenciales.

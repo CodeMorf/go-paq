@@ -58,7 +58,8 @@ export function initDatabase() {
         ('003_postgis', CURRENT_TIMESTAMP),
         ('004_cod_state_machine', CURRENT_TIMESTAMP),
         ('005_logistics_jobs', CURRENT_TIMESTAMP),
-        ('006_configuration_center', CURRENT_TIMESTAMP)
+        ('006_configuration_center', CURRENT_TIMESTAMP),
+        ('007_google_maps_credentials', CURRENT_TIMESTAMP)
     `);
   }
 }
@@ -104,6 +105,7 @@ export async function runMigrations() {
   const codAndInternationalSql = fs.readFileSync(path.join(migrationsDir, '004_cod_state_machine.sql'), 'utf8');
   const logisticsJobsSql = fs.readFileSync(path.join(migrationsDir, '005_logistics_jobs.sql'), 'utf8');
   const configurationCenterSql = fs.readFileSync(path.join(migrationsDir, '006_configuration_center.sql'), 'utf8');
+  const googleMapsCredentialsSql = fs.readFileSync(path.join(migrationsDir, '007_google_maps_credentials.sql'), 'utf8');
   const lockKey = 7874701;
 
   await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
@@ -139,6 +141,10 @@ export async function runMigrations() {
     if (!applied.has('006_configuration_center')) {
       await pgPool.query(configurationCenterSql);
       await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['006_configuration_center']);
+    }
+    if (!applied.has('007_google_maps_credentials')) {
+      await pgPool.query(googleMapsCredentialsSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['007_google_maps_credentials']);
     }
   } finally {
     await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);
@@ -437,6 +443,17 @@ CREATE TABLE IF NOT EXISTS organization_setting_revisions (
 );
 CREATE INDEX IF NOT EXISTS idx_org_settings_updated ON organization_settings(updated_at);
 CREATE INDEX IF NOT EXISTS idx_org_setting_revisions_org_created ON organization_setting_revisions(organization_id, created_at);
+CREATE TABLE IF NOT EXISTS organization_integration_credentials (
+  organization_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  encrypted_value TEXT NOT NULL,
+  key_hint TEXT,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (organization_id, provider)
+);
+CREATE INDEX IF NOT EXISTS idx_org_integration_credentials_provider ON organization_integration_credentials(provider, updated_at);
 `;
 
 function ensureSqliteColumn(tableName: string, columnName: string, definition: string) {

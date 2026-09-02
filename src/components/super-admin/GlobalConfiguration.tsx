@@ -10,6 +10,7 @@ import {
   Globe2,
   HardDrive,
   LockKeyhole,
+  MapPinned,
   PackageCheck,
   Palette,
   RefreshCw,
@@ -18,6 +19,7 @@ import {
   Save,
   ServerCog,
   ShieldCheck,
+  Trash2,
   Truck,
   WalletCards,
   Wrench,
@@ -144,6 +146,10 @@ export const GlobalConfiguration: React.FC = () => {
   const [revisions, setRevisions] = useState<any[]>([]);
   const [ready, setReady] = useState<any>(null);
   const [integrations, setIntegrations] = useState<any>(null);
+  const [googleMaps, setGoogleMaps] = useState<{ configured: boolean; keyHint: string | null; updatedAt: string | null }>({ configured: false, keyHint: null, updatedAt: null });
+  const [googleMapsKey, setGoogleMapsKey] = useState('');
+  const [googleMapsSaving, setGoogleMapsSaving] = useState(false);
+  const [googleMapsError, setGoogleMapsError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -164,6 +170,9 @@ export const GlobalConfiguration: React.FC = () => {
       setVersion(configuration.version);
       setConfigured(configuration.configured);
       setUpdatedAt(configuration.updatedAt);
+      setGoogleMaps(configuration.googleMaps);
+      setGoogleMapsKey('');
+      setGoogleMapsError('');
     }
     if (readiness.success) setReady(readiness);
     if (integrationHealth.success) setIntegrations(integrationHealth);
@@ -197,6 +206,22 @@ export const GlobalConfiguration: React.FC = () => {
     setConfigured(true);
     setUpdatedAt(result.updatedAt);
     addToast('success', 'Configuración guardada', `${activeMeta.label} quedó persistida en PostgreSQL, versión ${result.version}.`);
+    const revisionResult = await ApiClient.getConfigurationRevisions(10);
+    if (revisionResult.success) setRevisions(revisionResult.revisions || []);
+  };
+
+  const saveGoogleMaps = async (apiKey: string | null) => {
+    setGoogleMapsSaving(true);
+    setGoogleMapsError('');
+    const result = await ApiClient.updateGoogleMapsConfiguration(apiKey, version, apiKey === null ? 'Retiro de credencial Google Maps' : 'Configuración de credencial Google Maps');
+    setGoogleMapsSaving(false);
+    if (!result.success) { setGoogleMapsError(result.error); return; }
+    setVersion(result.version);
+    setConfigured(true);
+    setUpdatedAt(result.updatedAt);
+    setGoogleMaps(result.googleMaps);
+    setGoogleMapsKey('');
+    addToast('success', apiKey === null ? 'Google Maps retirado' : 'Google Maps configurado', apiKey === null ? 'La credencial fue retirada del tenant.' : 'La credencial quedó guardada cifrada y versionada en PostgreSQL.');
     const revisionResult = await ApiClient.getConfigurationRevisions(10);
     if (revisionResult.success) setRevisions(revisionResult.revisions || []);
   };
@@ -235,7 +260,31 @@ export const GlobalConfiguration: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-800"><p className="text-[11px] text-slate-500">{dirty ? 'Hay cambios sin guardar en esta sección.' : configured ? `Versión ${version} sincronizada con el backend.` : 'Valores predeterminados; todavía no existe una configuración personalizada para este tenant.'}</p><Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={() => void save()} disabled={saving || loading || !dirty}>{saving ? 'Guardando…' : 'Guardar sección'}</Button></div>
         </Card>
 
-        {activeCategory === 'integrations' && <Card><div className="mb-3 flex items-center gap-2"><Wrench className="h-4 w-4 text-indigo-600" /><h3 className="text-sm font-bold">Estado real de proveedores</h3></div><div className="grid gap-2 sm:grid-cols-2"><StatusCard label="Karrio" ok={integrations?.karrio?.status === 'ONLINE'} value={integrations?.karrio?.status || 'NO CONFIGURADO'} /><StatusCard label="Witylogix" ok={integrations?.witylogix?.status === 'ONLINE'} value={integrations?.witylogix?.status || 'NO CONFIGURADO'} /></div><p className="mt-3 text-[11px] leading-5 text-slate-500">Seleccionar un proveedor no crea credenciales ni inventa una conexión. El proveedor solo se considera activo cuando el adaptador del backend confirma el servicio.</p></Card>}
+        {activeCategory === 'integrations' && <>
+          <Card className="border-sky-200 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-950/20">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <MapPinned className="mt-0.5 h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Google Maps para mapas públicos</h3>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 dark:text-slate-300">Administra aquí la clave de navegador que utilizará el mapa de sucursales. Se guarda cifrada, no se vuelve a mostrar completa y no se comparte con otros tenants.</p>
+                </div>
+              </div>
+              <StatusCard label="Estado" ok={googleMaps.configured} value={googleMaps.configured ? `CONFIGURADO ${googleMaps.keyHint || ''}` : 'NO CONFIGURADO'} />
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+                Nueva clave de Google Maps
+                <input type="password" value={googleMapsKey} onChange={(event) => setGoogleMapsKey(event.target.value)} placeholder={googleMaps.configured ? 'Escribe una nueva clave para reemplazarla' : 'Pega aquí la clave restringida de Google Cloud'} autoComplete="new-password" spellCheck={false} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-normal text-slate-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+              </label>
+              <Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={() => void saveGoogleMaps(googleMapsKey.trim())} disabled={googleMapsSaving || loading || googleMapsKey.trim().length < 20}>{googleMapsSaving ? 'Guardando…' : 'Guardar clave'}</Button>
+              <button type="button" onClick={() => { if (window.confirm('¿Retirar la credencial de Google Maps de este tenant?')) void saveGoogleMaps(null); }} disabled={googleMapsSaving || loading || !googleMaps.configured} className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 px-4 py-3 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"><Trash2 className="h-4 w-4" />Retirar</button>
+            </div>
+            {googleMapsError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{googleMapsError}</p>}
+            <p className="mt-3 text-[11px] leading-5 text-slate-500">Usa restricciones HTTP referrer para <code className="font-mono">https://gopaq.lat/*</code> y habilita únicamente Maps JavaScript API/Places si realmente los necesitas. Configurado no significa que Google haya validado la facturación o las restricciones.</p>
+          </Card>
+          <Card><div className="mb-3 flex items-center gap-2"><Wrench className="h-4 w-4 text-indigo-600" /><h3 className="text-sm font-bold">Estado real de proveedores</h3></div><div className="grid gap-2 sm:grid-cols-2"><StatusCard label="Karrio" ok={integrations?.karrio?.status === 'ONLINE'} value={integrations?.karrio?.status || 'NO CONFIGURADO'} /><StatusCard label="Witylogix" ok={integrations?.witylogix?.status === 'ONLINE'} value={integrations?.witylogix?.status || 'NO CONFIGURADO'} /></div><p className="mt-3 text-[11px] leading-5 text-slate-500">Seleccionar un proveedor no crea credenciales ni inventa una conexión. El proveedor solo se considera activo cuando el adaptador del backend confirma el servicio.</p></Card>
+        </>}
         {activeCategory === 'security' && <Card className="border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/20"><div className="flex items-start gap-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /><p className="text-xs leading-5 text-amber-900 dark:text-amber-200">Los cambios de seguridad se aplican a nuevas sesiones y deben probarse con una cuenta distinta. JWT, cookies, secretos, TLS y contraseñas existentes no se muestran en esta pantalla.</p></div></Card>}
       </div>
     </div>

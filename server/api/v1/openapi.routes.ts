@@ -121,6 +121,22 @@ openapiRouter.get('/openapi.json', (req, res) => {
           responses: { '200': { description: 'Configuración persistida y versionada' }, '409': { description: 'Versión desactualizada' }, '422': { description: 'Configuración inválida' } }
         }
       },
+      '/configuration/google-maps': {
+        patch: {
+          summary: 'Guardar o retirar la credencial de navegador de Google Maps',
+          description: 'Actualiza la credencial cifrada y versionada del tenant. La respuesta nunca contiene la clave completa.',
+          security: [{ bearerAuth: [] }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['apiKey', 'expectedVersion'], properties: { apiKey: { type: ['string', 'null'], minLength: 20 }, expectedVersion: { type: 'integer', minimum: 0 }, reason: { type: 'string' } } } } } },
+          responses: { '200': { description: 'Credencial guardada o retirada' }, '403': { description: 'Rol no autorizado' }, '409': { description: 'Versión desactualizada' }, '422': { description: 'Clave o versión inválida' }, '503': { description: 'Cifrado de credenciales no configurado' } }
+        }
+      },
+      '/configuration/maps': {
+        get: {
+          summary: 'Consultar la configuración pública de Google Maps',
+          description: 'Devuelve la clave de navegador únicamente cuando el tenant público la configuró; no devuelve ninguna otra configuración.',
+          responses: { '200': { description: 'Estado de Google Maps y clave de navegador configurada' }, '503': { description: 'Credencial no disponible' } }
+        }
+      },
       '/configuration/revisions': {
         get: {
           summary: 'Consultar historial de configuración',

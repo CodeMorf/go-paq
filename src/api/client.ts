@@ -92,11 +92,17 @@ export class ApiClient {
       return { success: false, error: err.message || 'No fue posible consultar la preparación del servicio.' };
     }
   }
-  static async getConfiguration(): Promise<ApiResponse<{ organizationId: string; categories: string[]; settings: Record<string, Record<string, unknown>>; version: number; configured: boolean; updatedBy: string | null; updatedAt: string | null }>> {
-    return this.request<{ organizationId: string; categories: string[]; settings: Record<string, Record<string, unknown>>; version: number; configured: boolean; updatedBy: string | null; updatedAt: string | null }>('/configuration');
+  static async getConfiguration(): Promise<ApiResponse<{ organizationId: string; categories: string[]; settings: Record<string, Record<string, unknown>>; version: number; configured: boolean; updatedBy: string | null; updatedAt: string | null; googleMaps: { configured: boolean; keyHint: string | null; updatedAt: string | null } }>> {
+    return this.request<{ organizationId: string; categories: string[]; settings: Record<string, Record<string, unknown>>; version: number; configured: boolean; updatedBy: string | null; updatedAt: string | null; googleMaps: { configured: boolean; keyHint: string | null; updatedAt: string | null } }>('/configuration');
   }
   static async updateConfiguration(category: string, settings: Record<string, unknown>, expectedVersion: number, reason?: string): Promise<ApiResponse<{ organizationId: string; category: string; settings: Record<string, Record<string, unknown>>; version: number; updatedBy: string; updatedAt: string }>> {
     return this.request<{ organizationId: string; category: string; settings: Record<string, Record<string, unknown>>; version: number; updatedBy: string; updatedAt: string }>(`/configuration/${encodeURIComponent(category)}`, { method: 'PATCH', body: JSON.stringify({ settings, expectedVersion, reason }) });
+  }
+  static async updateGoogleMapsConfiguration(apiKey: string | null, expectedVersion: number, reason?: string): Promise<ApiResponse<{ organizationId: string; version: number; updatedBy: string; updatedAt: string; googleMaps: { configured: boolean; keyHint: string | null; updatedAt: string | null } }>> {
+    return this.request<{ organizationId: string; version: number; updatedBy: string; updatedAt: string; googleMaps: { configured: boolean; keyHint: string | null; updatedAt: string | null } }>('/configuration/google-maps', { method: 'PATCH', body: JSON.stringify({ apiKey, expectedVersion, reason }) });
+  }
+  static async getPublicMapConfiguration(): Promise<ApiResponse<{ provider: string; configured: boolean; status: string; apiKey?: string }>> {
+    return this.request<{ provider: string; configured: boolean; status: string; apiKey?: string }>('/configuration/maps', {}, false);
   }
   static async getConfigurationRevisions(limit = 50): Promise<ApiResponse<{ revisions: any[] }>> {
     return this.request<{ revisions: any[] }>(`/configuration/revisions?limit=${encodeURIComponent(String(limit))}`);
