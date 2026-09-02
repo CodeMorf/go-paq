@@ -30,7 +30,7 @@ const clientSchema = z.object({
   rncTaxId: z.string().trim().max(40).optional(),
   tier: z.string().trim().max(60).default('Standard'),
   creditLimit: z.coerce.number().min(0).max(100000000).default(0),
-  branchId: z.string().trim().min(1).max(120).optional()
+  branchId: z.string().trim().min(1).max(120)
 });
 
 clientsRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS', 'BRANCH_MANAGER']), requireScope('clients:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -39,9 +39,11 @@ clientsRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMI
   const orgId = req.organizationId!;
   const input = parsed.data;
   const role = normalizeRole(req.user?.role);
-  if (['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'].includes(role) && req.user?.branchId && input.branchId && input.branchId !== req.user.branchId) return res.status(403).json({ success: false, error: 'La cuenta solo puede crear clientes en su sucursal.' });
-  const branchId = input.branchId || req.user?.branchId || null;
-  if (branchId && !(await queryOneAsync('SELECT id FROM branches WHERE id = ? AND organization_id = ? AND active = 1', [branchId, orgId]))) return res.status(422).json({ success: false, error: 'Sucursal inválida para esta organización.' });
+  const branchScopedRoles = ['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'DISPATCHER', 'WAREHOUSE', 'CASHIER'];
+  if (branchScopedRoles.includes(role) && !req.user?.branchId) return res.status(403).json({ success: false, error: 'La cuenta de sucursal no tiene una sucursal asignada.' });
+  if (branchScopedRoles.includes(role) && input.branchId !== req.user?.branchId) return res.status(403).json({ success: false, error: 'La cuenta solo puede crear clientes en su sucursal.' });
+  const branchId = input.branchId;
+  if (!(await queryOneAsync('SELECT id FROM branches WHERE id = ? AND organization_id = ? AND active = 1', [branchId, orgId]))) return res.status(422).json({ success: false, error: 'Sucursal inválida para esta organización.' });
   const email = input.email.toLowerCase().trim();
   if (await queryOneAsync('SELECT id FROM clients WHERE organization_id = ? AND email = ? AND active = 1', [orgId, email])) return res.status(409).json({ success: false, error: 'Ya existe un cliente activo con ese correo.' });
   const clientId = `cli-${crypto.randomUUID()}`;

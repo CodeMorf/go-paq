@@ -81,6 +81,11 @@ async function runComprehensiveTestSuite() {
     .post('/api/v1/auth/register')
     .send({ email: `invalid_branch_${Date.now()}@example.com`, password: 'SecurePass123!', name: 'Sucursal inválida', branchId: 'branch-does-not-exist' });
   assert(invalidBranchRegister.status === 422, 'CLIENT OWNERSHIP: registration rejects a branch outside the public organization');
+  const missingClientBranch = await request(app)
+    .post('/api/v1/clients')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Cliente sin sucursal', email: `missing_branch_${Date.now()}@example.com`, phone: '8095550101' });
+  assert(missingClientBranch.status === 422, 'CLIENT OWNERSHIP: administrative client creation requires an active branch');
 
   // 5. Security: Unauthenticated access rejected
   const unauthRes = await request(app).get('/api/v1/shipments');
