@@ -12,6 +12,7 @@
     "seed:demo": "tsx server/db/seedDemo.ts",
     "reset:demo": "tsx server/db/resetDemo.ts",
     "seed:production": "tsx server/db/seedProduction.ts",
+    "seed:dominican-republic": "tsx server/db/seedDominicanRepublic.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

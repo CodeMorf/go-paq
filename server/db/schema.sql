@@ -208,10 +208,51 @@ CREATE TABLE IF NOT EXISTS rates_matrix (
   service_variant TEXT,
   tiers_json TEXT NOT NULL DEFAULT '[]',
   surcharges_json TEXT NOT NULL DEFAULT '{}',
+  max_weight REAL,
   currency TEXT DEFAULT 'DOP',
   active INTEGER DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS countries (
+  id TEXT PRIMARY KEY,
+  iso2 TEXT NOT NULL UNIQUE,
+  iso3 TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  official_name TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS provinces (
+  id TEXT PRIMARY KEY,
+  country_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  capital TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (country_id, code),
+  UNIQUE (country_id, name),
+  FOREIGN KEY (country_id) REFERENCES countries(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS service_zones (
+  id TEXT PRIMARY KEY,
+  province_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  zone_number INTEGER NOT NULL CHECK (zone_number BETWEEN 1 AND 3),
+  description TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (province_id, code),
+  UNIQUE (province_id, zone_number),
+  FOREIGN KEY (province_id) REFERENCES provinces(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS shipments (

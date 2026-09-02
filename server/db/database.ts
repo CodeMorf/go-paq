@@ -86,6 +86,7 @@ export function initDatabase() {
     ensureSqliteColumn('rates_matrix', 'service_variant', 'TEXT');
     ensureSqliteColumn('rates_matrix', 'tiers_json', "TEXT NOT NULL DEFAULT '[]'");
     ensureSqliteColumn('rates_matrix', 'surcharges_json', "TEXT NOT NULL DEFAULT '{}'");
+    ensureSqliteColumn('rates_matrix', 'max_weight', 'REAL');
     ensureSqliteColumn('clients', 'country', 'TEXT');
     ensureSqliteColumn('clients', 'province', 'TEXT');
     ensureSqliteColumn('clients', 'city', 'TEXT');
@@ -99,7 +100,8 @@ export function initDatabase() {
         ('005_logistics_jobs', CURRENT_TIMESTAMP),
         ('006_configuration_center', CURRENT_TIMESTAMP),
         ('007_google_maps_credentials', CURRENT_TIMESTAMP),
-        ('008_admin_master_data', CURRENT_TIMESTAMP)
+        ('008_admin_master_data', CURRENT_TIMESTAMP),
+        ('009_geographic_catalog_and_weight_cap', CURRENT_TIMESTAMP)
     `);
   }
 }
@@ -147,6 +149,7 @@ export async function runMigrations() {
   const configurationCenterSql = fs.readFileSync(path.join(migrationsDir, '006_configuration_center.sql'), 'utf8');
   const googleMapsCredentialsSql = fs.readFileSync(path.join(migrationsDir, '007_google_maps_credentials.sql'), 'utf8');
   const adminMasterDataSql = fs.readFileSync(path.join(migrationsDir, '008_admin_master_data.sql'), 'utf8');
+  const geographicCatalogSql = fs.readFileSync(path.join(migrationsDir, '009_geographic_catalog_and_weight_cap.sql'), 'utf8');
   const lockKey = 7874701;
 
   await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
@@ -190,6 +193,10 @@ export async function runMigrations() {
     if (!applied.has('008_admin_master_data')) {
       await pgPool.query(adminMasterDataSql);
       await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['008_admin_master_data']);
+    }
+    if (!applied.has('009_geographic_catalog_and_weight_cap')) {
+      await pgPool.query(geographicCatalogSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['009_geographic_catalog_and_weight_cap']);
     }
   } finally {
     await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);

@@ -334,6 +334,29 @@ async function runComprehensiveTestSuite() {
   const rateSimulation = await request(app).post('/api/v1/rates/simulate').set('Authorization', `Bearer ${token}`).send({ serviceType: 'local', originCity: 'Santo Domingo', destCity: 'Santo Domingo', weightKg: 2, lengthCm: 20, widthCm: 20, heightCm: 10, distanceKm: 5 });
   assert(rateCreate.status === 201 && rateRead.status === 200 && rateRead.body.rates.some((rate: any) => rate.id === rateCreate.body.rate?.id) && rateSimulation.status === 200 && rateSimulation.body.quote?.ruleCode, 'RATES ENGINE: flexible rule persistence and backend tariff simulation return the applied rule');
 
+  const lbRate = await request(app)
+    .post('/api/v1/rates')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ ruleCode: `TEST-RD-LB-${Date.now()}`, serviceType: 'nacional', originZone: '*', destZone: '*', baseRate: 190, perKgRate: 0, perVolRate: 0, minCharge: 190, pricingMode: 'base_plus_weight', weightUnit: 'lb', includedWeight: 1, additionalWeightStep: 1, additionalWeightRate: 18, maxWeight: 60, priority: 1 });
+  const lbSimulation = await request(app)
+    .post('/api/v1/rates/simulate')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ serviceType: 'nacional', originCity: 'Santo Domingo', destCity: 'Santiago', weightKg: 27.2155, lengthCm: 10, widthCm: 10, heightCm: 10 });
+  const overCapSimulation = await request(app)
+    .post('/api/v1/rates/simulate')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ serviceType: 'nacional', originCity: 'Santo Domingo', destCity: 'Santiago', weightKg: 28, lengthCm: 10, widthCm: 10, heightCm: 10 });
+  assert(lbRate.status === 201 && lbSimulation.status === 200 && lbSimulation.body.quote?.ruleCode === lbRate.body.rate?.ruleCode && lbSimulation.body.quote?.baseRate === 190 && lbSimulation.body.quote?.weightCost === 1062 && lbSimulation.body.quote?.subtotal === 1252 && overCapSimulation.status === 422, 'RATES ENGINE: RD first-pound/additional-pound tariff computes 190 + 18 up to 60 lb and rejects heavier packages');
+
+  await transactionAsync(async (tx) => {
+    const now = new Date().toISOString();
+    await tx.execute(`INSERT INTO countries (id, iso2, iso3, name, official_name, active, created_at, updated_at) VALUES ('country-do-test', 'ZZ', 'ZZZ', 'País de prueba', 'País de prueba', 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [now, now]);
+    await tx.execute(`INSERT INTO provinces (id, country_id, code, name, capital, active, created_at, updated_at) VALUES ('province-do-test', 'country-do-test', 'TST', 'Provincia de prueba', 'Ciudad de prueba', 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [now, now]);
+    await tx.execute(`INSERT INTO service_zones (id, province_id, code, name, zone_number, description, active, created_at, updated_at) VALUES ('zone-do-test-1', 'province-do-test', 'ZZ-TST-1', 'Centro provincial', 1, 'Zona de prueba', 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [now, now]);
+  });
+  const geography = await request(app).get('/api/v1/geography?country=ZZ');
+  assert(geography.status === 200 && geography.body.country?.iso2 === 'ZZ' && geography.body.provinces?.[0]?.zones?.[0]?.code === 'ZZ-TST-1', 'GEOGRAPHY CATALOG: public country/province/operational-zone hierarchy is readable without exposing tenant data');
+
   // 15. Real Quotes & Pricing Engine
   const quoteRes = await request(app)
     .post('/api/v1/quotes')

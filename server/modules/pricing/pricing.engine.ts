@@ -74,6 +74,10 @@ export async function calculatePricing(input: QuoteInput, organizationId: string
 
   const pricingMode = String(rate.pricing_mode || 'base_plus_weight');
   const billingWeight = String(rate.weight_unit || 'kg') === 'lb' ? billableWeight * 2.2046226218 : billableWeight;
+  const maxWeight = rate.max_weight == null ? null : Number(rate.max_weight);
+  if (maxWeight !== null && billingWeight > maxWeight + 0.000001) {
+    throw Object.assign(new Error(`El peso facturable supera el máximo de ${maxWeight} ${String(rate.weight_unit || 'kg')}.`), { statusCode: 422 });
+  }
   const includedWeight = Number(rate.included_weight ?? 1);
   const weightStep = Math.max(0.001, Number(rate.additional_weight_step ?? 1));
   const additionalWeightRate = Number(rate.additional_weight_rate ?? rate.per_kg_rate ?? 0);
