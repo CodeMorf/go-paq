@@ -43,6 +43,29 @@ const zoneLabels = [
   { number: 3, name: 'Sur operativo', description: 'Zona operativa para el corredor sur y periferia provincial.' }
 ] as const;
 
+const nationalPoundRate = {
+  ruleCode: 'RD-NACIONAL-LB-60',
+  serviceType: 'nacional',
+  originZone: '*',
+  destZone: '*',
+  baseRate: 190,
+  perKgRate: 0,
+  perVolRate: 0,
+  minCharge: 190,
+  maxWeight: 60,
+  pricingMode: 'base_plus_weight',
+  weightUnit: 'lb',
+  includedWeight: 1,
+  additionalWeightStep: 1,
+  additionalWeightRate: 18,
+  includedDistanceKm: 0,
+  distanceRate: 0,
+  currency: 'DOP',
+  priority: 1,
+  tiersJson: '[]',
+  surchargesJson: '{}'
+} as const;
+
 async function main() {
   if (process.env.NODE_ENV !== 'production') throw new Error('El catálogo productivo requiere NODE_ENV=production.');
   if (!isPostgres) throw new Error('El catálogo productivo requiere PostgreSQL.');
@@ -50,6 +73,7 @@ async function main() {
 
   await initDatabaseAsync();
   const now = new Date().toISOString();
+  const organizationId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
   await transactionAsync(async (tx) => {
     await tx.execute(`
       INSERT INTO countries (id, iso2, iso3, name, official_name, active, created_at, updated_at)
@@ -75,12 +99,62 @@ async function main() {
         `, [zoneId, provinceId, zoneCode, zone.name, zone.number, zone.description, now, now]);
       }
     }
+
+    const existingRate = await tx.queryOne<{ id: string }>(
+      'SELECT id FROM rates_matrix WHERE organization_id = ? AND rule_code = ? LIMIT 1',
+      [organizationId, nationalPoundRate.ruleCode]
+    );
+    if (!existingRate) {
+      await tx.execute(`
+        INSERT INTO rates_matrix (
+          id, organization_id, rule_code, service_type, service_variant,
+          origin_zone, dest_zone, base_rate, per_kg_rate, per_vol_rate,
+          min_charge, pricing_mode, weight_unit, included_weight,
+          additional_weight_step, additional_weight_rate, included_distance_km,
+          distance_rate, max_weight, currency, priority, client_id, branch_id,
+          tiers_json, surcharges_json, active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, 1, ?, ?)
+      `, [
+        `rate-${nationalPoundRate.ruleCode.toLowerCase()}`,
+        organizationId,
+        nationalPoundRate.ruleCode,
+        nationalPoundRate.serviceType,
+        nationalPoundRate.originZone,
+        nationalPoundRate.destZone,
+        nationalPoundRate.baseRate,
+        nationalPoundRate.perKgRate,
+        nationalPoundRate.perVolRate,
+        nationalPoundRate.minCharge,
+        nationalPoundRate.pricingMode,
+        nationalPoundRate.weightUnit,
+        nationalPoundRate.includedWeight,
+        nationalPoundRate.additionalWeightStep,
+        nationalPoundRate.additionalWeightRate,
+        nationalPoundRate.includedDistanceKm,
+        nationalPoundRate.distanceRate,
+        nationalPoundRate.maxWeight,
+        nationalPoundRate.currency,
+        nationalPoundRate.priority,
+        nationalPoundRate.tiersJson,
+        nationalPoundRate.surchargesJson,
+        now,
+        now
+      ]);
+    }
   });
 
   const country = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM countries WHERE iso2 = 'DO' AND active = TRUE`);
   const provinceCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM provinces WHERE country_id = 'country-do' AND active = TRUE`);
   const zoneCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM service_zones z JOIN provinces p ON p.id = z.province_id WHERE p.country_id = 'country-do' AND z.active = TRUE`);
-  console.log(JSON.stringify({ success: true, country: Number(country?.count || 0), provinces: Number(provinceCount?.count || 0), zones: Number(zoneCount?.count || 0), zoneModel: 'operational_labels_without_invented_coordinates' }));
+  const configuredRate = await queryOne<{ id: string }>(`SELECT id FROM rates_matrix WHERE organization_id = ? AND rule_code = ? AND active = TRUE`, [organizationId, nationalPoundRate.ruleCode]);
+  console.log(JSON.stringify({
+    success: true,
+    country: Number(country?.count || 0),
+    provinces: Number(provinceCount?.count || 0),
+    zones: Number(zoneCount?.count || 0),
+    zoneModel: 'operational_labels_without_invented_coordinates',
+    rate: configuredRate ? nationalPoundRate : null
+  }));
 }
 
 main()
