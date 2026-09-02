@@ -51,6 +51,7 @@ export class ApiClient {
   static async getMe(): Promise<ApiResponse<{ user: any }>> { return this.request<{ user: any }>('/auth/me'); }
   static async getShipments(params?: { status?: string; search?: string }): Promise<ApiResponse<{ count: number; shipments: any[] }>> { const query = new URLSearchParams(params as any).toString(); return this.request<{ count: number; shipments: any[] }>(`/shipments?${query}`); }
   static async getShipment(id: string): Promise<ApiResponse<{ shipment: any }>> { return this.request<{ shipment: any }>(`/shipments/${id}`); }
+  static async updateShipmentStatus(id: string, payload: any): Promise<ApiResponse<{ shipment: any }>> { return this.request<{ shipment: any }>(`/shipments/${id}/status`, { method: 'PATCH', body: JSON.stringify(payload) }); }
   static async createShipment(payload: any): Promise<ApiResponse<{ shipment: any }>> { return this.request<{ shipment: any }>('/shipments', { method: 'POST', body: JSON.stringify(payload) }); }
   static async calculateQuote(payload: any): Promise<ApiResponse<{ quote: any }>> { return this.request<{ quote: any }>('/quotes', { method: 'POST', body: JSON.stringify(payload) }); }
   static async getTracking(trackingNumber: string): Promise<ApiResponse<{ shipment: any }>> { return this.request<{ shipment: any }>(`/tracking/${trackingNumber}`); }
@@ -58,6 +59,13 @@ export class ApiClient {
   static async createRoute(payload: any): Promise<ApiResponse<{ route: any }>> { return this.request<{ route: any }>('/routes', { method: 'POST', body: JSON.stringify(payload) }); }
   static async dispatchRoute(routeId: string, driverId?: string): Promise<ApiResponse<{ message: string }>> { return this.request<{ message: string }>(`/routes/${routeId}/dispatch`, { method: 'POST', body: JSON.stringify({ driverId }) }); }
   static async getDrivers(): Promise<ApiResponse<{ drivers: any[] }>> { return this.request<{ drivers: any[] }>('/drivers'); }
+  static async createDriver(payload: any): Promise<ApiResponse<{ driver: any }>> { return this.request<{ driver: any }>('/drivers', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async updateDriver(id: string, payload: any): Promise<ApiResponse<{ driver: any }>> { return this.request<{ driver: any }>(`/drivers/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }); }
+  static async deleteDriver(id: string): Promise<ApiResponse<{ message: string }>> { return this.request<{ message: string }>(`/drivers/${id}`, { method: 'DELETE' }); }
+  static async getVehicles(): Promise<ApiResponse<{ vehicles: any[] }>> { return this.request<{ vehicles: any[] }>('/vehicles'); }
+  static async createVehicle(payload: any): Promise<ApiResponse<{ vehicle: any }>> { return this.request<{ vehicle: any }>('/vehicles', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async updateVehicle(id: string, payload: any): Promise<ApiResponse<{ vehicle: any }>> { return this.request<{ vehicle: any }>(`/vehicles/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }); }
+  static async deleteVehicle(id: string): Promise<ApiResponse<{ message: string }>> { return this.request<{ message: string }>(`/vehicles/${id}`, { method: 'DELETE' }); }
   static async sendDriverTelemetry(payload: { driverId: string; lat: number; lng: number; speed?: number; heading?: number; battery?: number }): Promise<ApiResponse<{ processed: any }>> { return this.request<{ processed: any }>('/drivers/telemetry', { method: 'POST', body: JSON.stringify(payload) }); }
   static async getActiveManifest(driverId?: string): Promise<ApiResponse<{ driver: any; route: any; stops: any[] }>> { return this.request<{ driver: any; route: any; stops: any[] }>(`/drivers/active-manifest?driverId=${driverId || ''}`); }
   static async getBranches(): Promise<ApiResponse<{ branches: any[] }>> { return this.request<{ branches: any[] }>('/branches'); }
@@ -65,7 +73,13 @@ export class ApiClient {
   static async closeBranchCash(branchId: string, payload: any): Promise<ApiResponse<{ message: string; summary: any }>> { return this.request<{ message: string; summary: any }>(`/branches/${branchId}/cash-close`, { method: 'POST', body: JSON.stringify(payload) }); }
   static async getClients(): Promise<ApiResponse<{ clients: any[] }>> { return this.request<{ clients: any[] }>('/clients'); }
   static async createClient(payload: any): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>('/clients', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async updateClient(id: string, payload: any): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>(`/clients/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }); }
+  static async deleteClient(id: string): Promise<ApiResponse<{ message: string }>> { return this.request<{ message: string }>(`/clients/${id}`, { method: 'DELETE' }); }
+  static async updateClientCredit(id: string, creditLimitDop: number): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>(`/clients/${id}/credit`, { method: 'PATCH', body: JSON.stringify({ creditLimitDop }) }); }
   static async getCodLedger(): Promise<ApiResponse<{ summary: any; transactions: any[] }>> { return this.request<{ summary: any; transactions: any[] }>('/cod/ledger'); }
+  static async getApiKeys(): Promise<ApiResponse<{ keys: any[] }>> { return this.request<{ keys: any[] }>('/api-keys'); }
+  static async createApiKey(payload: any): Promise<ApiResponse<{ apiKey: any }>> { return this.request<{ apiKey: any }>('/api-keys', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async revokeApiKey(id: string): Promise<ApiResponse<{ message: string }>> { return this.request<{ message: string }>(`/api-keys/${id}`, { method: 'DELETE' }); }
   static async settleCod(transactionIds: string[], notes?: string): Promise<ApiResponse<{ message: string; settlementReference: string; settledAt: string }>> { return this.request<{ message: string; settlementReference: string; settledAt: string }>('/cod/settle', { method: 'POST', body: JSON.stringify({ transactionIds, notes }) }); }
   static async getInternationalLockers(): Promise<ApiResponse<{ lockers: any[] }>> { return this.request<{ lockers: any[] }>('/international/lockers'); }
   static async getInternationalPackages(): Promise<ApiResponse<{ count: number; packages: any[] }>> { return this.request<{ count: number; packages: any[] }>('/international/packages'); }

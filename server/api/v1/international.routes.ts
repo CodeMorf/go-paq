@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { queryAll, queryOne, execute, transaction } from '../../db/database';
 import { authenticate, AuthenticatedRequest } from '../../auth/middleware';
+import { serializeInternationalPackage } from '../../utils/serializers';
 
 export const internationalRouter = Router();
 
@@ -29,7 +30,7 @@ internationalRouter.get('/packages', authenticate, (req: AuthenticatedRequest, r
     ORDER BY p.created_at DESC
   `, [orgId]);
 
-  return res.json({ success: true, count: packages.length, packages });
+  return res.json({ success: true, count: packages.length, packages: packages.map(serializeInternationalPackage) });
 });
 
 // POST /api/v1/international/consolidate
@@ -52,7 +53,8 @@ internationalRouter.post('/consolidate', authenticate, (req: AuthenticatedReques
     `, [consolidationId, orgId, clientId || 'cli-techstore', masterTracking, packageIds.length, notes || '', now]);
 
     for (const pId of packageIds) {
-      execute(`UPDATE international_packages SET status = 'consolidated', consolidation_id = ? WHERE id = ?`, [consolidationId, pId]);
+      const result:any = execute(`UPDATE international_packages SET status = 'consolidated', consolidation_id = ? WHERE id = ? AND organization_id = ? AND status != 'consolidated'`, [consolidationId, pId, orgId]);
+      if (!result?.changes) throw new Error(`Paquete no válido para consolidación: ${pId}`);
     }
   });
 

@@ -18,6 +18,7 @@ import { apiKeysRouter } from '../api/v1/apiKeys.routes';
 import { webhooksRouter } from '../api/v1/webhooks.routes';
 import { openapiRouter } from '../api/v1/openapi.routes';
 import { integrationsRouter } from '../api/v1/integrations.routes';
+import { vehiclesRouter } from '../api/v1/vehicles.routes';
 
 export const app = express();
 
@@ -42,6 +43,7 @@ apiV1.use('/quotes', quotesRouter);
 apiV1.use('/tracking', trackingRouter);
 apiV1.use('/routes', routesRouter);
 apiV1.use('/drivers', driversRouter);
+apiV1.use('/vehicles', vehiclesRouter);
 apiV1.use('/branches', branchesRouter);
 apiV1.use('/clients', clientsRouter);
 apiV1.use('/cod', codRouter);
