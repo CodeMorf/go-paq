@@ -1,47 +1,31 @@
 import { Router } from 'express';
 import { isPostgres, queryOneAsync } from '../../db/database';
+import { authenticate, AuthenticatedRequest, requireRole } from '../../auth/middleware';
+import { asyncHandler } from '../../core/http';
 import { WitylogixBridge } from '../../integrations/witylogix/witylogix.adapter';
 import { KarrioAdapter } from '../../integrations/karrio/karrio.adapter';
 
 export const integrationsRouter = Router();
 
-integrationsRouter.get('/health', async (_req, res) => {
+integrationsRouter.get('/health', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS']), asyncHandler(async (_req: AuthenticatedRequest, res) => {
   let dbStatus = 'healthy';
   try {
-    const testRow = await queryOneAsync('SELECT 1 as live');
+    const testRow = await queryOneAsync<{ live: number }>('SELECT 1 AS live');
     if (!testRow) dbStatus = 'unresponsive';
-  } catch (error: any) {
-    dbStatus = `error: ${error.message}`;
+  } catch (error) {
+    dbStatus = 'error';
   }
 
   const wityStart = Date.now();
   const wityResult = await WitylogixBridge.health();
   const wityError = 'error' in wityResult ? wityResult.error : undefined;
-  const witylogix = {
-    configured: WitylogixBridge.isConfigured(),
-    serviceUrl: process.env.WITYLOGIX_SERVICE_URL || null,
-    licenseNotice: 'GNU AGPL-3.0 — independent service, HTTP boundary',
-    reachable: wityResult.success,
-    latencyMs: WitylogixBridge.isConfigured() ? Date.now() - wityStart : null,
-    status: !WitylogixBridge.isConfigured() ? 'NOT CONFIGURED' : wityResult.success ? 'ONLINE' : (wityError || 'UNAVAILABLE')
-  };
-
   const karrioStart = Date.now();
   const karrioResult = await KarrioAdapter.health();
-  const karrio = {
-    configured: KarrioAdapter.isConfigured(),
-    serviceUrl: process.env.KARRIO_API_URL || null,
-    licenseNotice: 'GNU LGPL-3.0 OSS core — independent service',
-    reachable: karrioResult.success,
-    latencyMs: process.env.KARRIO_API_URL ? Date.now() - karrioStart : null,
-    status: !process.env.KARRIO_API_URL ? 'NOT CONFIGURED' : karrioResult.success ? 'ONLINE' : (karrioResult.error || 'UNAVAILABLE')
-  };
-
   return res.json({
     success: true,
     timestamp: new Date().toISOString(),
-    database: { engine: isPostgres ? 'PostgreSQL + PostGIS' : 'SQLite (Local Dev)', status: dbStatus },
-    witylogix,
-    karrio
+    database: { engine: isPostgres ? 'PostgreSQL + PostGIS' : 'SQLite (solo desarrollo)', status: dbStatus },
+    witylogix: { configured: WitylogixBridge.isConfigured(), licenseNotice: 'GNU AGPL-3.0 — servicio independiente por HTTP', reachable: wityResult.success, latencyMs: WitylogixBridge.isConfigured() ? Date.now() - wityStart : null, status: !WitylogixBridge.isConfigured() ? 'NOT CONFIGURADO' : wityResult.success ? 'ONLINE' : (wityError || 'UNAVAILABLE') },
+    karrio: { configured: KarrioAdapter.isConfigured(), licenseNotice: 'GNU LGPL-3.0 — servicio independiente', reachable: karrioResult.success, latencyMs: KarrioAdapter.isConfigured() ? Date.now() - karrioStart : null, status: !KarrioAdapter.isConfigured() ? 'NOT CONFIGURADO' : karrioResult.success ? 'ONLINE' : (karrioResult.error || 'UNAVAILABLE') }
   });
-});
+}));

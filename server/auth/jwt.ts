@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 
@@ -9,8 +9,8 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'gopaq_development_secret_key_only_2026';
-const JWT_EXPIRES_IN = '7d';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'local-development-only-gopaq-secret');
+const JWT_EXPIRES_IN = (process.env.JWT_ACCESS_TTL || '15m') as SignOptions['expiresIn'];
 
 export interface TokenPayload {
   userId: string;
@@ -19,15 +19,29 @@ export interface TokenPayload {
   email: string;
   role: string;
   name: string;
+  clientId?: string;
+  sessionId?: string;
+  tokenType?: 'access';
 }
 
 export function generateToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  if (!JWT_SECRET) throw new Error('JWT_SECRET no está configurado.');
+  return jwt.sign({ ...payload, tokenType: 'access' }, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+    issuer: process.env.JWT_ISSUER || 'gopaq',
+    audience: process.env.JWT_AUDIENCE || 'gopaq-web'
+  });
 }
 
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload;
+    if (!JWT_SECRET) return null;
+    const payload = jwt.verify(token, JWT_SECRET, {
+      issuer: process.env.JWT_ISSUER || 'gopaq',
+      audience: process.env.JWT_AUDIENCE || 'gopaq-web'
+    }) as TokenPayload;
+    if (payload.tokenType !== 'access' || !payload.userId || !payload.organizationId || !payload.role) return null;
+    return payload;
   } catch {
     return null;
   }

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import crypto from 'crypto';
 import { app } from '../core/app';
-import { runSeeds } from '../db/seed';
+import { runSeeds, runDemoSeeds } from '../db/seed';
 import { execute, queryOne, queryOneAsync, queryAllAsync, executeAsync, transactionAsync } from '../db/database';
 import { KarrioAdapter } from '../integrations/karrio/karrio.adapter';
 import { GoPaqRoutingEngine } from '../modules/routing/routing.engine';
@@ -11,6 +11,8 @@ async function runComprehensiveTestSuite() {
 
   // Seed DB
   runSeeds();
+  process.env.DEMO_ACCESS_ENABLED = 'true';
+  await runDemoSeeds();
 
   let passed = 0;
   let failed = 0;
@@ -32,6 +34,16 @@ async function runComprehensiveTestSuite() {
 
   assert(loginRes.status === 200 && loginRes.body.token, 'POST /api/v1/auth/login generates valid JWT for admin');
   const token = loginRes.body.token;
+
+  const wrongAreaRes = await request(app)
+    .post('/api/v1/auth/login')
+    .send({ email: 'cliente@gopaq.local', password: 'GoPaq123!', area: 'super-admin' });
+  assert(wrongAreaRes.status === 403, 'AUTHORIZATION: Client cannot authenticate through the Super Admin area');
+
+  const demoRes = await request(app)
+    .post('/api/v1/auth/demo')
+    .send({ area: 'portal' });
+  assert(demoRes.status === 200 && demoRes.body.demo === true && demoRes.body.user.isDemo === true, 'DEMO TENANT: isolated portal demo session is issued by the backend');
 
   // 2. Auth: Invalid Login
   const invalidLogin = await request(app)
@@ -145,8 +157,8 @@ async function runComprehensiveTestSuite() {
   assert(!checkBranch, 'ASYNC DATABASE LAYER: transactionAsync rolled back atomically upon error');
 
   // 13. Integrations Health Endpoint (Witylogix & Karrio status reporting)
-  const healthRes = await request(app).get('/api/v1/integrations/health');
-  assert(healthRes.status === 200 && healthRes.body.witylogix && healthRes.body.karrio, 'GET /api/v1/integrations/health returns live diagnostics for Witylogix & Karrio');
+  const healthRes = await request(app).get('/api/v1/integrations/health').set('Authorization', `Bearer ${token}`);
+  assert(healthRes.status === 200 && healthRes.body.witylogix && healthRes.body.karrio, 'GET /api/v1/integrations/health returns protected diagnostics for Witylogix & Karrio');
 
   // 14. Real Quotes & Pricing Engine
   const quoteRes = await request(app)
@@ -179,6 +191,20 @@ async function runComprehensiveTestSuite() {
     .get('/api/v1/cod/ledger')
     .set('Authorization', `Bearer ${token}`);
   assert(codRes.status === 200 && codRes.body.summary.total_transactions > 0, 'GET /api/v1/cod/ledger returns real COD accounting ledger');
+
+  const rivalCodId = `cod-rival-${Date.now()}`;
+  execute(`INSERT INTO shipments (id, organization_id, tracking_number, service_type, status, origin_json, destination_json, package_json, pricing_json, shipping_cost, created_at, updated_at) VALUES (?, 'org-rival', ?, 'local', 'pending', '{}', '{}', '{}', '{}', 200, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING`, [`shp-${rivalCodId}`, `GP-${rivalCodId.toUpperCase()}`]);
+  execute(`INSERT INTO cod_transactions (id, organization_id, shipment_id, amount, currency, status, created_at) VALUES (?, 'org-rival', ?, 100, 'DOP', 'received_branch', CURRENT_TIMESTAMP)`, [rivalCodId, `shp-${rivalCodId}`]);
+  const crossTenantSettlement = await request(app).post('/api/v1/cod/settle').set('Authorization', `Bearer ${token}`).send({ transactionIds: [rivalCodId] });
+  assert(crossTenantSettlement.status === 404, 'COD TENANT ISOLATION: settlement cannot mutate another organization');
+
+  const ownCodId = `cod-own-${Date.now()}`;
+  execute(`INSERT INTO cod_transactions (id, organization_id, shipment_id, amount, currency, status, created_at) VALUES (?, 'org-gopaq', 'shp-8924', 100, 'DOP', 'received_branch', CURRENT_TIMESTAMP)`, [ownCodId]);
+  const settlementKey = `settlement-${Date.now()}`;
+  const ownSettlement = await request(app).post('/api/v1/cod/settle').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', settlementKey).send({ transactionIds: [ownCodId] });
+  const repeatedSettlement = await request(app).post('/api/v1/cod/settle').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', settlementKey).send({ transactionIds: [ownCodId] });
+  const settledRow = queryOne<{ status: string }>('SELECT status FROM cod_transactions WHERE id = ?', [ownCodId]);
+  assert(ownSettlement.status === 200 && repeatedSettlement.status === 200 && settledRow?.status === 'settled_merchant', 'COD IDEMPOTENCY: settlement is atomic and a retry does not double-settle');
 
   console.log(`\n======================================================`);
   console.log(`TEST SUITE RESULTS: ${passed} PASSED | ${failed} FAILED`);

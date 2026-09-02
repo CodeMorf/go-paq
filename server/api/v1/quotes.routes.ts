@@ -1,10 +1,39 @@
 import { Router } from 'express';
+import crypto from 'crypto';
+import { z } from 'zod';
 import { calculatePricing } from '../../modules/pricing/pricing.engine';
 import { KarrioAdapter } from '../../integrations/karrio/karrio.adapter';
+import { asyncHandler } from '../../core/http';
 
 export const quotesRouter = Router();
 
-quotesRouter.post('/', async (req, res) => {
+const quoteSchema = z.object({
+    serviceType: z.enum(['local', 'express', 'nacional', 'internacional', 'mudanza', 'carga_pesada']).default('local'),
+    originCity: z.string().trim().min(2).max(120).default('Santo Domingo'),
+    destCity: z.string().trim().min(2).max(120).default('Santo Domingo'),
+    originCountry: z.string().trim().length(2).default('DO'),
+    destinationCountry: z.string().trim().length(2).default('DO'),
+    originPostalCode: z.string().trim().max(30).optional(),
+    destinationPostalCode: z.string().trim().max(30).optional(),
+    originAddress: z.string().trim().max(250).optional(),
+    destinationAddress: z.string().trim().max(250).optional(),
+    senderName: z.string().trim().max(160).optional(),
+    recipientName: z.string().trim().max(160).optional(),
+    senderPhone: z.string().trim().max(40).optional(),
+    recipientPhone: z.string().trim().max(40).optional(),
+    weightKg: z.coerce.number().positive().max(100000).default(1),
+    lengthCm: z.coerce.number().positive().max(10000).default(20),
+    widthCm: z.coerce.number().positive().max(10000).default(15),
+    heightCm: z.coerce.number().positive().max(10000).default(10),
+    declaredValueUsd: z.coerce.number().min(0).max(100000000).default(0),
+    isFragile: z.boolean().default(false),
+    codAmount: z.coerce.number().min(0).max(100000000).default(0),
+    dangerousZoneId: z.string().trim().max(120).optional()
+  });
+
+quotesRouter.post('/', asyncHandler(async (req, res) => {
+  const parsed = quoteSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de cotización inválidos.' });
   const {
     serviceType = 'local',
     originCity = 'Santo Domingo',
@@ -27,19 +56,19 @@ quotesRouter.post('/', async (req, res) => {
     isFragile = false,
     codAmount = 0,
     dangerousZoneId
-  } = req.body;
+  } = parsed.data;
 
   const quote = calculatePricing({
     serviceType,
     originCity,
     destCity,
-    weightKg: Number(weightKg) || 1,
-    lengthCm: Number(lengthCm) || 20,
-    widthCm: Number(widthCm) || 15,
-    heightCm: Number(heightCm) || 10,
-    declaredValueUsd: Number(declaredValueUsd) || 0,
-    isFragile: Boolean(isFragile),
-    codAmount: Number(codAmount) || 0,
+    weightKg,
+    lengthCm,
+    widthCm,
+    heightCm,
+    declaredValueUsd,
+    isFragile,
+    codAmount,
     dangerousZoneId
   });
 
@@ -64,14 +93,14 @@ quotesRouter.post('/', async (req, res) => {
       phone_number: recipientPhone
     },
     parcels: [{
-      weight: Number(weightKg) || 1,
+      weight: weightKg,
       weight_unit: 'KG',
-      length: Number(lengthCm) || 20,
-      width: Number(widthCm) || 15,
-      height: Number(heightCm) || 10,
+      length: lengthCm,
+      width: widthCm,
+      height: heightCm,
       dimension_unit: 'CM'
     }],
-    reference: `gopaq-quote-${Date.now()}`
+    reference: `gopaq-quote-${crypto.randomUUID()}`
   });
 
   if (!carrierResult.success) {
@@ -96,4 +125,4 @@ quotesRouter.post('/', async (req, res) => {
       rates: carrierResult.rates || []
     }
   });
-});
+}));

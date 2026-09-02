@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
-import { initDatabase, execute, queryOne, executeAsync, queryOneAsync } from './database';
+import crypto from 'crypto';
+import { initDatabase, initDatabaseAsync, execute, queryOne, executeAsync, queryOneAsync, transactionAsync } from './database';
+import { hashPassword } from '../auth/jwt';
 
 export function runSeeds() {
   initDatabase();
@@ -238,4 +240,47 @@ export function runSeeds() {
   ]);
 
   console.log('✅ Seed completed successfully with 100% real persistent relational data.');
+}
+
+/**
+ * Demo is an explicit, isolated dataset. It is never called by the server
+ * startup path in production. The demo endpoint issues temporary sessions;
+ * no shared demo password is embedded in the repository.
+ */
+export async function runDemoSeeds() {
+  await initDatabaseAsync();
+  const now = new Date().toISOString();
+  const randomPasswordHash = hashPassword(crypto.randomBytes(32).toString('hex'));
+
+  await transactionAsync(async (tx) => {
+    await tx.execute(`INSERT INTO organizations (id, name, slug, currency, country, active, created_at, updated_at) VALUES ('org-demo', 'GoPaq Demo', 'gopaq-demo', 'DOP', 'DO', 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [now, now]);
+    await tx.execute(`INSERT INTO branches (id, organization_id, code, name, city, address, phone, manager_name, latitude, longitude, is_hub, active, created_at, updated_at) VALUES ('br-demo-central', 'org-demo', 'DEMO-01', 'Sucursal Demo', 'Santo Domingo', 'Entorno de demostración', NULL, 'Demo GoPaq', 18.4861, -69.9312, 1, 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [now, now]);
+
+    const demoUsers = [
+      ['usr-demo-admin', 'demo.admin@gopaq.local', 'Demo Super Admin', 'SUPER_ADMIN'],
+      ['usr-demo-client', 'demo.client@gopaq.local', 'Demo Cliente', 'CLIENT'],
+      ['usr-demo-branch', 'demo.branch@gopaq.local', 'Demo Sucursal', 'BRANCH_MANAGER'],
+      ['usr-demo-driver', 'demo.driver@gopaq.local', 'Demo Driver', 'DRIVER']
+    ];
+    for (const [id, email, name, role] of demoUsers) {
+      await tx.execute(`INSERT INTO users (id, organization_id, branch_id, email, password_hash, name, role, phone, active, created_at, updated_at) VALUES (?, 'org-demo', 'br-demo-central', ?, ?, ?, ?, NULL, 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [id, email, randomPasswordHash, name, role, now, now]);
+    }
+    await tx.execute(`INSERT INTO clients (id, organization_id, branch_id, name, company_name, email, phone, tier, credit_limit, balance, cod_pending_balance, active, created_at, updated_at) VALUES ('cli-demo', 'org-demo', 'br-demo-central', 'Cliente Demo', 'Comercio Demo', 'demo.client@gopaq.local', '0000000000', 'Demo', 0, 0, 0, 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [now, now]);
+    await tx.execute(`INSERT INTO drivers (id, organization_id, branch_id, user_id, name, email, phone, license_number, vehicle_type, vehicle_plate, status, current_lat, current_lng, rating, active, created_at, updated_at) VALUES ('drv-demo', 'org-demo', 'br-demo-central', 'usr-demo-driver', 'Demo Driver', 'demo.driver@gopaq.local', '0000000000', 'DEMO', 'Furgoneta Demo', 'DEMO-000', 'available', 18.4861, -69.9312, 5, 1, ?, ?) ON CONFLICT (id) DO NOTHING`, [now, now]);
+    await tx.execute(`INSERT INTO rates_matrix (id, organization_id, service_type, origin_zone, dest_zone, base_rate, per_kg_rate, per_vol_rate, min_charge, currency, active, created_at) VALUES ('rate-demo-local', 'org-demo', 'local', 'DEMO', 'DEMO', 100, 20, 20, 100, 'DOP', 1, ?) ON CONFLICT (id) DO NOTHING`, [now]);
+  });
+  console.log('✅ Demo tenant ready: org-demo (isolated, resettable, no external sends).');
+}
+
+export async function resetDemoTenant() {
+  await initDatabaseAsync();
+  await transactionAsync(async (tx) => {
+    await tx.execute(`DELETE FROM password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE organization_id = 'org-demo')`);
+    await tx.execute(`DELETE FROM sessions WHERE organization_id = 'org-demo'`);
+    await tx.execute(`DELETE FROM audit_logs WHERE organization_id = 'org-demo'`);
+    await tx.execute(`DELETE FROM idempotency_keys WHERE organization_id = 'org-demo'`);
+    await tx.execute(`DELETE FROM outbox_events WHERE organization_id = 'org-demo'`);
+    await tx.execute(`DELETE FROM organizations WHERE id = 'org-demo'`);
+  });
+  console.log('✅ Demo tenant reset: org-demo only.');
 }

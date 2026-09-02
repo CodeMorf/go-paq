@@ -5,7 +5,7 @@ import { ToastContainer, Modal } from './components/ui/DesignSystem';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { ShipmentCreator } from './components/portal/ShipmentCreator';
 import { ApiClient } from './api/client';
-import { LoginPage, RegisterPage, destinationForRole } from './components/auth/AuthPages';
+import { LoginPage, RegisterPage, RoleLoginPage, destinationForRole } from './components/auth/AuthPages';
 import { UserRole } from './types';
 import { SuperAdminLayout } from './components/super-admin/SuperAdminLayout';
 import { SuperAdminDashboard } from './components/super-admin/SuperAdminDashboard';
@@ -107,7 +107,6 @@ const ProtectedArea: React.FC<{ section: Section }> = ({ section }) => {
 
   useEffect(() => {
     let live = true;
-    if (!ApiClient.hasSession()) { setState({ loading: false, invalid: true }); return; }
     ApiClient.getMe().then(result => {
       if (!live) return;
       if (!result.success || !result.user) { ApiClient.logout(); setState({ loading: false, invalid: true }); return; }
@@ -209,6 +208,10 @@ export default function App() {
     <Route path="/" element={<RootRedirect />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
+    <Route path="/super-admin/login" element={<RoleLoginPage area="super-admin" />} />
+    <Route path="/portal/login" element={<RoleLoginPage area="portal" />} />
+    <Route path="/sucursal/login" element={<RoleLoginPage area="sucursal" />} />
+    <Route path="/driver/login" element={<RoleLoginPage area="driver" />} />
     <Route path="/docs/api/*" element={<ApiDocs />} />
     <Route path="/super-admin/*" element={<ProtectedArea section="super-admin" />} />
     <Route path="/portal/*" element={<ProtectedArea section="portal" />} />

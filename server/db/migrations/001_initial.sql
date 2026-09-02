@@ -1,0 +1,2 @@
+-- The migration runner installs the canonical schema.sql as migration 001.
+-- This marker keeps the initial schema explicit in the migration history.

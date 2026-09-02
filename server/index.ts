@@ -1,132 +1,84 @@
 import http from 'http';
 import url from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
+import { z } from 'zod';
 import { app } from './core/app';
-import { runSeeds } from './db/seed';
+import { initDatabaseAsync, queryOneAsync, executeAsync } from './db/database';
 import { verifyToken, TokenPayload } from './auth/jwt';
-import { execute, queryOne } from './db/database';
+import { normalizeRole } from './auth/roles';
 
-const PORT = process.env.PORT || 4000;
-
-// 1. Run database migrations & seeds
-try {
-  runSeeds();
-} catch (err) {
-  console.error('Error running seeds:', err);
-}
-
-// 2. Create HTTP & Secure WebSocket Server
-const server = http.createServer(app);
-const wss = new WebSocketServer({ noServer: true });
+const PORT = Number(process.env.PORT || 4000);
 
 interface AuthenticatedSocket extends WebSocket {
-  user?: TokenPayload;
-  organizationId?: string;
+  user: TokenPayload;
+  organizationId: string;
   isAlive?: boolean;
 }
 
-server.on('upgrade', (request, socket, head) => {
-  const parsedUrl = url.parse(request.url || '', true);
-  const pathname = parsedUrl.pathname;
+const telemetrySchema = z.object({ driverId: z.string().min(1).max(120), lat: z.number().finite().min(-90).max(90), lng: z.number().finite().min(-180).max(180), speed: z.number().finite().min(0).max(300).default(0), heading: z.number().finite().min(0).max(360).default(0), battery: z.number().finite().min(0).max(100).default(100) });
 
-  if (pathname === '/ws') {
-    const token = parsedUrl.query.token as string | undefined;
+async function start() {
+  await initDatabaseAsync();
+  if (process.env.NODE_ENV !== 'production' && process.env.SEED_DEV_DATA === 'true') {
+    const { runSeeds } = await import('./db/seed');
+    runSeeds();
+  }
 
-    // Verify token during WebSocket handshake if provided
-    let user: TokenPayload | null = null;
-    if (token) {
-      user = verifyToken(token);
-    }
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 
+  server.on('upgrade', (request, socket, head) => {
+    const parsedUrl = url.parse(request.url || '', true);
+    if (parsedUrl.pathname !== '/ws') return socket.destroy();
+    const origin = request.headers.origin;
+    const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map((item) => item.trim()).filter(Boolean);
+    if (origin && allowedOrigins.length > 0 && !allowedOrigins.includes(origin)) return socket.destroy();
+
+    // The access token is accepted only for the handshake. It is never logged
+    // and connections without a valid token are rejected before upgrade.
+    const queryToken = typeof parsedUrl.query.token === 'string' ? parsedUrl.query.token : undefined;
+    const protocolToken = String(request.headers['sec-websocket-protocol'] || '').split(',').map((item) => item.trim()).find((item) => item.startsWith('gopaq-bearer.'))?.slice('gopaq-bearer.'.length);
+    const user = verifyToken(protocolToken || queryToken || '');
+    if (!user) return socket.destroy();
     wss.handleUpgrade(request, socket, head, (ws) => {
       const authWs = ws as AuthenticatedSocket;
-      if (user) {
-        authWs.user = user;
-        authWs.organizationId = user.organizationId;
-      }
+      authWs.user = user;
+      authWs.organizationId = user.organizationId;
       wss.emit('connection', authWs, request);
     });
-  } else {
-    socket.destroy();
-  }
-});
-
-wss.on('connection', (ws: AuthenticatedSocket) => {
-  ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; });
-
-  ws.on('message', (message: string) => {
-    try {
-      const data = JSON.parse(message.toString());
-
-      // 1. In-band Auth message
-      if (data.type === 'auth' && data.token) {
-        const decoded = verifyToken(data.token);
-        if (decoded) {
-          ws.user = decoded;
-          ws.organizationId = decoded.organizationId;
-          ws.send(JSON.stringify({ type: 'auth_success', user: { name: decoded.name, role: decoded.role } }));
-        } else {
-          ws.send(JSON.stringify({ type: 'auth_error', error: 'Token inválido' }));
-        }
-        return;
-      }
-
-      // 2. Require Authentication for all actions
-      if (!ws.organizationId) {
-        ws.send(JSON.stringify({ type: 'auth_required', error: 'Autenticación requerida para enviar mensajes.' }));
-        return;
-      }
-
-      // 3. Driver Telemetry (Scoped to driver and tenant)
-      if (data.type === 'driver_telemetry' && data.payload) {
-        const { driverId, lat, lng, speed = 0, heading = 0, battery = 100 } = data.payload;
-
-        // Verify driver belongs to current organization
-        const driver = queryOne(`SELECT id, user_id FROM drivers WHERE id = ? AND organization_id = ?`, [driverId, ws.organizationId]);
-        if (!driver) {
-          ws.send(JSON.stringify({ type: 'error', error: 'Driver no autorizado en esta organización.' }));
-          return;
-        }
-
-        // If authenticated user is a DRIVER, verify identity
-        if (ws.user?.role === 'DRIVER' && driver.user_id && driver.user_id !== ws.user.userId) {
-          ws.send(JSON.stringify({ type: 'error', error: 'No autorizado para enviar telemetría de otro conductor.' }));
-          return;
-        }
-
-        execute(`
-          UPDATE drivers 
-          SET current_lat = ?, current_lng = ?, speed = ?, heading = ?, battery = ?, status = ?, updated_at = datetime('now')
-          WHERE id = ? AND organization_id = ?
-        `, [lat, lng, speed, heading, battery, speed > 5 ? 'in_motion' : 'idle', driverId, ws.organizationId]);
-
-        // Broadcast ONLY to authenticated clients in the SAME organization room
-        const broadcastMsg = JSON.stringify({
-          type: 'driver.location.updated',
-          payload: {
-            driverId,
-            position: { lat, lng },
-            telemetry: { speedKmh: speed, headingDeg: heading, batteryPct: battery, timestamp: new Date().toISOString() }
-          }
-        });
-
-        wss.clients.forEach((client) => {
-          const authClient = client as AuthenticatedSocket;
-          if (authClient.readyState === WebSocket.OPEN && authClient.organizationId === ws.organizationId) {
-            authClient.send(broadcastMsg);
-          }
-        });
-      }
-    } catch (e: any) {
-      console.error('[WebSocket Error]:', e);
-    }
   });
 
-  ws.send(JSON.stringify({ type: 'connected', message: 'GoPaq Secure Realtime Bus Connected' }));
-});
+  wss.on('connection', (ws: AuthenticatedSocket) => {
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+    ws.send(JSON.stringify({ type: 'connected', message: 'GoPaq Secure Realtime Bus Connected' }));
+    ws.on('message', async (message: string) => {
+      try {
+        const parsed = JSON.parse(message.toString());
+        if (parsed.type !== 'driver_telemetry' || !parsed.payload) return;
+        const telemetry = telemetrySchema.safeParse(parsed.payload);
+        if (!telemetry.success) return ws.send(JSON.stringify({ type: 'error', error: 'Telemetría inválida.' }));
+        const data = telemetry.data;
+        const driver = await queryOneAsync<{ id: string; user_id: string | null }>('SELECT id, user_id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [data.driverId, ws.organizationId]);
+        if (!driver) return ws.send(JSON.stringify({ type: 'error', error: 'Driver no autorizado en esta organización.' }));
+        if (['DRIVER', 'COURIER'].includes(normalizeRole(ws.user.role)) && driver.user_id !== ws.user.userId) return ws.send(JSON.stringify({ type: 'error', error: 'No autorizado para enviar telemetría de otro conductor.' }));
+        const locationSql = process.env.DATABASE_URL?.startsWith('postgres') ? ', current_location = ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography' : '';
+        const params: any[] = [data.lat, data.lng, data.speed, data.heading, data.battery, data.speed > 5 ? 'in_motion' : 'idle'];
+        if (locationSql) params.push(data.lng, data.lat);
+        params.push(data.driverId, ws.organizationId);
+        await executeAsync(`UPDATE drivers SET current_lat = ?, current_lng = ?, speed = ?, heading = ?, battery = ?, status = ?${locationSql}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND organization_id = ? AND active = 1`, params);
+        const broadcastMsg = JSON.stringify({ type: 'driver.location.updated', payload: { driverId: data.driverId, position: { lat: data.lat, lng: data.lng }, telemetry: { speedKmh: data.speed, headingDeg: data.heading, batteryPct: data.battery, timestamp: new Date().toISOString() } } });
+        wss.clients.forEach((client) => { const target = client as AuthenticatedSocket; if (target.readyState === WebSocket.OPEN && target.organizationId === ws.organizationId) target.send(broadcastMsg); });
+      } catch (error) {
+        console.error('[WebSocket Error]:', error instanceof Error ? error.message : 'invalid_message');
+        ws.send(JSON.stringify({ type: 'error', error: 'Mensaje realtime inválido.' }));
+      }
+    });
+  });
 
-server.listen(PORT, () => {
-  console.log(`🚀 GoPaq Core Logistics Backend API running on http://localhost:${PORT}`);
-  console.log(`📡 Secure WebSocket Realtime Server running on ws://localhost:${PORT}/ws`);
-});
+  const heartbeat = setInterval(() => { wss.clients.forEach((client) => { const ws = client as AuthenticatedSocket; if (ws.isAlive === false) return ws.terminate(); ws.isAlive = false; ws.ping(); }); }, 30000);
+  wss.on('close', () => clearInterval(heartbeat));
+  server.listen(PORT, () => { console.log(`GoPaq API listening on port ${PORT}`); });
+}
+
+start().catch((error) => { console.error('GoPaq startup failed:', error instanceof Error ? error.message : 'unknown_error'); process.exit(1); });

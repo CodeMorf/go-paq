@@ -40,18 +40,81 @@ export function initDatabase() {
 
   if (sqliteDb) {
     sqliteDb.exec(schemaSql);
+    sqliteDb.exec(sqliteFoundationSql);
+    sqliteDb.exec(`
+      INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+      VALUES ('001_initial', CURRENT_TIMESTAMP), ('002_production_foundations', CURRENT_TIMESTAMP)
+    `);
   }
 }
 
 export async function initDatabaseAsync() {
+  if (isPostgres && pgPool) {
+    await runMigrations();
+  } else if (sqliteDb) {
+    initDatabase();
+  }
+}
+
+/**
+ * Apply production schema changes through an explicit, locked migration
+ * history. SQLite remains available for local tests; PostgreSQL is the only
+ * supported production database and receives the PostGIS migration.
+ */
+export async function runMigrations() {
+  if (!isPostgres || !pgPool) {
+    initDatabase();
+    return;
+  }
+
   const schemaPath = path.resolve(__dirname, 'schema.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  const postgresBaseSchema = schemaSql
+    .replace(/^\s*PRAGMA foreign_keys = ON;\s*$/m, '')
+    .replace(/TEXT NOT NULL DEFAULT \(datetime\('now'\)\)/g, 'TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  const migrationsDir = path.resolve(__dirname, 'migrations');
+  const foundationSql = fs.readFileSync(path.join(migrationsDir, '002_production_foundations.sql'), 'utf8');
+  const postgisSql = fs.readFileSync(path.join(migrationsDir, '003_postgis.sql'), 'utf8');
+  const lockKey = 7874701;
 
-  if (isPostgres && pgPool) {
-    // Execute PostgreSQL DDL
-    await pgPool.query(schemaSql);
-  } else if (sqliteDb) {
-    sqliteDb.exec(schemaSql);
+  await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
+  try {
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const applied = new Set((await pgPool.query('SELECT version FROM schema_migrations')).rows.map((row) => row.version));
+    if (!applied.has('001_initial')) {
+      await pgPool.query(postgresBaseSchema);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['001_initial']);
+    }
+    if (!applied.has('002_production_foundations')) {
+      await pgPool.query(foundationSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['002_production_foundations']);
+    }
+    if (!applied.has('003_postgis')) {
+      await pgPool.query(postgisSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['003_postgis']);
+    }
+  } finally {
+    await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);
+  }
+}
+
+export async function checkDatabase(): Promise<{ ok: boolean; engine: 'postgres' | 'sqlite'; postgisVersion?: string; error?: string }> {
+  try {
+    if (isPostgres) {
+      const row = await queryOneAsync<{ version: string; postgis_version: string | null }>(
+        `SELECT version(), CASE WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') THEN PostGIS_Extension_Version() ELSE NULL END AS postgis_version`
+      );
+      return { ok: !!row, engine: 'postgres', postgisVersion: row?.postgis_version || undefined };
+    }
+    return { ok: !!queryOne('SELECT 1 as live'), engine: 'sqlite' };
+  } catch (error) {
+    return { ok: false, engine: isPostgres ? 'postgres' : 'sqlite', error: error instanceof Error ? error.message : 'database_error' };
   }
 }
 
@@ -191,3 +254,84 @@ export function transaction<T>(fn: () => T): T {
   }
   return fn();
 }
+
+const sqliteFoundationSql = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  organization_id TEXT NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  user_agent TEXT,
+  ip_address TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(organization_id, user_id, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at, revoked_at);
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT,
+  user_id TEXT,
+  action TEXT NOT NULL,
+  resource_type TEXT,
+  resource_id TEXT,
+  outcome TEXT NOT NULL,
+  ip_address TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_audit_org_created ON audit_logs(organization_id, created_at);
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  status_code INTEGER,
+  response_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT,
+  UNIQUE(organization_id, idempotency_key)
+);
+CREATE TABLE IF NOT EXISTS outbox_events (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  aggregate_type TEXT NOT NULL,
+  aggregate_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT,
+  processed_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox_events(status, next_attempt_at, created_at);
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_expiry ON password_reset_tokens(expires_at, used_at);
+CREATE TABLE IF NOT EXISTS cash_closes (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  branch_id TEXT NOT NULL,
+  closed_by TEXT NOT NULL,
+  total_cash REAL NOT NULL,
+  total_pos REAL NOT NULL,
+  total_transfers REAL NOT NULL,
+  grand_total REAL NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_cash_closes_branch_created ON cash_closes(organization_id, branch_id, created_at);
+`;
