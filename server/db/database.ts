@@ -92,6 +92,7 @@ export async function runMigrations() {
   const migrationsDir = path.resolve(__dirname, 'migrations');
   const foundationSql = fs.readFileSync(path.join(migrationsDir, '002_production_foundations.sql'), 'utf8');
   const postgisSql = fs.readFileSync(path.join(migrationsDir, '003_postgis.sql'), 'utf8');
+  const codAndInternationalSql = fs.readFileSync(path.join(migrationsDir, '004_cod_state_machine.sql'), 'utf8');
   const lockKey = 7874701;
 
   await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
@@ -115,6 +116,10 @@ export async function runMigrations() {
     if (!applied.has('003_postgis')) {
       await pgPool.query(postgisSql);
       await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['003_postgis']);
+    }
+    if (!applied.has('004_cod_state_machine')) {
+      await pgPool.query(codAndInternationalSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['004_cod_state_machine']);
     }
   } finally {
     await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);
