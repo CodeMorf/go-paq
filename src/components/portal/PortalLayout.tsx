@@ -21,6 +21,7 @@ import {
 import { NotificationCenter } from '../ui/NotificationCenter';
 import { Button } from '../ui/DesignSystem';
 import { GoPaqLogo } from '../ui/GoPaqLogo';
+import { ApiClient } from '../../api/client';
 
 export const PortalLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { 
@@ -35,6 +36,14 @@ export const PortalLayout: React.FC<{ children: React.ReactNode }> = ({ children
   } = useApp();
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await ApiClient.logout();
+    } finally {
+      window.location.assign('/portal/login');
+    }
+  };
 
   const menuItems = [
     { id: 'dashboard', label: 'Mi Panel General', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -97,7 +106,7 @@ export const PortalLayout: React.FC<{ children: React.ReactNode }> = ({ children
           <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-xs">
             JM
           </div>
-          <div className="text-xs">
+          <div className="text-xs min-w-0 flex-1">
             <span className="font-bold text-slate-900 dark:text-white block">
               TechStore Caribe
             </span>
@@ -105,6 +114,16 @@ export const PortalLayout: React.FC<{ children: React.ReactNode }> = ({ children
               Casillero: NX-8849
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300 transition-colors"
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Salir
+          </button>
         </div>
       </div>
     </>

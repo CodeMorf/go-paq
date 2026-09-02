@@ -47,7 +47,13 @@ export class ApiClient {
   }
 
   static hasSession() { return !!this.getToken(); }
-  static async logout() { await this.request('/auth/logout', { method: 'POST' }, false); this.setToken(null); }
+  static async logout() {
+    try {
+      await this.request('/auth/logout', { method: 'POST' }, false);
+    } finally {
+      this.setToken(null);
+    }
+  }
 
   static async login(email: string, password: string, area?: 'super-admin' | 'portal' | 'sucursal' | 'driver'): Promise<ApiResponse<{ token: string; user: any }>> {
     const data = await this.request<{ token: string; user: any }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, area }) }, false);
