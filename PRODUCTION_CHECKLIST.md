@@ -1,6 +1,6 @@
 # Checklist de producción GoPaq
 
-Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. El núcleo persistente está activo en `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
+Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. La verificación de este release (`3bece74`) se ejecutó desde `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
 
 ## Código, seguridad y CI local
 
@@ -17,8 +17,10 @@
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
-- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 44 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 55 pruebas API/seguridad, build Vite y `git diff --check` verificados.
 - [x] Configuración Global: 14 secciones con valores por tenant, API PATCH protegida, control de versión, auditoría, outbox e historial de revisiones.
+- [x] Identidad visual: logo PNG transparente y favicon se guardan mediante API en almacenamiento persistente; colores, favicon y logo se aplican después de confirmación del backend.
+- [x] Maestros operativos: alta real de sucursales y conductores con validación de tenant, sucursal, duplicados, auditoría y outbox.
 - [x] Google Maps: credencial de navegador separada de la configuración de negocio, cifrada en PostgreSQL, versionada/auditada y con estado público `NO CONFIGURADO` cuando no existe.
 - [x] El selector cruzado Admin/Portal/Agencia/Driver fue eliminado; cada área permanece en su propia ruta, sesión y guard de backend.
 - [x] Mudanzas y carga pesada: cotización, orden persistida, trabajo unificado, ruta, POD y rastreo canónico verificados en API.
@@ -26,6 +28,7 @@
 ## VPS y despliegue verificados
 
 - [x] Rama desplegada: `Morf/production-hardening`.
+- [x] Release desplegado: `3bece74` (`feat(config): persist tenant branding and operational master data` + protección de almacenamiento local).
 - [x] Ubuntu 26.04 LTS; 4 vCPU; 7.8 GiB RAM; aproximadamente 109 GiB libres en el volumen raíz al auditar.
 - [x] Docker Engine y Compose activos; servicios con `restart: unless-stopped`.
 - [x] PostgreSQL 18.6 verificado desde la base en ejecución.
@@ -46,7 +49,7 @@
 - [x] Logo oficial GoPaq usado en menú, portada, logins y áreas.
 - [x] Login productivo de Super Admin verificado; su intento de entrar al portal devuelve 403.
 - [x] Las superficies de login no muestran `Acceso de prueba`; el endpoint demo existente permanece aislado en `org-demo` para pruebas internas controladas.
-- [ ] Google Maps público: falta registrar una clave real restringida en `/super-admin/configuracion` y verificar la carga contra Google; sin esa credencial el estado esperado es `NO CONFIGURADO`.
+- [x] Google Maps público: la configuración real está activa y el loader JavaScript de Google respondió desde Internet; falta únicamente la validación visual interactiva en un navegador conectado y revisar periódicamente las restricciones de referrer/API en Google Cloud.
 - [ ] Coordenadas de sucursales: falta confirmar y guardar desde `/super-admin/configuracion` la ubicación exacta de cada sucursal productiva; sin coordenadas el mapa permanece sin pines y no calcula cercanía.
 - [x] Cliente: cotización backend, creación de shipment, persistencia e historial de tracking.
 - [x] Sucursal: recepción/escaneo idempotente e inventario persistido.
@@ -56,6 +59,8 @@
 - [x] Internacional: casillero, prealerta y replay idempotente; consolidación queda conectada al motor y sin datos inventados.
 - [x] Mudanza/carga pesada: orden real desde panel, asignación a ruta, manifiesto Driver, POD y tracking canónico verificados en API.
 - [x] Reinicio de API/worker y Redis: readiness recuperado y datos persistentes conservados en PostgreSQL.
+- [x] Aceptación operativa en `org-demo`: quote → shipment → tracking → recepción → ruta/despacho → manifiesto Driver → POD → tracking entregado; mudanza y carga pesada también completaron cotización, orden, despacho, POD y tracking. El tenant fue reseteado y sembrado después de la prueba.
+- [x] Backup y restore posteriores al release: dump PostgreSQL creado con modo `0600` y restaurado en base temporal con 2 organizaciones; la base temporal fue eliminada automáticamente.
 
 ## Pendientes reales antes de ampliar tráfico
 
