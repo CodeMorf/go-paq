@@ -117,6 +117,9 @@ export function requireRole(allowedRoles: string[]) {
 
 export function requireScope(scope: string) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (req.user?.supportSession && (scope.endsWith(':write') || ['api_keys:write', 'webhooks:write', 'cod:collect'].includes(scope))) {
+      return res.status(403).json({ success: false, error: 'El modo asistencia es de solo lectura.' });
+    }
     if (req.apiKeyScopes?.includes(scope)) {
       return next();
     }

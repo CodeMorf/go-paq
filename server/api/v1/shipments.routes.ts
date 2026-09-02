@@ -118,7 +118,11 @@ shipmentsRouter.post('/', authenticate, requireScope('shipments:write'), asyncHa
     heightCm: input.package.heightCm,
     declaredValueUsd: input.package.declaredValueUsd,
     isFragile: input.package.isFragile,
-    codAmount: input.codAmount
+    codAmount: input.codAmount,
+    clientId,
+    branchId,
+    distanceKm: Number(input.distanceKm || 0),
+    serviceVariant: typeof input.serviceVariant === 'string' ? input.serviceVariant : undefined
   }, orgId);
 
   const trackingNumber = `GP-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;

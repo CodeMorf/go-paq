@@ -21,6 +21,8 @@ export interface TokenPayload {
   name: string;
   clientId?: string;
   sessionId?: string;
+  supportSession?: boolean;
+  supportingUserId?: string;
   tokenType?: 'access';
 }
 

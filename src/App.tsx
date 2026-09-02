@@ -31,6 +31,7 @@ import { CashRegister } from './components/sucursal/CashRegister';
 import { DriverApp } from './components/driver/DriverApp';
 import { ApiDocs } from './components/docs/ApiDocs';
 import { PublicSite } from './components/public/PublicSite';
+import { ProductionMassScanPanel, ProductionBranchesAdmin, ProductionClientsAdmin, ProductionDangerZonesAdmin, ProductionRatesAdmin } from './components/super-admin/AdminMasterDataPanels';
 
 type Section = 'super-admin' | 'portal' | 'sucursal' | 'driver';
 
@@ -135,19 +136,19 @@ const AreaContent: React.FC<{ section: Section; user?: any }> = ({ section, user
     {activeSubView === 'operaciones-vivo' && <ProductionOperationsConsole />}
     {activeSubView === 'zernio-omnichannel' && <ProductionUnavailablePanel title="Omnicanal y WhatsApp" description="No existe un proveedor externo configurado para mensajería omnicanal en este entorno." provider="WhatsApp / Zernio" />}
     {activeSubView === 'ia-eventos' && <ProductionUnavailablePanel title="Automatizaciones e IA" description="No hay un motor de IA o automatizaciones externas configurado y persistido para esta organización." provider="IA / automatizaciones" />}
-    {activeSubView === 'escaneo-masivo' && <ProductionBranchScanner />}
+    {activeSubView === 'escaneo-masivo' && <ProductionMassScanPanel />}
     {activeSubView === 'mapa-flota' && <ProductionFleetPanel />}
     {activeSubView === 'envios' && <ProductionShipmentsManager />}
     {activeSubView === 'courier-intl' && <InternationalCourier />}
     {activeSubView === 'rutas' && <RoutesDispatcher />}
     {activeSubView === 'mudanzas-carga' && <MovingHeavyCargo />}
     {activeSubView === 'drivers' && <DriversFleet />}
-    {activeSubView === 'sucursales' && <ProductionBranchNetwork />}
+    {activeSubView === 'sucursales' && <ProductionBranchesAdmin />}
     {activeSubView === 'registro-sucursal-matcher' && <ProductionClientRegistration />}
-    {activeSubView === 'clientes' && <ProductionClientDirectory />}
-    {activeSubView === 'zonas-peligrosas' && <ProductionUnavailablePanel title="Zonas peligrosas" description="El backend aún no expone un CRUD persistente para zonas de riesgo y geofencing en esta organización." provider="PostGIS / geofencing" />}
+    {activeSubView === 'clientes' && <ProductionClientsAdmin />}
+    {activeSubView === 'zonas-peligrosas' && <ProductionDangerZonesAdmin />}
     {activeSubView === 'cod' && <CodReconciliation />}
-    {activeSubView === 'tarifas' && <ProductionQuotePanel />}
+    {activeSubView === 'tarifas' && <ProductionRatesAdmin />}
     {activeSubView === 'equipo' && <TeamRbac />}
     {activeSubView === 'configuracion' && <GlobalConfiguration />}
     {!['dashboard','operaciones-vivo','zernio-omnichannel','ia-eventos','escaneo-masivo','mapa-flota','envios','rastreo','courier-intl','rutas','mudanzas-carga','drivers','sucursales','registro-sucursal-matcher','clientes','zonas-peligrosas','cod','tarifas','equipo','configuracion'].includes(activeSubView) && <ProductionAdminDashboard />}
@@ -191,8 +192,27 @@ const RootRedirect = () => {
   return target ? <Navigate to={target} replace /> : <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Cargando GoPaq…</div>;
 };
 
+const SupportTokenBootstrap: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const supportToken = params.get('support_token') || hashParams.get('support_token');
+    if (supportToken) {
+      ApiClient.acceptToken(supportToken);
+      params.delete('support_token');
+      const query = params.toString();
+      hashParams.delete('support_token');
+      const hash = hashParams.toString();
+      window.history.replaceState({}, document.title, `${window.location.pathname}${query ? `?${query}` : ''}${hash ? `#${hash}` : ''}`);
+    }
+    setReady(true);
+  }, []);
+  return ready ? <>{children}</> : <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Preparando sesión segura…</div>;
+};
+
 export default function App() {
-  return <ErrorBoundary><AppProvider><BrowserRouter><Routes>
+  return <ErrorBoundary><AppProvider><BrowserRouter><SupportTokenBootstrap><Routes>
     <Route path="/" element={<PublicSite />} />
     <Route path="/servicios/*" element={<PublicSite />} />
     <Route path="/rastreo" element={<PublicSite />} />
@@ -212,5 +232,5 @@ export default function App() {
     <Route path="/sucursal/*" element={<ProtectedArea section="sucursal" />} />
     <Route path="/driver/*" element={<ProtectedArea section="driver" />} />
     <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes></BrowserRouter></AppProvider></ErrorBoundary>;
+  </Routes></SupportTokenBootstrap></BrowserRouter></AppProvider></ErrorBoundary>;
 }

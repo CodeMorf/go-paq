@@ -14,7 +14,7 @@ function storageRoot() {
  * External S3/MinIO implementations can replace this adapter without changing
  * the shipment or driver domains.
  */
-export type StorageCategory = 'signatures' | 'pod-photos' | 'branding';
+export type StorageCategory = 'signatures' | 'pod-photos' | 'branding' | 'branch-logos';
 
 export async function storeDataUrl(value: string | undefined, category: StorageCategory, maxBytes: number): Promise<string | undefined> {
   if (!value) return undefined;

@@ -50,6 +50,45 @@ export function initDatabase() {
     ensureSqliteColumn('moving_orders', 'job_id', 'TEXT');
     ensureSqliteColumn('heavy_cargo_orders', 'job_id', 'TEXT');
     ensureSqliteColumn('route_stops', 'job_id', 'TEXT');
+    ensureSqliteColumn('branches', 'logo_storage_key', 'TEXT');
+    ensureSqliteColumn('branches', 'country', "TEXT NOT NULL DEFAULT 'DO'");
+    ensureSqliteColumn('branches', 'province', 'TEXT');
+    ensureSqliteColumn('branches', 'sector', 'TEXT');
+    ensureSqliteColumn('branches', 'postal_code', 'TEXT');
+    ensureSqliteColumn('branches', 'whatsapp', 'TEXT');
+    ensureSqliteColumn('branches', 'email', 'TEXT');
+    ensureSqliteColumn('branches', 'business_hours_json', "TEXT NOT NULL DEFAULT '{}'");
+    ensureSqliteColumn('branches', 'branch_type', "TEXT NOT NULL DEFAULT 'branch'");
+    ensureSqliteColumn('branches', 'manager_phone', 'TEXT');
+    ensureSqliteColumn('branches', 'manager_email', 'TEXT');
+    ensureSqliteColumn('dangerous_zones', 'latitude', 'REAL');
+    ensureSqliteColumn('dangerous_zones', 'longitude', 'REAL');
+    ensureSqliteColumn('dangerous_zones', 'radius_m', 'INTEGER NOT NULL DEFAULT 500');
+    ensureSqliteColumn('dangerous_zones', 'description', "TEXT NOT NULL DEFAULT ''");
+    ensureSqliteColumn('dangerous_zones', 'country', "TEXT NOT NULL DEFAULT 'DO'");
+    ensureSqliteColumn('dangerous_zones', 'province', 'TEXT');
+    ensureSqliteColumn('dangerous_zones', 'sector', 'TEXT');
+    ensureSqliteColumn('dangerous_zones', 'alert_reason', "TEXT NOT NULL DEFAULT ''");
+    ensureSqliteColumn('dangerous_zones', 'updated_by', 'TEXT');
+    ensureSqliteColumn('dangerous_zones', 'updated_at', 'TEXT');
+    ensureSqliteColumn('rates_matrix', 'pricing_mode', "TEXT NOT NULL DEFAULT 'base_plus_weight'");
+    ensureSqliteColumn('rates_matrix', 'weight_unit', "TEXT NOT NULL DEFAULT 'kg'");
+    ensureSqliteColumn('rates_matrix', 'included_weight', 'REAL NOT NULL DEFAULT 1');
+    ensureSqliteColumn('rates_matrix', 'additional_weight_step', 'REAL NOT NULL DEFAULT 1');
+    ensureSqliteColumn('rates_matrix', 'additional_weight_rate', 'REAL');
+    ensureSqliteColumn('rates_matrix', 'included_distance_km', 'REAL NOT NULL DEFAULT 0');
+    ensureSqliteColumn('rates_matrix', 'distance_rate', 'REAL NOT NULL DEFAULT 0');
+    ensureSqliteColumn('rates_matrix', 'updated_at', 'TEXT');
+    ensureSqliteColumn('rates_matrix', 'rule_code', 'TEXT');
+    ensureSqliteColumn('rates_matrix', 'priority', 'INTEGER NOT NULL DEFAULT 100');
+    ensureSqliteColumn('rates_matrix', 'client_id', 'TEXT');
+    ensureSqliteColumn('rates_matrix', 'branch_id', 'TEXT');
+    ensureSqliteColumn('rates_matrix', 'service_variant', 'TEXT');
+    ensureSqliteColumn('rates_matrix', 'tiers_json', "TEXT NOT NULL DEFAULT '[]'");
+    ensureSqliteColumn('rates_matrix', 'surcharges_json', "TEXT NOT NULL DEFAULT '{}'");
+    ensureSqliteColumn('clients', 'country', 'TEXT');
+    ensureSqliteColumn('clients', 'province', 'TEXT');
+    ensureSqliteColumn('clients', 'city', 'TEXT');
     sqliteDb.exec(`
       INSERT OR IGNORE INTO schema_migrations (version, applied_at)
       VALUES
@@ -59,7 +98,8 @@ export function initDatabase() {
         ('004_cod_state_machine', CURRENT_TIMESTAMP),
         ('005_logistics_jobs', CURRENT_TIMESTAMP),
         ('006_configuration_center', CURRENT_TIMESTAMP),
-        ('007_google_maps_credentials', CURRENT_TIMESTAMP)
+        ('007_google_maps_credentials', CURRENT_TIMESTAMP),
+        ('008_admin_master_data', CURRENT_TIMESTAMP)
     `);
   }
 }
@@ -106,6 +146,7 @@ export async function runMigrations() {
   const logisticsJobsSql = fs.readFileSync(path.join(migrationsDir, '005_logistics_jobs.sql'), 'utf8');
   const configurationCenterSql = fs.readFileSync(path.join(migrationsDir, '006_configuration_center.sql'), 'utf8');
   const googleMapsCredentialsSql = fs.readFileSync(path.join(migrationsDir, '007_google_maps_credentials.sql'), 'utf8');
+  const adminMasterDataSql = fs.readFileSync(path.join(migrationsDir, '008_admin_master_data.sql'), 'utf8');
   const lockKey = 7874701;
 
   await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
@@ -145,6 +186,10 @@ export async function runMigrations() {
     if (!applied.has('007_google_maps_credentials')) {
       await pgPool.query(googleMapsCredentialsSql);
       await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['007_google_maps_credentials']);
+    }
+    if (!applied.has('008_admin_master_data')) {
+      await pgPool.query(adminMasterDataSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['008_admin_master_data']);
     }
   } finally {
     await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);

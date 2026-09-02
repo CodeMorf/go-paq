@@ -80,7 +80,7 @@ function safeUser(user: any) {
   };
 }
 
-async function issueSession(user: any, req: Request, res: Response) {
+export async function issueSession(user: any, req: Request, res: Response, options: { setRefreshCookie?: boolean; supportSession?: boolean; supportingUserId?: string } = {}) {
   const sessionId = crypto.randomUUID();
   const refreshToken = crypto.randomBytes(48).toString('base64url');
   const expiresAt = new Date(Date.now() + refreshDays * 24 * 60 * 60 * 1000).toISOString();
@@ -92,7 +92,9 @@ async function issueSession(user: any, req: Request, res: Response) {
     role: user.role,
     name: user.name,
     clientId: user.client_id || undefined,
-    sessionId
+    sessionId,
+    supportSession: options.supportSession,
+    supportingUserId: options.supportingUserId
   };
 
   await executeAsync(`
@@ -109,7 +111,7 @@ async function issueSession(user: any, req: Request, res: Response) {
     new Date().toISOString()
   ]);
 
-  setRefreshCookie(res, refreshToken);
+  if (options.setRefreshCookie !== false) setRefreshCookie(res, refreshToken);
   return { token: generateToken(accessPayload), user: safeUser(user), expiresAt };
 }
 
@@ -286,7 +288,7 @@ authRouter.get('/me', authenticate, asyncHandler(async (req: AuthenticatedReques
     WHERE u.id = ? AND u.organization_id = ? AND u.active = 1 AND o.active = 1
   `, [req.user.userId, req.organizationId]);
   if (!user) return res.status(404).json({ success: false, error: 'Usuario no encontrado.' });
-  return res.json({ success: true, user: safeUser(user) });
+  return res.json({ success: true, user: { ...safeUser(user), isSupportSession: !!req.user.supportSession } });
 }));
 
 authRouter.get('/users', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN']), requireScope('team:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {

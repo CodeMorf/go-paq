@@ -14,12 +14,13 @@ export const ROLE_SCOPES: Record<string, readonly string[]> = {
   OPERATIONS: [
     'shipments:read', 'shipments:write', 'tracking:read', 'quotes:read', 'quotes:write',
     'routes:read', 'routes:write', 'drivers:read', 'branches:read', 'clients:read',
+    'clients:write',
     'international:read', 'moving:read', 'moving:write', 'heavy_cargo:read', 'heavy_cargo:write',
     'cod:read', 'cod:reconcile', 'cod:settle', 'webhooks:read', 'webhooks:write'
   ],
   CLIENT: ['shipments:read', 'shipments:write', 'tracking:read', 'quotes:read', 'quotes:write', 'clients:read', 'international:read', 'international:write', 'moving:read', 'moving:write', 'heavy_cargo:read', 'heavy_cargo:write', 'api_keys:read', 'api_keys:write', 'webhooks:read', 'webhooks:write'],
   CUSTOMER: ['shipments:read', 'shipments:write', 'tracking:read', 'quotes:read', 'quotes:write', 'clients:read', 'international:read', 'international:write', 'moving:read', 'moving:write', 'heavy_cargo:read', 'heavy_cargo:write'],
-  BRANCH_MANAGER: ['shipments:read', 'shipments:write', 'tracking:read', 'quotes:read', 'quotes:write', 'routes:read', 'routes:write', 'drivers:read', 'branches:read', 'branches:write', 'moving:read', 'heavy_cargo:read', 'cod:read', 'cod:receive', 'cod:reconcile', 'cod:collect'],
+  BRANCH_MANAGER: ['shipments:read', 'shipments:write', 'tracking:read', 'quotes:read', 'quotes:write', 'routes:read', 'routes:write', 'drivers:read', 'branches:read', 'branches:write', 'clients:write', 'moving:read', 'heavy_cargo:read', 'cod:read', 'cod:receive', 'cod:reconcile', 'cod:collect'],
   MANAGER: ['shipments:read', 'shipments:write', 'tracking:read', 'quotes:read', 'routes:read', 'routes:write', 'drivers:read', 'branches:read', 'moving:read', 'heavy_cargo:read', 'cod:read', 'cod:receive'],
   COUNTER: ['shipments:read', 'shipments:write', 'tracking:read', 'quotes:read', 'branches:read', 'cod:read', 'cod:receive', 'cod:collect'],
   DISPATCHER: ['shipments:read', 'tracking:read', 'routes:read', 'routes:write', 'drivers:read', 'branches:read'],

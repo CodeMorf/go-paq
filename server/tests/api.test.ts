@@ -300,6 +300,40 @@ async function runComprehensiveTestSuite() {
   assert(createdDriver.status === 201 && createdDriverRow?.organization_id === 'org-gopaq' && createdDriverRow?.branch_id === createdBranch.body.branch?.id, 'DRIVER MASTER DATA: admin creates a durable driver assigned to an owned branch');
   assert(clientDriverCreate.status === 403, 'DRIVER MASTER DATA RBAC: client cannot create operational drivers');
 
+  const branchLogoUpdate = await request(app)
+    .patch(`/api/v1/branches/${createdBranch.body.branch?.id}`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ logo: tinyPng, province: 'Distrito Nacional', sector: 'Centro', postalCode: '10101', branchType: 'agency' });
+  const branchLogoAsset = await request(app)
+    .get(`/api/v1/branches/${createdBranch.body.branch?.id}/logo`)
+    .set('Authorization', `Bearer ${token}`);
+  assert(branchLogoUpdate.status === 200 && branchLogoAsset.status === 200 && branchLogoAsset.headers['content-type']?.startsWith('image/png'), 'BRANCH BRANDING: logo and operational metadata persist outside the branch row blob');
+
+  const clientDirectory = await request(app)
+    .get('/api/v1/clients?q=Cliente&status=active&page=1&limit=10')
+    .set('Authorization', `Bearer ${token}`);
+  const supportSession = clientDirectory.body.clients?.find((client: any) => client.email === testEmail);
+  const supportStart = supportSession ? await request(app).post(`/api/v1/clients/${supportSession.id}/support-session`).set('Authorization', `Bearer ${token}`) : { status: 0, body: {} };
+  const supportRead = supportStart.body.token ? await request(app).get('/api/v1/clients').set('Authorization', `Bearer ${supportStart.body.token}`) : { status: 0, body: {} };
+  const supportWrite = supportStart.body.token ? await request(app).post('/api/v1/shipments').set('Authorization', `Bearer ${supportStart.body.token}`).send({ serviceType: 'local', origin: { city: 'Santo Domingo', address: 'Calle A' }, destination: { city: 'Santo Domingo', address: 'Calle B' }, package: { weightKg: 1, lengthCm: 10, widthCm: 10, heightCm: 10 } }) : { status: 0, body: {} };
+  assert(clientDirectory.status === 200 && clientDirectory.body.pagination?.total >= 1 && supportStart.status === 200 && supportStart.body.support?.readOnly === true && supportRead.status === 200 && supportRead.body.clients?.length === 1 && supportWrite.status === 403, 'CLIENT ADMIN: filtered directory, audited read-only support session and write protection work');
+
+  const zoneCreate = await request(app)
+    .post('/api/v1/dangerous-zones')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Zona de prueba geográfica', description: 'Prueba persistente', riskLevel: 'alto', country: 'DO', province: 'Distrito Nacional', city: 'Santo Domingo', sector: 'Ensanche', latitude: 18.4861, longitude: -69.9312, radiusM: 750, surchargeAmount: 85, restrictionPolicy: 'Requiere revisión', alertReason: 'Prueba de seguridad' });
+  const zonesRead = await request(app).get('/api/v1/dangerous-zones').set('Authorization', `Bearer ${token}`);
+  const clientZoneWrite = await request(app).post('/api/v1/dangerous-zones').set('Authorization', `Bearer ${demoRes.body.token}`).send({ name: 'No autorizada', riskLevel: 'alto', city: 'Santo Domingo', latitude: 18, longitude: -69, restrictionPolicy: 'x' });
+  assert(zoneCreate.status === 201 && zonesRead.status === 200 && zonesRead.body.zones.some((zone: any) => zone.id === zoneCreate.body.zone?.id) && clientZoneWrite.status === 403, 'DANGEROUS ZONES: tenant-scoped point/radius management and RBAC persist correctly');
+
+  const rateCreate = await request(app)
+    .post('/api/v1/rates')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ ruleCode: `TEST-RATE-${Date.now()}`, serviceType: 'local', originZone: '*', destZone: '*', baseRate: 150, minCharge: 150, pricingMode: 'hybrid', weightUnit: 'lb', includedWeight: 1, additionalWeightStep: 1, additionalWeightRate: 50, includedDistanceKm: 3, distanceRate: 25, tiers: [{ min: 0, max: 5, price: 250 }, { min: 6, max: 10, price: 400 }], surcharges: { night: { type: 'percent', value: 10 } } });
+  const rateRead = await request(app).get('/api/v1/rates?serviceType=local').set('Authorization', `Bearer ${token}`);
+  const rateSimulation = await request(app).post('/api/v1/rates/simulate').set('Authorization', `Bearer ${token}`).send({ serviceType: 'local', originCity: 'Santo Domingo', destCity: 'Santo Domingo', weightKg: 2, lengthCm: 20, widthCm: 20, heightCm: 10, distanceKm: 5 });
+  assert(rateCreate.status === 201 && rateRead.status === 200 && rateRead.body.rates.some((rate: any) => rate.id === rateCreate.body.rate?.id) && rateSimulation.status === 200 && rateSimulation.body.quote?.ruleCode, 'RATES ENGINE: flexible rule persistence and backend tariff simulation return the applied rule');
+
   // 15. Real Quotes & Pricing Engine
   const quoteRes = await request(app)
     .post('/api/v1/quotes')

@@ -28,7 +28,11 @@ const quoteSchema = z.object({
     declaredValueUsd: z.coerce.number().min(0).max(100000000).default(0),
     isFragile: z.boolean().default(false),
     codAmount: z.coerce.number().min(0).max(100000000).default(0),
-    dangerousZoneId: z.string().trim().max(120).optional()
+    dangerousZoneId: z.string().trim().max(120).optional(),
+    distanceKm: z.coerce.number().min(0).max(100000).optional(),
+    clientId: z.string().trim().max(120).optional(),
+    branchId: z.string().trim().max(120).optional(),
+    serviceVariant: z.string().trim().max(40).optional()
   });
 
 quotesRouter.post('/', asyncHandler(async (req, res) => {
@@ -55,7 +59,11 @@ quotesRouter.post('/', asyncHandler(async (req, res) => {
     declaredValueUsd = 0,
     isFragile = false,
     codAmount = 0,
-    dangerousZoneId
+    dangerousZoneId,
+    distanceKm,
+    clientId,
+    branchId,
+    serviceVariant
   } = parsed.data;
 
   const quote = await calculatePricing({
@@ -69,7 +77,11 @@ quotesRouter.post('/', asyncHandler(async (req, res) => {
     declaredValueUsd,
     isFragile,
     codAmount,
-    dangerousZoneId
+    dangerousZoneId,
+    distanceKm,
+    clientId,
+    branchId,
+    serviceVariant
   }, process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq');
 
   const needsCarrierRates = serviceType === 'internacional' || String(originCountry).toUpperCase() !== String(destinationCountry).toUpperCase();

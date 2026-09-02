@@ -21,6 +21,7 @@ import { webhooksRouter } from '../api/v1/webhooks.routes';
 import { openapiRouter } from '../api/v1/openapi.routes';
 import { integrationsRouter } from '../api/v1/integrations.routes';
 import { configurationRouter } from '../api/v1/configuration.routes';
+import { dangerousZonesRouter, ratesRouter } from '../api/v1/masterData.routes';
 import { requestId, publicError } from './http';
 import { checkDatabase, isPostgres, queryOneAsync } from '../db/database';
 import Redis from 'ioredis';
@@ -101,6 +102,8 @@ apiV1.use('/api-keys', apiKeysRouter);
 apiV1.use('/webhooks', webhooksRouter);
 apiV1.use('/integrations', integrationsRouter);
 apiV1.use('/configuration', configurationRouter);
+apiV1.use('/dangerous-zones', dangerousZonesRouter);
+apiV1.use('/rates', ratesRouter);
 apiV1.use('/docs', openapiRouter);
 app.use('/api/v1', apiV1);
 

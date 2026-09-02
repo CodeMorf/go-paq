@@ -11,6 +11,7 @@ export type ApiResponse<T = Record<string, any>> =
 
 export class ApiClient {
   private static readonly tokenStorageKey = 'gopaq_access_token';
+  private static readonly supportStorageKey = 'gopaq_support_session';
 
   private static getToken(): string | null {
     return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(this.tokenStorageKey) : null;
@@ -18,8 +19,27 @@ export class ApiClient {
 
   private static setToken(token: string | null) {
     if (typeof sessionStorage === 'undefined') return;
-    if (token) sessionStorage.setItem(this.tokenStorageKey, token);
-    else sessionStorage.removeItem(this.tokenStorageKey);
+    if (token) {
+      sessionStorage.setItem(this.tokenStorageKey, token);
+      if (this.tokenIsSupportSession(token)) sessionStorage.setItem(this.supportStorageKey, '1');
+      else sessionStorage.removeItem(this.supportStorageKey);
+    } else {
+      sessionStorage.removeItem(this.tokenStorageKey);
+      sessionStorage.removeItem(this.supportStorageKey);
+    }
+  }
+
+  private static tokenIsSupportSession(token: string): boolean {
+    try {
+      const encoded = token.split('.')[1];
+      if (!encoded) return false;
+      const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+      return !!(JSON.parse(atob(normalized)) as { supportSession?: boolean }).supportSession;
+    } catch { return false; }
+  }
+
+  private static isSupportSession(): boolean {
+    return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(this.supportStorageKey) === '1';
   }
 
   private static async request<T = any>(endpoint: string, options: RequestInit = {}, allowRefresh = true): Promise<ApiResponse<T>> {
@@ -34,7 +54,7 @@ export class ApiClient {
     try {
       const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, credentials: 'include' });
       const data = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
-      if (res.status === 401 && allowRefresh && !endpoint.startsWith('/auth/')) {
+      if (res.status === 401 && allowRefresh && !endpoint.startsWith('/auth/') && !this.isSupportSession()) {
         const refreshed = await this.request<{ token: string; user: any }>('/auth/refresh', { method: 'POST' }, false);
         if (refreshed.success && refreshed.token) return this.request<T>(endpoint, options, false);
       }
@@ -47,9 +67,11 @@ export class ApiClient {
   }
 
   static hasSession() { return !!this.getToken(); }
+  static acceptToken(token: string) { this.setToken(token); }
   static async logout() {
+    const supportSession = this.isSupportSession();
     try {
-      await this.request('/auth/logout', { method: 'POST' }, false);
+      if (!supportSession) await this.request('/auth/logout', { method: 'POST' }, false);
     } finally {
       this.setToken(null);
     }
@@ -130,14 +152,28 @@ export class ApiClient {
   static async completeDriverStop(stopId: string, payload: any, idempotencyKey?: string): Promise<ApiResponse<{ stopId: string; shipmentId: string; trackingNumber: string; status: string; codStatus: string }>> { return this.request<{ stopId: string; shipmentId: string; trackingNumber: string; status: string; codStatus: string }>(`/drivers/stops/${encodeURIComponent(stopId)}/complete`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
   static async failDriverStop(stopId: string, payload: { reason: string; notes?: string }, idempotencyKey?: string): Promise<ApiResponse<{ stopId: string; status: string; failedAt: string }>> { return this.request<{ stopId: string; status: string; failedAt: string }>(`/drivers/stops/${encodeURIComponent(stopId)}/fail`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
   static async getBranches(): Promise<ApiResponse<{ branches: any[] }>> { return this.request<{ branches: any[] }>('/branches'); }
-  static async createBranch(payload: { code: string; name: string; city: string; address: string; phone?: string; managerName?: string; isHub?: boolean; latitude?: number | null; longitude?: number | null }): Promise<ApiResponse<{ branch: any }>> { return this.request<{ branch: any }>('/branches', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async createBranch(payload: any): Promise<ApiResponse<{ branch: any }>> { return this.request<{ branch: any }>('/branches', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async updateBranch(branchId: string, payload: any): Promise<ApiResponse<{ branch: any }>> { return this.request<{ branch: any }>(`/branches/${encodeURIComponent(branchId)}`, { method: 'PATCH', body: JSON.stringify(payload) }); }
+  static async updateBranchStatus(branchId: string, active: boolean): Promise<ApiResponse<{ active: boolean }>> { return this.request<{ active: boolean }>(`/branches/${encodeURIComponent(branchId)}/status`, { method: 'PATCH', body: JSON.stringify({ active }) }); }
   static async updateBranchLocation(branchId: string, payload: { latitude: number | null; longitude: number | null; address?: string }): Promise<ApiResponse<{ branch: any }>> { return this.request<{ branch: any }>(`/branches/${encodeURIComponent(branchId)}/location`, { method: 'PATCH', body: JSON.stringify(payload) }); }
   static async getPublicBranches(): Promise<ApiResponse<{ branches: any[] }>> { return this.request<{ branches: any[] }>('/branches/public'); }
   static async getBranchInventory(branchId: string): Promise<ApiResponse<{ count: number; inventory: any[] }>> { return this.request<{ count: number; inventory: any[] }>(`/branches/${branchId}/inventory`); }
-  static async scanBranchShipment(branchId: string, payload: { trackingNumber: string; action: 'receive' | 'store' | 'dispatch'; location?: string }, idempotencyKey?: string): Promise<ApiResponse<{ shipmentId: string; trackingNumber: string; status: string; action: string }>> { return this.request<{ shipmentId: string; trackingNumber: string; status: string; action: string }>(`/branches/${encodeURIComponent(branchId)}/scan`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
+  static async scanBranchShipment(branchId: string, payload: { trackingNumber: string; action: 'receive' | 'store' | 'dispatch'; location?: string }, idempotencyKey?: string): Promise<ApiResponse<{ shipmentId: string; trackingNumber: string; clientName?: string | null; branchName?: string | null; status: string; action: string; previousStatus?: string; processedAt?: string; processedBy?: string }>> { return this.request<{ shipmentId: string; trackingNumber: string; clientName?: string | null; branchName?: string | null; status: string; action: string; previousStatus?: string; processedAt?: string; processedBy?: string }>(`/branches/${encodeURIComponent(branchId)}/scan`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
   static async closeBranchCash(branchId: string, payload: any): Promise<ApiResponse<{ message: string; summary: any }>> { return this.request<{ message: string; summary: any }>(`/branches/${branchId}/cash-close`, { method: 'POST', body: JSON.stringify(payload) }); }
-  static async getClients(): Promise<ApiResponse<{ clients: any[] }>> { return this.request<{ clients: any[] }>('/clients'); }
+  static async getClients(params?: Record<string, string | number>): Promise<ApiResponse<{ clients: any[]; pagination?: any }>> { const query = new URLSearchParams(Object.entries(params || {}).map(([key, value]) => [key, String(value)])).toString(); return this.request<{ clients: any[]; pagination?: any }>(`/clients${query ? `?${query}` : ''}`); }
   static async createClient(payload: any): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>('/clients', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async updateClient(clientId: string, payload: any): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>(`/clients/${encodeURIComponent(clientId)}`, { method: 'PATCH', body: JSON.stringify(payload) }); }
+  static async deactivateClient(clientId: string): Promise<ApiResponse<{ status: string }>> { return this.request<{ status: string }>(`/clients/${encodeURIComponent(clientId)}`, { method: 'DELETE' }); }
+  static async startClientSupport(clientId: string): Promise<ApiResponse<{ token: string; expiresAt: string; support: any }>> { return this.request<{ token: string; expiresAt: string; support: any }>(`/clients/${encodeURIComponent(clientId)}/support-session`, { method: 'POST' }); }
+  static async getDangerousZones(params?: Record<string, string>): Promise<ApiResponse<{ zones: any[] }>> { const query = new URLSearchParams(params || {}).toString(); return this.request<{ zones: any[] }>(`/dangerous-zones${query ? `?${query}` : ''}`); }
+  static async createDangerousZone(payload: any): Promise<ApiResponse<{ zone: any }>> { return this.request<{ zone: any }>('/dangerous-zones', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async updateDangerousZone(id: string, payload: any): Promise<ApiResponse<{ zone: any }>> { return this.request<{ zone: any }>(`/dangerous-zones/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }); }
+  static async deactivateDangerousZone(id: string): Promise<ApiResponse<{ status: string }>> { return this.request<{ status: string }>(`/dangerous-zones/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  static async getRates(params?: Record<string, string>): Promise<ApiResponse<{ rates: any[] }>> { const query = new URLSearchParams(params || {}).toString(); return this.request<{ rates: any[] }>(`/rates${query ? `?${query}` : ''}`); }
+  static async createRate(payload: any): Promise<ApiResponse<{ rate: any }>> { return this.request<{ rate: any }>('/rates', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async simulateRate(payload: any): Promise<ApiResponse<{ quote: any }>> { return this.request<{ quote: any }>('/rates/simulate', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async updateRate(id: string, payload: any): Promise<ApiResponse<{ rate: any }>> { return this.request<{ rate: any }>(`/rates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }); }
+  static async deactivateRate(id: string): Promise<ApiResponse<{ status: string }>> { return this.request<{ status: string }>(`/rates/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
   static async getApiKeys(): Promise<ApiResponse<{ keys: any[] }>> { return this.request<{ keys: any[] }>('/api-keys'); }
   static async createApiKey(payload: any): Promise<ApiResponse<{ apiKey: any }>> { return this.request<{ apiKey: any }>('/api-keys', { method: 'POST', body: JSON.stringify(payload) }); }
   static async getCodLedger(): Promise<ApiResponse<{ summary: any; transactions: any[] }>> { return this.request<{ summary: any; transactions: any[] }>('/cod/ledger'); }
