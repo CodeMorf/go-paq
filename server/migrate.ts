@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { runMigrations, checkDatabase } from './db/database';
+import { checkDatabase, closeDatabase, runMigrations } from './db/database';
 
 dotenv.config();
 
@@ -11,7 +11,11 @@ async function main() {
   console.log(`GoPaq migrations applied (${health.engine}${health.postgisVersion ? ` / PostGIS ${health.postgisVersion}` : ''}).`);
 }
 
-main().catch((error) => {
-  console.error('GoPaq migration failed:', error instanceof Error ? error.message : 'unknown_error');
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error('GoPaq migration failed:', error instanceof Error ? error.message : 'unknown_error');
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeDatabase();
+  });
