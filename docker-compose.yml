@@ -31,7 +31,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-    networks: [gopaq_private]
+    networks:
+      - gopaq_private
+      - gopaq_edge
 
   gopaq-migrate:
     build:
@@ -114,3 +116,5 @@ networks:
   gopaq_private:
     name: gopaq_private
     internal: true
+  gopaq_edge:
+    name: gopaq_edge
