@@ -248,6 +248,58 @@ async function runComprehensiveTestSuite() {
   const publicMapsAfterClear = await request(app).get('/api/v1/configuration/maps');
   assert(mapsClear.status === 200 && publicMapsAfterClear.status === 200 && publicMapsAfterClear.body.status === 'NO CONFIGURADO' && !publicMapsAfterClear.body.apiKey, 'GOOGLE MAPS RESET: retirar la credencial deja el proveedor en NO CONFIGURADO');
 
+  // 14c. Real branding and operational master-data writes: storage, RBAC,
+  // tenant scope and audit/outbox persistence are exercised through HTTP.
+  const publicBrandingBefore = await request(app).get('/api/v1/configuration/public');
+  assert(publicBrandingBefore.status === 200 && publicBrandingBefore.body.branding?.logoUrl === '/assets/brand/gopaq-logo-lockup.png' && !publicBrandingBefore.body.branding?.settings, 'BRANDING PUBLIC CONTRACT: public endpoint exposes only safe visual configuration');
+  const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+  const brandingUpdate = await request(app)
+    .patch('/api/v1/configuration/branding')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: mapsClear.body.version, logo: tinyPng, reason: 'Prueba de identidad visual persistida' });
+  const publicBrandingStored = await request(app).get('/api/v1/configuration/public');
+  const publicBrandingAsset = await request(app).get('/api/v1/configuration/public/branding/logo');
+  const brandingClientWrite = await request(app)
+    .patch('/api/v1/configuration/branding')
+    .set('Authorization', `Bearer ${demoRes.body.token}`)
+    .send({ expectedVersion: brandingUpdate.body.version, favicon: tinyPng });
+  assert(brandingUpdate.status === 200 && publicBrandingStored.body.branding?.logoUrl.includes('/configuration/public/branding/logo') && publicBrandingAsset.status === 200 && publicBrandingAsset.headers['content-type']?.startsWith('image/png'), 'BRANDING: PNG is stored outside business rows and served only after backend persistence');
+  assert(brandingClientWrite.status === 403, 'BRANDING RBAC: client cannot change tenant identity');
+  const brandingClear = await request(app)
+    .patch('/api/v1/configuration/branding')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ expectedVersion: brandingUpdate.body.version, logo: null, favicon: null, reason: 'Restaurar identidad oficial de fixture' });
+  assert(brandingClear.status === 200, 'BRANDING RESET: administrator can restore the official transparent assets');
+
+  const createdBranchCode = `TEST-${Date.now()}`;
+  const createdBranch = await request(app)
+    .post('/api/v1/branches')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ code: createdBranchCode, name: 'Sucursal de prueba persistida', city: 'Santo Domingo', address: 'Calle de prueba 123', phone: '8095550199', isHub: false });
+  const duplicateBranch = await request(app)
+    .post('/api/v1/branches')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ code: createdBranchCode.toLowerCase(), name: 'Duplicada', city: 'Santo Domingo', address: 'Calle de prueba 123' });
+  const createdBranchRow = createdBranch.body.branch?.id ? await queryOneAsync<{ id: string; organization_id: string }>('SELECT id, organization_id FROM branches WHERE id = ?', [createdBranch.body.branch.id]) : null;
+  const clientBranchCreate = await request(app)
+    .post('/api/v1/branches')
+    .set('Authorization', `Bearer ${demoRes.body.token}`)
+    .send({ code: `CLIENT-${Date.now()}`, name: 'No autorizada', city: 'Santo Domingo', address: 'Calle no autorizada' });
+  assert(createdBranch.status === 201 && createdBranchRow?.organization_id === 'org-gopaq' && duplicateBranch.status === 409, 'BRANCH MASTER DATA: admin creates a durable tenant branch and duplicate codes are rejected');
+  assert(clientBranchCreate.status === 403, 'BRANCH MASTER DATA RBAC: client cannot create a branch');
+
+  const createdDriver = await request(app)
+    .post('/api/v1/drivers')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ name: 'Conductor de prueba persistido', phone: '8095550188', licenseNumber: `LIC-${Date.now()}`, vehicleType: 'Van', vehiclePlate: `TEST-${Date.now()}`, branchId: createdBranch.body.branch?.id });
+  const createdDriverRow = createdDriver.body.driver?.id ? await queryOneAsync<{ id: string; organization_id: string; branch_id: string }>('SELECT id, organization_id, branch_id FROM drivers WHERE id = ?', [createdDriver.body.driver.id]) : null;
+  const clientDriverCreate = await request(app)
+    .post('/api/v1/drivers')
+    .set('Authorization', `Bearer ${demoRes.body.token}`)
+    .send({ name: 'No autorizado', phone: '8095550177', licenseNumber: `CLIENT-LIC-${Date.now()}`, vehicleType: 'Van', vehiclePlate: `CLIENT-${Date.now()}`, branchId: createdBranch.body.branch?.id });
+  assert(createdDriver.status === 201 && createdDriverRow?.organization_id === 'org-gopaq' && createdDriverRow?.branch_id === createdBranch.body.branch?.id, 'DRIVER MASTER DATA: admin creates a durable driver assigned to an owned branch');
+  assert(clientDriverCreate.status === 403, 'DRIVER MASTER DATA RBAC: client cannot create operational drivers');
+
   // 15. Real Quotes & Pricing Engine
   const quoteRes = await request(app)
     .post('/api/v1/quotes')

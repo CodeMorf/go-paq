@@ -8,7 +8,10 @@ import {
   getGoogleMapsConfiguration,
   getConfigurationRevisions,
   getPublicGoogleMapsConfiguration,
+  getPublicBrandingAsset,
+  getPublicBrandingConfiguration,
   getOrganizationConfiguration,
+  prepareBrandingAsset,
   updateGoogleMapsConfiguration,
   updateOrganizationConfiguration
 } from '../../modules/configuration/configuration.service';
@@ -59,6 +62,25 @@ configurationRouter.get('/maps', asyncHandler(async (_req, res) => {
   return res.json({ success: true, provider: 'google_maps', ...googleMaps });
 }));
 
+// Only public-safe visual settings are returned here. No tenant business,
+// credentials, user data or operational configuration is exposed.
+configurationRouter.get('/public', asyncHandler(async (_req, res) => {
+  const organizationId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const branding = await getPublicBrandingConfiguration(organizationId);
+  return res.json({ success: true, branding });
+}));
+
+configurationRouter.get('/public/branding/:kind', asyncHandler(async (req, res) => {
+  const kind = req.params.kind === 'favicon' ? 'favicon' : req.params.kind === 'logo' ? 'logo' : null;
+  if (!kind) return res.status(404).end();
+  const organizationId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const asset = await getPublicBrandingAsset(organizationId, kind);
+  if (!asset) return res.status(404).end();
+  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+  res.setHeader('Content-Type', asset.mimeType);
+  return res.send(asset.buffer);
+}));
+
 configurationRouter.get('/revisions', authenticate, requireRole(readRoles), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const parsedLimit = Number(req.query.limit || 50);
   const revisions = await getConfigurationRevisions(req.organizationId!, Number.isFinite(parsedLimit) ? parsedLimit : 50);
@@ -77,6 +99,13 @@ const googleMapsUpdateSchema = z.object({
   reason: z.string().trim().max(240).optional()
 }).strict();
 
+const brandingUpdateSchema = z.object({
+  logo: z.union([z.string().trim().max(3_000_000), z.null()]).optional(),
+  favicon: z.union([z.string().trim().max(1_000_000), z.null()]).optional(),
+  expectedVersion: z.number().int().min(0),
+  reason: z.string().trim().max(240).optional()
+}).strict();
+
 configurationRouter.patch('/google-maps', authenticate, requireRole(fullWriteRoles), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const parsed = googleMapsUpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(422).json({ success: false, error: 'La clave de Google Maps o la versión de configuración es inválida.' });
@@ -87,6 +116,30 @@ configurationRouter.patch('/google-maps', authenticate, requireRole(fullWriteRol
     apiKey: parsed.data.apiKey,
     expectedVersion: parsed.data.expectedVersion,
     reason: parsed.data.reason,
+    ipAddress: req.ip
+  });
+  return res.json({ success: true, organizationId: req.organizationId, ...updated });
+}));
+
+configurationRouter.patch('/branding', authenticate, requireRole(fullWriteRoles), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const parsed = brandingUpdateSchema.safeParse(req.body);
+  if (!parsed.success || (parsed.data.logo === undefined && parsed.data.favicon === undefined)) {
+    return res.status(422).json({ success: false, error: 'Debes indicar el logo o el favicon que deseas guardar.' });
+  }
+  const [logoUrl, faviconUrl] = await Promise.all([
+    prepareBrandingAsset(parsed.data.logo, 'logo'),
+    prepareBrandingAsset(parsed.data.favicon, 'favicon')
+  ]);
+  const patch: Record<string, unknown> = {};
+  if (logoUrl !== undefined) patch.logoUrl = logoUrl;
+  if (faviconUrl !== undefined) patch.faviconUrl = faviconUrl;
+  const updated = await updateOrganizationConfiguration({
+    organizationId: req.organizationId!,
+    userId: req.user!.userId,
+    category: 'organization',
+    patch,
+    expectedVersion: parsed.data.expectedVersion,
+    reason: parsed.data.reason || 'Actualización de identidad visual',
     ipAddress: req.ip
   });
   return res.json({ success: true, organizationId: req.organizationId, ...updated });

@@ -17,6 +17,7 @@ import {
   RefreshCw,
   ReceiptText,
   Route,
+  Search,
   Save,
   ServerCog,
   ShieldCheck,
@@ -24,10 +25,12 @@ import {
   Truck,
   WalletCards,
   Wrench,
-  XCircle
+  XCircle,
+  ImagePlus
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useApp } from '../../context/AppContext';
+import { geocodeAddress } from '../../lib/googleMaps';
 import { Button, Card } from '../ui/DesignSystem';
 
 type Category = 'organization' | 'localization' | 'services' | 'operations' | 'international' | 'finance' | 'billing' | 'notifications' | 'automation' | 'security' | 'driver' | 'storage' | 'integrations' | 'developer';
@@ -137,7 +140,7 @@ function StatusCard({ label, ok, value }: { label: string; ok: boolean; value: s
 }
 
 export const GlobalConfiguration: React.FC = () => {
-  const { addToast } = useApp();
+  const { addToast, updateBranding } = useApp();
   const [activeCategory, setActiveCategory] = useState<Category>('organization');
   const [settings, setSettings] = useState<SettingsMap>({});
   const [savedSettings, setSavedSettings] = useState<SettingsMap>({});
@@ -155,6 +158,13 @@ export const GlobalConfiguration: React.FC = () => {
   const [branchLocationsLoading, setBranchLocationsLoading] = useState(false);
   const [branchLocationSaving, setBranchLocationSaving] = useState<string | null>(null);
   const [branchLocationError, setBranchLocationError] = useState('');
+  const [branchAddressQueries, setBranchAddressQueries] = useState<Record<string, string>>({});
+  const [branchAddressSearching, setBranchAddressSearching] = useState<string | null>(null);
+  const [publicGoogleMapsKey, setPublicGoogleMapsKey] = useState('');
+  const [brandingDraft, setBrandingDraft] = useState<{ logo: string | null; favicon: string | null }>({ logo: null, favicon: null });
+  const [savedBranding, setSavedBranding] = useState<{ logo: string | null; favicon: string | null }>({ logo: null, favicon: null });
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingError, setBrandingError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -162,11 +172,12 @@ export const GlobalConfiguration: React.FC = () => {
   const load = async () => {
     setLoading(true);
     setError('');
-    const [configuration, readiness, integrationHealth, revisionResult] = await Promise.all([
+    const [configuration, readiness, integrationHealth, revisionResult, publicMaps] = await Promise.all([
       ApiClient.getConfiguration(),
       ApiClient.getReadiness(),
       ApiClient.getIntegrationsHealth(),
-      ApiClient.getConfigurationRevisions(10)
+      ApiClient.getConfigurationRevisions(10),
+      ApiClient.getPublicMapConfiguration()
     ]);
     if (!configuration.success) setError(configuration.error);
     else {
@@ -178,10 +189,18 @@ export const GlobalConfiguration: React.FC = () => {
       setGoogleMaps(configuration.googleMaps);
       setGoogleMapsKey('');
       setGoogleMapsError('');
+      const organization = configuration.settings.organization || {};
+      const logo = typeof organization.logoUrl === 'string' ? organization.logoUrl : null;
+      const favicon = typeof organization.faviconUrl === 'string' ? organization.faviconUrl : null;
+      setBrandingDraft({ logo, favicon });
+      setSavedBranding({ logo, favicon });
+      setBrandingError('');
     }
     if (readiness.success) setReady(readiness);
     if (integrationHealth.success) setIntegrations(integrationHealth);
     if (revisionResult.success) setRevisions(revisionResult.revisions || []);
+    if (publicMaps.success && publicMaps.configured && publicMaps.apiKey) setPublicGoogleMapsKey(publicMaps.apiKey);
+    else setPublicGoogleMapsKey('');
     if (activeCategory === 'integrations') await loadBranchLocations();
     setLoading(false);
   };
@@ -202,6 +221,7 @@ export const GlobalConfiguration: React.FC = () => {
   const activeFields = fieldDefinitions[activeCategory];
   const activeValues = settings[activeCategory] || {};
   const dirty = JSON.stringify(activeValues) !== JSON.stringify(savedSettings[activeCategory] || {});
+  const brandingDirty = brandingDraft.logo !== savedBranding.logo || brandingDraft.favicon !== savedBranding.favicon;
 
   const updateField = (field: Field, rawValue: string | boolean) => {
     let value: unknown = rawValue;
@@ -221,9 +241,74 @@ export const GlobalConfiguration: React.FC = () => {
     setVersion(result.version);
     setConfigured(true);
     setUpdatedAt(result.updatedAt);
+    const organization = result.settings.organization || {};
+    updateBranding({
+      displayName: String(organization.displayName || 'GoPaq'),
+      primaryColor: String(organization.primaryColor || '#4f46e5'),
+      secondaryColor: String(organization.secondaryColor || '#0f172a'),
+      logoUrl: previewAssetUrl(typeof organization.logoUrl === 'string' ? organization.logoUrl : null),
+      faviconUrl: previewAssetUrl(typeof organization.faviconUrl === 'string' ? organization.faviconUrl : null)
+    });
     addToast('success', 'Configuración guardada', `${activeMeta.label} quedó persistida en PostgreSQL, versión ${result.version}.`);
     const revisionResult = await ApiClient.getConfigurationRevisions(10);
     if (revisionResult.success) setRevisions(revisionResult.revisions || []);
+  };
+
+  const previewAssetUrl = (value: string | null) => value?.startsWith('storage://branding/') ? '/api/v1/configuration/public/branding/logo' : value || '/assets/brand/gopaq-logo-lockup.png';
+  const previewFaviconUrl = (value: string | null) => value?.startsWith('storage://branding/') ? '/api/v1/configuration/public/branding/favicon' : value || '/assets/brand/gopaq-mascot.png';
+
+  const readBrandFile = (kind: 'logo' | 'favicon', file: File) => {
+    if (kind === 'logo' && file.type !== 'image/png') { setBrandingError('El logo debe ser PNG para conservar un fondo transparente.'); return; }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { setBrandingError('Solo se aceptan imágenes PNG, JPG o WebP.'); return; }
+    const maxBytes = kind === 'logo' ? 1_400_000 : 500_000;
+    if (file.size > maxBytes) { setBrandingError(`El ${kind === 'logo' ? 'logo' : 'favicon'} supera el límite permitido.`); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return;
+      setBrandingDraft((current) => ({ ...current, [kind]: reader.result }));
+      setBrandingError('');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveBranding = async () => {
+    const payload: { logo?: string | null; favicon?: string | null; expectedVersion: number; reason: string } = { expectedVersion: version, reason: 'Actualización de identidad visual desde Configuración Global' };
+    if (brandingDraft.logo !== savedBranding.logo) payload.logo = brandingDraft.logo;
+    if (brandingDraft.favicon !== savedBranding.favicon) payload.favicon = brandingDraft.favicon;
+    if (payload.logo === undefined && payload.favicon === undefined) return;
+    setBrandingSaving(true);
+    setBrandingError('');
+    const result = await ApiClient.updateBranding(payload);
+    setBrandingSaving(false);
+    if (!result.success) { setBrandingError(result.error || 'No fue posible guardar la identidad visual.'); return; }
+    const organization = result.settings.organization || {};
+    const logo = typeof organization.logoUrl === 'string' ? organization.logoUrl : null;
+    const favicon = typeof organization.faviconUrl === 'string' ? organization.faviconUrl : null;
+    setSettings(result.settings);
+    setSavedSettings(result.settings);
+    setVersion(result.version);
+    setConfigured(true);
+    setUpdatedAt(result.updatedAt);
+    setBrandingDraft({ logo, favicon });
+    setSavedBranding({ logo, favicon });
+    updateBranding({ displayName: String(organization.displayName || 'GoPaq'), logoUrl: previewAssetUrl(logo), faviconUrl: previewFaviconUrl(favicon), primaryColor: String(organization.primaryColor || '#4f46e5'), secondaryColor: String(organization.secondaryColor || '#0f172a'), version: result.version, updatedAt: result.updatedAt });
+    addToast('success', 'Identidad visual guardada', 'El logo y favicon quedaron persistidos en PostgreSQL y visibles en los portales.');
+  };
+
+  const searchBranchAddress = async (branch: any) => {
+    const query = String(branchAddressQueries[branch.id] || `${branch.address}, ${branch.city}, República Dominicana`).trim();
+    if (!publicGoogleMapsKey) { setBranchLocationError('Google Maps está NO CONFIGURADO. Guarda primero una clave restringida en esta pantalla.'); return; }
+    if (query.length < 5) { setBranchLocationError('Escribe una dirección verificable antes de buscar.'); return; }
+    setBranchAddressSearching(branch.id);
+    setBranchLocationError('');
+    try {
+      const result = await geocodeAddress(query, publicGoogleMapsKey);
+      setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, latitude: result.latitude, longitude: result.longitude, verifiedAddress: result.formattedAddress } : item));
+    } catch (searchError: any) {
+      setBranchLocationError(searchError?.message || 'No se encontró una dirección verificable.');
+    } finally {
+      setBranchAddressSearching(null);
+    }
   };
 
   const saveGoogleMaps = async (apiKey: string | null) => {
@@ -237,6 +322,7 @@ export const GlobalConfiguration: React.FC = () => {
     setUpdatedAt(result.updatedAt);
     setGoogleMaps(result.googleMaps);
     setGoogleMapsKey('');
+    setPublicGoogleMapsKey(apiKey || '');
     addToast('success', apiKey === null ? 'Google Maps retirado' : 'Google Maps configurado', apiKey === null ? 'La credencial fue retirada del tenant.' : 'La credencial quedó guardada cifrada y versionada en PostgreSQL.');
     const revisionResult = await ApiClient.getConfigurationRevisions(10);
     if (revisionResult.success) setRevisions(revisionResult.revisions || []);
@@ -257,7 +343,7 @@ export const GlobalConfiguration: React.FC = () => {
     }
     setBranchLocationSaving(branch.id);
     setBranchLocationError('');
-    const result = await ApiClient.updateBranchLocation(branch.id, { latitude, longitude });
+    const result = await ApiClient.updateBranchLocation(branch.id, { latitude, longitude, address: branch.verifiedAddress || undefined });
     setBranchLocationSaving(null);
     if (!result.success) { setBranchLocationError(result.error || 'No fue posible guardar la ubicación.'); return; }
     setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, ...result.branch } : item));
@@ -298,6 +384,27 @@ export const GlobalConfiguration: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-800"><p className="text-[11px] text-slate-500">{dirty ? 'Hay cambios sin guardar en esta sección.' : configured ? `Versión ${version} sincronizada con el backend.` : 'Valores predeterminados; todavía no existe una configuración personalizada para este tenant.'}</p><Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={() => void save()} disabled={saving || loading || !dirty}>{saving ? 'Guardando…' : 'Guardar sección'}</Button></div>
         </Card>
 
+        {activeCategory === 'organization' && <Card className="border-violet-200 bg-violet-50/50 dark:border-violet-900 dark:bg-violet-950/20">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3"><ImagePlus className="mt-0.5 h-5 w-5 shrink-0 text-violet-700 dark:text-violet-300" /><div><h3 className="text-sm font-bold text-slate-900 dark:text-white">Logo original y favicon</h3><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600 dark:text-slate-300">La identidad visual se guarda en el tenant y se aplica a la web, logins, paneles, portal y Driver. El logo acepta PNG para conservar transparencia; no se guarda en el navegador ni se muestra como una operación local.</p></div></div>
+            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-800">FONDO TRANSPARENTE</span>
+          </div>
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-slate-500">Logo de GoPaq</p><p className="mt-1 text-[11px] text-slate-500">PNG transparente, máximo 1.4 MB.</p></div><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"><ImagePlus className="h-4 w-4" />Subir logo<input type="file" accept="image/png" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) readBrandFile('logo', file); event.currentTarget.value = ''; }} /></label></div>
+              <div className="mt-4 flex min-h-28 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-[linear-gradient(45deg,#f1f5f9_25%,transparent_25%),linear-gradient(-45deg,#f1f5f9_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f1f5f9_75%),linear-gradient(-45deg,transparent_75%,#f1f5f9_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] p-4 dark:border-slate-700 dark:bg-slate-800"><img src={previewAssetUrl(brandingDraft.logo)} alt="Vista previa del logo GoPaq" className="max-h-24 max-w-full object-contain" /></div>
+              <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setBrandingDraft((current) => ({ ...current, logo: '/assets/brand/gopaq-logo-lockup.png' }))}>Usar logo oficial transparente</Button><Button type="button" size="sm" variant="ghost" onClick={() => setBrandingDraft((current) => ({ ...current, logo: null }))}>Quitar logo configurado</Button></div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-slate-500">Favicon</p><p className="mt-1 text-[11px] text-slate-500">PNG, JPG o WebP, máximo 500 KB.</p></div><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"><ImagePlus className="h-4 w-4" />Subir favicon<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) readBrandFile('favicon', file); event.currentTarget.value = ''; }} /></label></div>
+              <div className="mt-4 flex min-h-28 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800"><img src={previewFaviconUrl(brandingDraft.favicon)} alt="Vista previa del favicon GoPaq" className="h-20 w-20 rounded-xl object-contain" /></div>
+              <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setBrandingDraft((current) => ({ ...current, favicon: '/assets/brand/gopaq-mascot.png' }))}>Usar icono oficial</Button><Button type="button" size="sm" variant="ghost" onClick={() => setBrandingDraft((current) => ({ ...current, favicon: null }))}>Quitar favicon</Button></div>
+            </div>
+          </div>
+          {brandingError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{brandingError}</p>}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-violet-200 pt-4 dark:border-violet-900"><p className="text-[11px] text-slate-500">{brandingDirty ? 'Hay cambios de identidad visual sin guardar.' : 'Identidad visual sincronizada con el backend.'} El logo oficial ya está preparado sin fondo.</p><Button type="button" variant="primary" icon={<Save className="h-4 w-4" />} onClick={() => void saveBranding()} disabled={!brandingDirty || brandingSaving || loading}>{brandingSaving ? 'Guardando…' : 'Guardar identidad visual'}</Button></div>
+        </Card>}
+
         {activeCategory === 'integrations' && <>
           <Card className="border-sky-200 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-950/20">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -327,7 +434,7 @@ export const GlobalConfiguration: React.FC = () => {
               <Button variant="secondary" size="sm" icon={<RefreshCw className={branchLocationsLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />} onClick={() => void loadBranchLocations()} disabled={branchLocationsLoading}>Actualizar sucursales</Button>
             </div>
             {branchLocationError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{branchLocationError}</p>}
-            {branchLocationsLoading && !branches.length ? <p className="mt-4 text-xs text-slate-500">Cargando sucursales desde PostgreSQL…</p> : !branches.length ? <p className="mt-4 text-xs text-slate-500">No hay sucursales activas para configurar.</p> : <div className="mt-4 space-y-3">{branches.map((branch) => { const hasCoordinates = branch.latitude !== null && branch.latitude !== undefined && branch.longitude !== null && branch.longitude !== undefined; return <div key={branch.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-900 dark:text-white">{branch.name}</p><p className="mt-1 text-[11px] text-slate-500">{branch.code} · {branch.address} · {branch.city}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${hasCoordinates ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{hasCoordinates ? 'COORDENADAS VERIFICADAS' : 'UBICACIÓN PENDIENTE'}</span></div><div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="block text-xs font-bold">Latitud<input type="number" step="any" min="-90" max="90" value={branch.latitude ?? ''} onChange={(event) => setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, latitude: event.target.value } : item))} placeholder="Ej. 18.4861" className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label><label className="block text-xs font-bold">Longitud<input type="number" step="any" min="-180" max="180" value={branch.longitude ?? ''} onChange={(event) => setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, longitude: event.target.value } : item))} placeholder="Ej. -69.9312" className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label><Button variant="primary" onClick={() => void saveBranchLocation(branch)} disabled={branchLocationSaving === branch.id}>{branchLocationSaving === branch.id ? 'Guardando…' : 'Guardar ubicación'}</Button></div><p className="mt-2 text-[10px] leading-4 text-slate-500">Fuente: coordenadas confirmadas por el administrador. La ubicación se guarda también en PostGIS cuando PostgreSQL está activo.</p></div>; })}</div>}
+            {branchLocationsLoading && !branches.length ? <p className="mt-4 text-xs text-slate-500">Cargando sucursales desde PostgreSQL…</p> : !branches.length ? <p className="mt-4 text-xs text-slate-500">No hay sucursales activas para configurar.</p> : <div className="mt-4 space-y-3">{branches.map((branch) => { const hasCoordinates = branch.latitude !== null && branch.latitude !== undefined && branch.longitude !== null && branch.longitude !== undefined; return <div key={branch.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-900 dark:text-white">{branch.name}</p><p className="mt-1 text-[11px] text-slate-500">{branch.code} · {branch.address} · {branch.city}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${hasCoordinates ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{hasCoordinates ? 'COORDENADAS VERIFICADAS' : 'UBICACIÓN PENDIENTE'}</span></div><div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end"><label className="min-w-0 flex-1 text-xs font-bold">Buscar dirección real<input value={branchAddressQueries[branch.id] ?? branch.address ?? ''} onChange={(event) => setBranchAddressQueries((current) => ({ ...current, [branch.id]: event.target.value }))} placeholder="Calle, número, ciudad, República Dominicana" className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label><Button variant="secondary" onClick={() => void searchBranchAddress(branch)} disabled={branchAddressSearching === branch.id || !publicGoogleMapsKey} icon={<Search className="h-4 w-4" />}>{branchAddressSearching === branch.id ? 'Buscando…' : 'Buscar dirección'}</Button></div>{branch.verifiedAddress && <p className="mt-2 rounded-lg bg-emerald-50 p-2 text-[11px] text-emerald-800">Dirección encontrada: {branch.verifiedAddress}</p>}<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><label className="block text-xs font-bold">Latitud<input type="number" step="any" min="-90" max="90" value={branch.latitude ?? ''} onChange={(event) => setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, latitude: event.target.value } : item))} placeholder="Ej. 18.4861" className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label><label className="block text-xs font-bold">Longitud<input type="number" step="any" min="-180" max="180" value={branch.longitude ?? ''} onChange={(event) => setBranches((current) => current.map((item) => item.id === branch.id ? { ...item, longitude: event.target.value } : item))} placeholder="Ej. -69.9312" className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label><Button variant="primary" onClick={() => void saveBranchLocation(branch)} disabled={branchLocationSaving === branch.id}>{branchLocationSaving === branch.id ? 'Guardando…' : 'Guardar ubicación'}</Button></div><p className="mt-2 text-[10px] leading-4 text-slate-500">La búsqueda usa Google Maps configurado de verdad y devuelve coordenadas verificables. Guardar ubicación persiste dirección, latitud, longitud y PostGIS en la sucursal; no se inventan coordenadas.</p></div>; })}</div>}
           </Card>
           <Card><div className="mb-3 flex items-center gap-2"><Wrench className="h-4 w-4 text-indigo-600" /><h3 className="text-sm font-bold">Estado real de proveedores</h3></div><div className="grid gap-2 sm:grid-cols-2"><StatusCard label="Karrio" ok={integrations?.karrio?.status === 'ONLINE'} value={integrations?.karrio?.status || 'NO CONFIGURADO'} /><StatusCard label="Witylogix" ok={integrations?.witylogix?.status === 'ONLINE'} value={integrations?.witylogix?.status || 'NO CONFIGURADO'} /></div><p className="mt-3 text-[11px] leading-5 text-slate-500">Seleccionar un proveedor no crea credenciales ni inventa una conexión. El proveedor solo se considera activo cuando el adaptador del backend confirma el servicio.</p></Card>
         </>}

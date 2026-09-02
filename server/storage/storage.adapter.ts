@@ -14,7 +14,9 @@ function storageRoot() {
  * External S3/MinIO implementations can replace this adapter without changing
  * the shipment or driver domains.
  */
-export async function storeDataUrl(value: string | undefined, category: 'signatures' | 'pod-photos', maxBytes: number): Promise<string | undefined> {
+export type StorageCategory = 'signatures' | 'pod-photos' | 'branding';
+
+export async function storeDataUrl(value: string | undefined, category: StorageCategory, maxBytes: number): Promise<string | undefined> {
   if (!value) return undefined;
   if (value.startsWith('storage://')) return value;
   const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\r\n]+)$/.exec(value);
@@ -29,4 +31,21 @@ export async function storeDataUrl(value: string | undefined, category: 'signatu
   await fs.mkdir(path.dirname(absolute), { recursive: true });
   await fs.writeFile(absolute, buffer, { mode: 0o600 });
   return `storage://${relative.replaceAll(path.sep, '/')}`;
+}
+
+export async function readStoredFile(value: string | undefined): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  if (!value?.startsWith('storage://')) return null;
+  const relative = value.slice('storage://'.length).replaceAll('/', path.sep);
+  if (!relative || relative.includes('..') || path.isAbsolute(relative)) return null;
+  const absolute = path.resolve(storageRoot(), relative);
+  const root = path.resolve(storageRoot());
+  if (absolute !== root && !absolute.startsWith(`${root}${path.sep}`)) return null;
+  try {
+    const buffer = await fs.readFile(absolute);
+    const extension = path.extname(absolute).toLowerCase();
+    const mimeType = extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.webp' ? 'image/webp' : 'image/png';
+    return { buffer, mimeType };
+  } catch {
+    return null;
+  }
 }

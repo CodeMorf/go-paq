@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, LocateFixed, LoaderCircle, MapPin, MapPinned, Navigation } from 'lucide-react';
 import { ApiClient } from '../../api/client';
+import { loadGoogleMaps } from '../../lib/googleMaps';
 
 declare global {
   interface Window {
@@ -23,8 +24,6 @@ export type ClientBranch = {
 type Coordinate = { lat: number; lng: number };
 type MapState = 'loading' | 'ready' | 'unconfigured' | 'error';
 
-let googleMapsLoader: Promise<void> | null = null;
-
 const toCoordinate = (branch: ClientBranch): Coordinate | null => {
   const lat = Number(branch.latitude);
   const lng = Number(branch.longitude);
@@ -38,32 +37,6 @@ const distanceKm = (from: Coordinate, to: Coordinate) => {
   const lngDelta = (to.lng - from.lng) * Math.PI / 180;
   const a = Math.sin(latDelta / 2) ** 2 + Math.cos(from.lat * Math.PI / 180) * Math.cos(to.lat * Math.PI / 180) * Math.sin(lngDelta / 2) ** 2;
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
-const loadGoogleMaps = (apiKey: string) => {
-  if (window.google?.maps) return Promise.resolve();
-  if (googleMapsLoader) return googleMapsLoader;
-
-  googleMapsLoader = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-gopaq-google-maps="true"]');
-    const script = existing || document.createElement('script');
-    const loaded = () => window.google?.maps ? resolve() : reject(new Error('Google Maps no devolvió la librería de mapas.'));
-    const failed = () => reject(new Error('No fue posible cargar Google Maps.'));
-    script.addEventListener('load', loaded, { once: true });
-    script.addEventListener('error', failed, { once: true });
-    if (!existing) {
-      script.dataset.gopaqGoogleMaps = 'true';
-      script.async = true;
-      script.defer = true;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
-      document.head.appendChild(script);
-    }
-  }).catch((error) => {
-    googleMapsLoader = null;
-    throw error;
-  });
-
-  return googleMapsLoader;
 };
 
 export const ClientBranchSelector: React.FC<{ selectedBranchId: string; onSelect: (branch: ClientBranch) => void }> = ({ selectedBranchId, onSelect }) => {

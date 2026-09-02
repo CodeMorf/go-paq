@@ -10,6 +10,7 @@ import {
   Globe2,
   MapPin,
   Package,
+  Plus,
   Radio,
   RefreshCw,
   Route as RouteIcon,
@@ -189,15 +190,68 @@ export const ProductionQuotePanel: React.FC = () => {
 };
 
 export const ProductionBranchNetwork: React.FC = () => {
+  const { addToast } = useApp();
   const [branches, setBranches] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
-  const load = async () => { setLoading(true); const result = await ApiClient.getBranches(); if (!result.success) { setError(result.error); setLoading(false); return; } const list = result.branches || []; setBranches(list); const target = selected && list.find((branch) => branch.id === selected.id) || list[0]; setSelected(target || null); if (target) { const stock = await ApiClient.getBranchInventory(target.id); if (stock.success) setInventory(stock.inventory || []); else setError(stock.error); } else setInventory([]); setLoading(false); };
+  const [form, setForm] = useState({ code: '', name: '', city: '', address: '', phone: '', managerName: '', isHub: false });
+
+  const load = async () => {
+    setLoading(true);
+    const result = await ApiClient.getBranches();
+    if (!result.success) { setError(result.error); setLoading(false); return; }
+    const list = result.branches || [];
+    setBranches(list);
+    const target = (selected && list.find((branch) => branch.id === selected.id)) || list[0];
+    setSelected(target || null);
+    if (target) {
+      const stock = await ApiClient.getBranchInventory(target.id);
+      if (stock.success) setInventory(stock.inventory || []); else setError(stock.error);
+    } else setInventory([]);
+    setLoading(false);
+  };
+
   useEffect(() => { void load(); }, []);
-  const choose = async (branch: any) => { setSelected(branch); const result = await ApiClient.getBranchInventory(branch.id); if (result.success) { setInventory(result.inventory || []); setError(''); } else setError(result.error); };
-  return <div className="space-y-6"><PanelHeader icon={<Building2 className="h-6 w-6 text-indigo-600" />} title="Sucursales y almacenes" description="Ubicaciones e inventario consultados desde el motor de sucursales. No se estiman capacidades ni movimientos." onRefresh={() => void load()} loading={loading} /><ErrorBox message={error} />{!branches.length && !loading ? <Card><p className="text-sm text-slate-500">No hay sucursales activas registradas.</p></Card> : <div className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]"><div className="space-y-3">{branches.map((branch) => <button key={branch.id} onClick={() => void choose(branch)} className={`w-full rounded-2xl border p-4 text-left ${selected?.id === branch.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}`}><div className="flex items-start justify-between gap-3"><div><p className="font-bold">{branch.name}</p><p className="mt-1 text-xs text-slate-500">{branch.code} · {branch.city}</p></div>{branch.is_hub ? <span className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-bold text-white">HUB</span> : null}</div><p className="mt-3 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" />{branch.address}</p></button>)}</div><Card><div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800"><div><h3 className="text-sm font-bold">Inventario persistido</h3><p className="mt-1 text-xs text-slate-500">{selected?.name || 'Selecciona una sucursal'}</p></div><span className="font-mono text-xs text-slate-500">{inventory.length} registros</span></div>{!inventory.length ? <p className="py-8 text-sm text-slate-500">No hay paquetes en inventario para esta sucursal.</p> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{inventory.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs"><span className="font-mono font-bold">{item.tracking_number || item.trackingNumber}</span><span className="text-slate-500">{item.status}</span><span className="text-slate-500">{item.current_location_json ? 'Ubicación registrada' : 'Sin ubicación física'}</span></div>)}</div>}</Card></div>}</div>;
+
+  const choose = async (branch: any) => {
+    setSelected(branch);
+    const result = await ApiClient.getBranchInventory(branch.id);
+    if (result.success) { setInventory(result.inventory || []); setError(''); } else setError(result.error);
+  };
+
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setCreating(true);
+    setError('');
+    const result = await ApiClient.createBranch({ ...form, isHub: form.isHub });
+    setCreating(false);
+    if (!result.success) { setError(result.error); return; }
+    addToast('success', 'Sucursal creada', 'La sucursal quedó persistida y ya puede recibir clientes, envíos y operaciones.');
+    setForm({ code: '', name: '', city: '', address: '', phone: '', managerName: '', isHub: false });
+    await load();
+  };
+
+  return <div className="space-y-6">
+    <PanelHeader icon={<Building2 className="h-6 w-6 text-indigo-600" />} title="Sucursales y almacenes" description="Aquí se crean las sucursales reales de la organización. Las coordenadas verificadas se completan en Configuración Global y el inventario se consulta desde PostgreSQL." onRefresh={() => void load()} loading={loading} />
+    <ErrorBox message={error} />
+    <Card>
+      <div className="mb-4 flex items-center gap-2"><Plus className="h-5 w-5 text-indigo-600" /><div><h3 className="text-sm font-bold">Registrar sucursal</h3><p className="mt-1 text-xs text-slate-500">El alta genera un registro real. No se generan coordenadas ni inventario ficticio.</p></div></div>
+      <form onSubmit={create} className="grid gap-4 md:grid-cols-2">
+        <label className="text-xs font-bold">Código interno<input required value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} placeholder="SDQ-02" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+        <label className="text-xs font-bold">Nombre<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Sucursal Santiago" className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+        <label className="text-xs font-bold">Ciudad<input required value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+        <label className="text-xs font-bold">Dirección<input required value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+        <label className="text-xs font-bold">Teléfono opcional<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+        <label className="text-xs font-bold">Responsable opcional<input value={form.managerName} onChange={(event) => setForm({ ...form, managerName: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+        <label className="flex items-center gap-3 text-xs font-bold md:col-span-2"><input type="checkbox" checked={form.isHub} onChange={(event) => setForm({ ...form, isHub: event.target.checked })} className="h-4 w-4 accent-indigo-600" />Marcar como hub principal</label>
+        <div className="md:col-span-2"><Button type="submit" variant="primary" disabled={creating}>{creating ? 'Guardando…' : 'Crear sucursal'}</Button></div>
+      </form>
+    </Card>
+    {!branches.length && !loading ? <Card><p className="text-sm text-slate-500">No hay sucursales activas registradas.</p></Card> : <div className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]"><div className="space-y-3">{branches.map((branch) => <button key={branch.id} onClick={() => void choose(branch)} className={`w-full rounded-2xl border p-4 text-left ${selected?.id === branch.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}`}><div className="flex items-start justify-between gap-3"><div><p className="font-bold">{branch.name}</p><p className="mt-1 text-xs text-slate-500">{branch.code} · {branch.city}</p></div>{branch.is_hub ? <span className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-bold text-white">HUB</span> : null}</div><p className="mt-3 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" />{branch.address}</p></button>)}</div><Card><div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800"><div><h3 className="text-sm font-bold">Inventario persistido</h3><p className="mt-1 text-xs text-slate-500">{selected?.name || 'Selecciona una sucursal'}</p></div><span className="font-mono text-xs text-slate-500">{inventory.length} registros</span></div>{!inventory.length ? <p className="py-8 text-sm text-slate-500">No hay paquetes en inventario para esta sucursal.</p> : <div className="divide-y divide-slate-100 dark:divide-slate-800">{inventory.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs"><span className="font-mono font-bold">{item.tracking_number || item.trackingNumber}</span><span className="text-slate-500">{item.status}</span><span className="text-slate-500">{item.current_location_json ? 'Ubicación registrada' : 'Sin ubicación física'}</span></div>)}</div>}</Card></div>}
+  </div>;
 };
 
 export const ProductionClientDirectory: React.FC = () => {

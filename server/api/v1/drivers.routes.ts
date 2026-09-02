@@ -2,12 +2,55 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { queryAllAsync, queryOneAsync, executeAsync, transactionAsync } from '../../db/database';
-import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/middleware';
+import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '../../auth/middleware';
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
 import { storeDataUrl } from '../../storage/storage.adapter';
 
 export const driversRouter = Router();
+
+const driverCreateSchema = z.object({
+  name: z.string().trim().min(2).max(160),
+  email: z.string().trim().email().max(160).optional(),
+  phone: z.string().trim().min(5).max(40),
+  licenseNumber: z.string().trim().min(2).max(80),
+  vehicleType: z.string().trim().min(2).max(100),
+  vehiclePlate: z.string().trim().min(2).max(40),
+  branchId: z.string().trim().min(1).max(120),
+  userId: z.string().trim().min(1).max(120).optional()
+}).strict();
+
+driversRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN']), requireScope('drivers:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const parsed = driverCreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: parsed.error.issues[0]?.message || 'Datos de conductor inválidos.' });
+  const organizationId = req.organizationId!;
+  const branch = await queryOneAsync<{ id: string }>('SELECT id FROM branches WHERE id = ? AND organization_id = ? AND active = 1', [parsed.data.branchId, organizationId]);
+  if (!branch) return res.status(422).json({ success: false, error: 'La sucursal seleccionada no pertenece a esta organización.' });
+  if (parsed.data.userId) {
+    const user = await queryOneAsync<{ id: string }>(`SELECT id FROM users WHERE id = ? AND organization_id = ? AND active = 1 AND role IN ('DRIVER', 'COURIER')`, [parsed.data.userId, organizationId]);
+    if (!user) return res.status(422).json({ success: false, error: 'La cuenta enlazada no es un conductor activo de esta organización.' });
+  }
+  const duplicate = await queryOneAsync<{ id: string }>('SELECT id FROM drivers WHERE organization_id = ? AND (lower(license_number) = lower(?) OR lower(vehicle_plate) = lower(?)) AND active = 1', [organizationId, parsed.data.licenseNumber, parsed.data.vehiclePlate]);
+  if (duplicate) return res.status(409).json({ success: false, error: 'Ya existe un conductor activo con esa licencia o placa.' });
+
+  const driverId = `drv-${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const driver = await transactionAsync(async (tx) => {
+    await tx.execute(`INSERT INTO drivers (id, organization_id, branch_id, user_id, name, email, phone, license_number, vehicle_type, vehicle_plate, status, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 1, ?, ?)`, [
+      driverId, organizationId, parsed.data.branchId, parsed.data.userId || null, parsed.data.name, parsed.data.email || null, parsed.data.phone,
+      parsed.data.licenseNumber, parsed.data.vehicleType, parsed.data.vehiclePlate, now, now
+    ]);
+    await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, 'driver.created', 'driver', ?, 'success', ?, ?, ?)`, [
+      `aud-${crypto.randomUUID()}`, organizationId, req.user!.userId, driverId, req.ip,
+      JSON.stringify({ branchId: parsed.data.branchId, hasLinkedUser: !!parsed.data.userId }), now
+    ]);
+    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'driver.created', 'driver', ?, ?, 'pending', 0, ?)`, [
+      `out-${crypto.randomUUID()}`, organizationId, driverId, JSON.stringify({ driverId, organizationId, branchId: parsed.data.branchId }), now
+    ]);
+    return { id: driverId, organization_id: organizationId, branch_id: parsed.data.branchId, user_id: parsed.data.userId || null, name: parsed.data.name, email: parsed.data.email || null, phone: parsed.data.phone, license_number: parsed.data.licenseNumber, vehicle_type: parsed.data.vehicleType, vehicle_plate: parsed.data.vehiclePlate, status: 'available', active: 1, created_at: now, updated_at: now };
+  });
+  return res.status(201).json({ success: true, driver });
+}));
 
 driversRouter.get('/', authenticate, requireScope('drivers:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const orgId = req.organizationId!;

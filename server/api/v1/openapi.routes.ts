@@ -137,6 +137,29 @@ openapiRouter.get('/openapi.json', (req, res) => {
           responses: { '200': { description: 'Estado de Google Maps y clave de navegador configurada' }, '503': { description: 'Credencial no disponible' } }
         }
       },
+      '/configuration/public': {
+        get: {
+          summary: 'Consultar identidad visual pública de GoPaq',
+          description: 'Devuelve únicamente el nombre, colores, logo y favicon seguros del tenant público.',
+          responses: { '200': { description: 'Identidad visual pública' } }
+        }
+      },
+      '/configuration/public/branding/{kind}': {
+        get: {
+          summary: 'Servir logo o favicon público almacenado',
+          parameters: [{ name: 'kind', in: 'path', required: true, schema: { type: 'string', enum: ['logo', 'favicon'] } }],
+          responses: { '200': { description: 'Imagen pública' }, '404': { description: 'Imagen no encontrada' } }
+        }
+      },
+      '/configuration/branding': {
+        patch: {
+          summary: 'Guardar logo y favicon del tenant',
+          description: 'Guarda archivos de marca mediante el backend, en almacenamiento persistente y con versionado/auditoría. El logo debe ser PNG para conservar transparencia.',
+          security: [{ bearerAuth: [] }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['expectedVersion'], properties: { logo: { type: ['string', 'null'] }, favicon: { type: ['string', 'null'] }, expectedVersion: { type: 'integer', minimum: 0 }, reason: { type: 'string' } } } } } },
+          responses: { '200': { description: 'Identidad visual persistida' }, '403': { description: 'Rol no autorizado' }, '409': { description: 'Versión desactualizada' }, '422': { description: 'Archivo o versión inválida' } }
+        }
+      },
       '/configuration/revisions': {
         get: {
           summary: 'Consultar historial de configuración',
@@ -152,6 +175,24 @@ openapiRouter.get('/openapi.json', (req, res) => {
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['latitude', 'longitude'], properties: { latitude: { type: ['number', 'null'], minimum: -90, maximum: 90 }, longitude: { type: ['number', 'null'], minimum: -180, maximum: 180 } } } } } },
           responses: { '200': { description: 'Ubicación persistida y publicada para el mapa' }, '403': { description: 'Rol no autorizado' }, '404': { description: 'Sucursal no encontrada' }, '422': { description: 'Coordenadas inválidas o incompletas' } }
+        }
+      },
+      '/branches': {
+        post: {
+          summary: 'Crear sucursal del tenant',
+          description: 'Crea una sucursal real con auditoría y evento outbox. Las coordenadas son opcionales y nunca se inventan.',
+          security: [{ bearerAuth: [] }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['code', 'name', 'city', 'address'], properties: { code: { type: 'string' }, name: { type: 'string' }, city: { type: 'string' }, address: { type: 'string' }, phone: { type: 'string' }, managerName: { type: 'string' }, isHub: { type: 'boolean' }, latitude: { type: ['number', 'null'] }, longitude: { type: ['number', 'null'] } } } } } },
+          responses: { '201': { description: 'Sucursal persistida' }, '403': { description: 'Rol o scope no autorizado' }, '409': { description: 'Código duplicado' }, '422': { description: 'Datos inválidos' } }
+        }
+      },
+      '/drivers': {
+        post: {
+          summary: 'Crear conductor y asignarlo a una sucursal',
+          description: 'Crea un perfil operativo real, valida la pertenencia de la sucursal y registra auditoría/outbox.',
+          security: [{ bearerAuth: [] }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name', 'phone', 'licenseNumber', 'vehicleType', 'vehiclePlate', 'branchId'], properties: { name: { type: 'string' }, email: { type: 'string', format: 'email' }, phone: { type: 'string' }, licenseNumber: { type: 'string' }, vehicleType: { type: 'string' }, vehiclePlate: { type: 'string' }, branchId: { type: 'string' }, userId: { type: 'string' } } } } } },
+          responses: { '201': { description: 'Conductor persistido' }, '403': { description: 'Rol o scope no autorizado' }, '409': { description: 'Licencia o placa duplicada' }, '422': { description: 'Datos inválidos o sucursal no válida' } }
         }
       }
     },

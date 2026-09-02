@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { getActiveBranding, subscribeBranding } from '../../lib/branding';
 
 interface GoPaqLogoProps {
   variant?: 'full' | 'horizontal' | 'compact' | 'icon';
@@ -15,6 +16,12 @@ export const GoPaqLogo: React.FC<GoPaqLogoProps> = ({
   className = '',
   theme = 'auto'
 }) => {
+  const [branding, setBranding] = useState(getActiveBranding);
+  useEffect(() => {
+    const unsubscribe = subscribeBranding(setBranding);
+    return () => { unsubscribe(); };
+  }, []);
+
   // Height & scale multipliers based on size
   const sizeStyles = {
     xs: { icon: 'w-6 h-6', text: 'text-base', slogan: 'text-[7px]', box: 'h-6' },
@@ -77,6 +84,17 @@ export const GoPaqLogo: React.FC<GoPaqLogoProps> = ({
         </svg>
       </div>
     );
+  }
+
+  if (branding.logoUrl) {
+    const logoSize = {
+      xs: 'max-h-6 max-w-32',
+      sm: 'max-h-8 max-w-40',
+      md: 'max-h-10 max-w-52',
+      lg: 'max-h-14 max-w-64',
+      xl: 'max-h-20 max-w-80'
+    }[size];
+    return <img src={branding.logoUrl} alt="GoPaq" className={`h-auto w-auto object-contain bg-transparent ${logoSize} ${className}`} loading="eager" />;
   }
 
   // Full Brand Logo with Wordmark & Slogan

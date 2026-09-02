@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { isPostgres, queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
 import { decryptSecret, encryptSecret } from '../../security/secretBox';
+import { readStoredFile, storeDataUrl } from '../../storage/storage.adapter';
 
 export const CONFIGURATION_CATEGORIES = [
   'organization',
@@ -31,6 +32,7 @@ export type GoogleMapsConfiguration = {
 };
 
 const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Debe ser un color hexadecimal válido.');
+const publicAssetPath = /^\/assets\/brand\/[A-Za-z0-9._-]+\.(?:png|jpe?g|webp|svg)$/;
 
 export const DEFAULT_CONFIGURATION: Record<ConfigurationCategory, Record<string, unknown>> = {
   organization: {
@@ -43,7 +45,9 @@ export const DEFAULT_CONFIGURATION: Record<ConfigurationCategory, Record<string,
     country: 'DO',
     timezone: 'America/Santo_Domingo',
     primaryColor: '#4f46e5',
-    secondaryColor: '#0f172a'
+    secondaryColor: '#0f172a',
+    logoUrl: '/assets/brand/gopaq-logo-lockup.png',
+    faviconUrl: '/assets/brand/gopaq-mascot.png'
   },
   localization: {
     baseCurrency: 'DOP',
@@ -162,7 +166,9 @@ const categorySchemas: Record<ConfigurationCategory, z.ZodTypeAny> = {
     country: z.string().trim().length(2).toUpperCase(),
     timezone: z.string().trim().min(3).max(80),
     primaryColor: colorSchema,
-    secondaryColor: colorSchema
+    secondaryColor: colorSchema,
+    logoUrl: z.union([z.string().trim().max(500).refine((value) => value.startsWith('storage://branding/') || publicAssetPath.test(value), 'Referencia de logo no permitida.'), z.null()]),
+    faviconUrl: z.union([z.string().trim().max(500).refine((value) => value.startsWith('storage://branding/') || publicAssetPath.test(value), 'Referencia de favicon no permitida.'), z.null()])
   }).partial().strict(),
   localization: z.object({
     baseCurrency: z.enum(['DOP', 'USD', 'EUR']),
@@ -309,6 +315,50 @@ export async function getOrganizationConfiguration(organizationId: string) {
     updatedBy: row?.updated_by || null,
     updatedAt: row?.updated_at || null
   };
+}
+
+function isSafeBrandAssetReference(value: string) {
+  return value.startsWith('storage://branding/') || publicAssetPath.test(value);
+}
+
+export async function getPublicBrandingConfiguration(organizationId: string) {
+  const configuration = await getOrganizationConfiguration(organizationId);
+  const organization = configuration.settings.organization;
+  const logoUrl = typeof organization.logoUrl === 'string' && isSafeBrandAssetReference(organization.logoUrl)
+    ? (organization.logoUrl.startsWith('storage://branding/') ? '/api/v1/configuration/public/branding/logo' : organization.logoUrl)
+    : '/assets/brand/gopaq-logo-lockup.png';
+  const faviconUrl = typeof organization.faviconUrl === 'string' && isSafeBrandAssetReference(organization.faviconUrl)
+    ? (organization.faviconUrl.startsWith('storage://branding/') ? '/api/v1/configuration/public/branding/favicon' : organization.faviconUrl)
+    : '/assets/brand/gopaq-mascot.png';
+  return {
+    displayName: String(organization.displayName || 'GoPaq'),
+    primaryColor: String(organization.primaryColor || DEFAULT_CONFIGURATION.organization.primaryColor),
+    secondaryColor: String(organization.secondaryColor || DEFAULT_CONFIGURATION.organization.secondaryColor),
+    logoUrl,
+    faviconUrl,
+    version: configuration.version,
+    updatedAt: configuration.updatedAt
+  };
+}
+
+export async function getPublicBrandingAsset(organizationId: string, kind: 'logo' | 'favicon') {
+  const configuration = await getOrganizationConfiguration(organizationId);
+  const key = kind === 'logo' ? 'logoUrl' : 'faviconUrl';
+  const value = configuration.settings.organization[key];
+  if (typeof value !== 'string' || !value.startsWith('storage://branding/')) return null;
+  return readStoredFile(value);
+}
+
+export async function prepareBrandingAsset(value: string | null | undefined, kind: 'logo' | 'favicon') {
+  if (value === undefined || value === null || value === '') return value === null ? null : undefined;
+  if (value.startsWith('/assets/brand/') && publicAssetPath.test(value)) return value;
+  if (!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=\r\n]+$/.test(value)) {
+    throw Object.assign(new Error(`El ${kind === 'logo' ? 'logo' : 'favicon'} debe ser PNG, JPG o WebP válido.`), { statusCode: 422 });
+  }
+  if (kind === 'logo' && !value.startsWith('data:image/png;')) {
+    throw Object.assign(new Error('El logo debe ser PNG para conservar transparencia.'), { statusCode: 422 });
+  }
+  return storeDataUrl(value, 'branding', kind === 'logo' ? 2_000_000 : 500_000);
 }
 
 /**

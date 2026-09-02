@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AppSection, Branch, CountryCode, Currency, NotificationItem, UserRole } from '../types';
 import { ApiClient } from '../api/client';
+import { applyBranding, DEFAULT_BRANDING, PublicBranding, setActiveBranding } from '../lib/branding';
 
 interface Toast {
   id: string;
@@ -41,6 +42,8 @@ interface AppContextType {
   addToast: (type: Toast['type'], title: string, message: string) => void;
   toasts: Toast[];
   removeToast: (id: string) => void;
+  branding: PublicBranding;
+  updateBranding: (patch: Partial<PublicBranding>) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -65,6 +68,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNewShipmentModalOpen, setIsNewShipmentModalOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [branding, setBranding] = useState<PublicBranding>(DEFAULT_BRANDING);
+
+  useEffect(() => {
+    let active = true;
+    void ApiClient.getPublicBranding().then((result) => {
+      if (!active || !result.success || !result.branding) return;
+      setBranding(result.branding);
+      setActiveBranding(result.branding);
+      applyBranding(result.branding);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    applyBranding(branding);
+  }, [branding]);
+
+  const updateBranding = (patch: Partial<PublicBranding>) => {
+    setBranding((current) => {
+      const next = { ...current, ...patch };
+      setActiveBranding(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -126,7 +153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       shipments, drivers, branches, selectedBranch, setSelectedBranch, commandPaletteOpen, setCommandPaletteOpen,
       selectedTracking, setSelectedTracking, isNewShipmentModalOpen, setIsNewShipmentModalOpen,
       notifications, unreadNotificationsCount: notifications.filter(notification => !notification.read).length,
-      markNotificationRead, markAllNotificationsRead, addToast, toasts, removeToast
+      markNotificationRead, markAllNotificationsRead, addToast, toasts, removeToast, branding, updateBranding
     }}>
       {children}
     </AppContext.Provider>

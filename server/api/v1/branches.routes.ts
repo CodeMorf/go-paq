@@ -25,9 +25,57 @@ branchesRouter.get('/', authenticate, requireScope('branches:read'), asyncHandle
   return res.json({ success: true, branches });
 }));
 
+const branchCreateSchema = z.object({
+  code: z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/, 'El código solo puede contener letras, números, guiones y guiones bajos.'),
+  name: z.string().trim().min(2).max(160),
+  city: z.string().trim().min(2).max(120),
+  address: z.string().trim().min(5).max(300),
+  phone: z.string().trim().max(40).optional(),
+  managerName: z.string().trim().max(160).optional(),
+  isHub: z.boolean().default(false),
+  latitude: z.union([z.null(), z.coerce.number().min(-90).max(90)]).optional(),
+  longitude: z.union([z.null(), z.coerce.number().min(-180).max(180)]).optional()
+}).strict().superRefine((value, context) => {
+  if ((value.latitude === null || value.latitude === undefined) !== (value.longitude === null || value.longitude === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'La latitud y la longitud deben guardarse juntas.' });
+  }
+});
+
+branchesRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN']), requireScope('branches:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const parsed = branchCreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: parsed.error.issues[0]?.message || 'Datos de sucursal inválidos.' });
+  const organizationId = req.organizationId!;
+  const duplicate = await queryOneAsync<{ id: string }>('SELECT id FROM branches WHERE organization_id = ? AND lower(code) = lower(?)', [organizationId, parsed.data.code]);
+  if (duplicate) return res.status(409).json({ success: false, error: 'Ya existe una sucursal con ese código en esta organización.' });
+
+  const branchId = `br-${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const latitude = parsed.data.latitude ?? null;
+  const longitude = parsed.data.longitude ?? null;
+  const branch = await transactionAsync(async (tx) => {
+    await tx.execute(`INSERT INTO branches (id, organization_id, code, name, city, address, phone, manager_name, latitude, longitude, is_hub, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`, [
+      branchId, organizationId, parsed.data.code, parsed.data.name, parsed.data.city, parsed.data.address,
+      parsed.data.phone || null, parsed.data.managerName || null, latitude, longitude, parsed.data.isHub ? 1 : 0, now, now
+    ]);
+    if (isPostgres && latitude !== null && longitude !== null) {
+      await tx.execute('UPDATE branches SET location = ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography WHERE id = ? AND organization_id = ?', [longitude, latitude, branchId, organizationId]);
+    }
+    await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, 'branch.created', 'branch', ?, 'success', ?, ?, ?)`, [
+      `aud-${crypto.randomUUID()}`, organizationId, req.user!.userId, branchId, req.ip,
+      JSON.stringify({ code: parsed.data.code, name: parsed.data.name, hasCoordinates: latitude !== null && longitude !== null }), now
+    ]);
+    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'branch.created', 'branch', ?, ?, 'pending', 0, ?)`, [
+      `out-${crypto.randomUUID()}`, organizationId, branchId, JSON.stringify({ branchId, organizationId, code: parsed.data.code, name: parsed.data.name }), now
+    ]);
+    return { id: branchId, organization_id: organizationId, code: parsed.data.code, name: parsed.data.name, city: parsed.data.city, address: parsed.data.address, phone: parsed.data.phone || null, manager_name: parsed.data.managerName || null, latitude, longitude, is_hub: parsed.data.isHub ? 1 : 0, active: 1, created_at: now, updated_at: now };
+  });
+  return res.status(201).json({ success: true, branch });
+}));
+
 const locationSchema = z.object({
   latitude: z.union([z.null(), z.coerce.number().min(-90).max(90)]),
-  longitude: z.union([z.null(), z.coerce.number().min(-180).max(180)])
+  longitude: z.union([z.null(), z.coerce.number().min(-180).max(180)]),
+  address: z.string().trim().min(5).max(300).optional()
 }).strict().superRefine((value, context) => {
   if ((value.latitude === null) !== (value.longitude === null)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'La latitud y la longitud deben guardarse juntas.' });
@@ -51,22 +99,22 @@ branchesRouter.patch('/:id/location', authenticate, requireRole(['SUPER_ADMIN', 
     let updated;
     if (isPostgres && parsed.data.latitude !== null && parsed.data.longitude !== null) {
       // PostGIS receives longitude first, latitude second (X/Y).
-      updated = await tx.execute(`UPDATE branches SET latitude = ?, longitude = ?, location = ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.latitude, parsed.data.longitude, parsed.data.longitude, parsed.data.latitude, now, branchId, organizationId]);
+      updated = await tx.execute(`UPDATE branches SET address = COALESCE(?, address), latitude = ?, longitude = ?, location = ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.address || null, parsed.data.latitude, parsed.data.longitude, parsed.data.longitude, parsed.data.latitude, now, branchId, organizationId]);
     } else {
-      updated = await tx.execute(`UPDATE branches SET latitude = ?, longitude = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.latitude, parsed.data.longitude, now, branchId, organizationId]);
+      updated = await tx.execute(`UPDATE branches SET address = COALESCE(?, address), latitude = ?, longitude = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.address || null, parsed.data.latitude, parsed.data.longitude, now, branchId, organizationId]);
     }
     if (updated.changes !== 1) throw Object.assign(new Error('La sucursal cambió mientras se guardaba su ubicación.'), { statusCode: 409 });
 
     await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, 'branch.location_updated', 'branch', ?, 'success', ?, ?, ?)`, [
       `aud-${crypto.randomUUID()}`, organizationId, req.user!.userId, branchId, req.ip,
-      JSON.stringify({ latitude: parsed.data.latitude, longitude: parsed.data.longitude, previousLatitude: current.latitude, previousLongitude: current.longitude }), now
+      JSON.stringify({ latitude: parsed.data.latitude, longitude: parsed.data.longitude, address: parsed.data.address || null, previousLatitude: current.latitude, previousLongitude: current.longitude }), now
     ]);
     await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'branch.location_updated', 'branch', ?, ?, 'pending', 0, ?)`, [
       `out-${crypto.randomUUID()}`, organizationId, branchId,
       JSON.stringify({ branchId, latitude: parsed.data.latitude, longitude: parsed.data.longitude, updatedAt: now }), now
     ]);
 
-    return { ...current, latitude: parsed.data.latitude, longitude: parsed.data.longitude, updated_at: now };
+    return { ...current, address: parsed.data.address || current.address, latitude: parsed.data.latitude, longitude: parsed.data.longitude, updated_at: now };
   });
 
   return res.json({ success: true, branch });

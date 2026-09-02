@@ -2,6 +2,30 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+:root {
+  --gopaq-primary: #4f46e5;
+  --gopaq-primary-hover: #4338ca;
+  --gopaq-secondary: #0f172a;
+  --gopaq-primary-soft: #eef2ff;
+  --gopaq-primary-border: #c7d2fe;
+}
+
+/* The configuration center changes these variables after the backend confirms
+ * the save. These utility bridges keep the existing Tailwind UI consistent
+ * without requiring every domain component to know the tenant's color. */
+.bg-indigo-600 { background-color: var(--gopaq-primary) !important; }
+.hover\:bg-indigo-700:hover { background-color: var(--gopaq-primary-hover) !important; }
+.dark .dark\:bg-indigo-600 { background-color: var(--gopaq-primary) !important; }
+.text-indigo-600, .text-indigo-700 { color: var(--gopaq-primary) !important; }
+.dark .dark\:text-indigo-400 { color: var(--gopaq-primary) !important; }
+.border-indigo-500, .border-indigo-600 { border-color: var(--gopaq-primary) !important; }
+.border-indigo-200 { border-color: var(--gopaq-primary-border) !important; }
+.bg-indigo-50 { background-color: var(--gopaq-primary-soft) !important; }
+.focus\:border-indigo-500:focus { border-color: var(--gopaq-primary) !important; }
+.focus\:ring-indigo-500:focus { --tw-ring-color: var(--gopaq-primary) !important; }
+.ring-indigo-500 { --tw-ring-color: var(--gopaq-primary) !important; }
+.accent-indigo-600 { accent-color: var(--gopaq-primary) !important; }
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
