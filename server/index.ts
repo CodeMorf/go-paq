@@ -82,7 +82,8 @@ async function start() {
   let realtimeSubscriber: import('ioredis').default | null = null;
   if (process.env.REDIS_URL) {
     const Redis = (await import('ioredis')).default;
-    realtimeSubscriber = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null, enableOfflineQueue: false, connectTimeout: 5000 });
+    realtimeSubscriber = new Redis(process.env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: null, enableOfflineQueue: false, connectTimeout: 5000 });
+    await realtimeSubscriber.connect();
     await realtimeSubscriber.subscribe('gopaq:realtime');
     realtimeSubscriber.on('message', (channel, message) => {
       if (channel !== 'gopaq:realtime') return;
