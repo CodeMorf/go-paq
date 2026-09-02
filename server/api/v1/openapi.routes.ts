@@ -7,7 +7,7 @@ openapiRouter.get('/openapi.json', (req, res) => {
     openapi: '3.1.0',
     info: {
       title: 'GoPaq Core Logistics REST API',
-      version: '1.4.0',
+      version: '1.5.0',
       description: 'API Pública de Logística, Courier Internacional, Despacho de Última Milla y Conciliación COD para GoPaq.',
       contact: { name: 'Soporte GoPaq API' }
     },
@@ -81,6 +81,28 @@ openapiRouter.get('/openapi.json', (req, res) => {
           ],
           responses: { '200': { description: 'Detalle de trazabilidad en vivo' } }
         }
+      },
+      '/moving/quote': {
+        post: {
+          summary: 'Calcular cotización de mudanza',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['volumeM3'], properties: { volumeM3: { type: 'number' }, floors: { type: 'integer' }, hasElevator: { type: 'boolean' }, crewCount: { type: 'integer' }, distanceKm: { type: 'number' } } } } } },
+          responses: { '200': { description: 'Cotización calculada por el motor de mudanzas' } }
+        }
+      },
+      '/moving/orders': {
+        get: { summary: 'Listar órdenes de mudanza del tenant', responses: { '200': { description: 'Órdenes persistidas' } } },
+        post: { summary: 'Crear orden de mudanza', parameters: [{ name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } }], responses: { '201': { description: 'Orden y trabajo unificado persistidos' } } }
+      },
+      '/heavy-cargo/quote': {
+        post: {
+          summary: 'Calcular cotización de carga pesada',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['totalWeightKg', 'lengthM', 'widthM', 'heightM'], properties: { palletsCount: { type: 'integer' }, totalWeightKg: { type: 'number' }, lengthM: { type: 'number' }, widthM: { type: 'number' }, heightM: { type: 'number' }, equipmentRequired: { type: 'string' } } } } } },
+          responses: { '200': { description: 'Cotización calculada por el motor de carga pesada' } }
+        }
+      },
+      '/heavy-cargo/orders': {
+        get: { summary: 'Listar órdenes de carga pesada del tenant', responses: { '200': { description: 'Órdenes persistidas' } } },
+        post: { summary: 'Crear orden de carga pesada', parameters: [{ name: 'Idempotency-Key', in: 'header', required: false, schema: { type: 'string' } }], responses: { '201': { description: 'Orden y trabajo unificado persistidos' } } }
       }
     }
   };

@@ -121,5 +121,8 @@ export class ApiClient {
   static async getIntegrationsHealth(): Promise<ApiResponse<{ witylogix: any; karrio: any; database: any }>> { return this.request<{ witylogix: any; karrio: any; database: any }>('/integrations/health'); }
   static async getMovingOrders(): Promise<ApiResponse<{ orders: any[] }>> { return this.request<{ orders: any[] }>('/moving/orders'); }
   static async quoteMoving(payload: any): Promise<ApiResponse<{ quote: any }>> { return this.request<{ quote: any }>('/moving/quote', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async createMovingOrder(payload: any, idempotencyKey?: string): Promise<ApiResponse<{ order: any; quote: any }>> { return this.request<{ order: any; quote: any }>('/moving/orders', { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
   static async getHeavyCargoOrders(): Promise<ApiResponse<{ orders: any[] }>> { return this.request<{ orders: any[] }>('/heavy-cargo/orders'); }
+  static async quoteHeavyCargo(payload: any): Promise<ApiResponse<{ quote: any }>> { return this.request<{ quote: any }>('/heavy-cargo/quote', { method: 'POST', body: JSON.stringify(payload) }); }
+  static async createHeavyCargoOrder(payload: any, idempotencyKey?: string): Promise<ApiResponse<{ order: any; quote: any }>> { return this.request<{ order: any; quote: any }>('/heavy-cargo/orders', { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
 }

@@ -47,6 +47,9 @@ export function initDatabase() {
     ensureSqliteColumn('cod_transactions', 'reconciled_by', 'TEXT');
     ensureSqliteColumn('international_packages', 'merchant_name', 'TEXT');
     ensureSqliteColumn('international_packages', 'prealert_at', 'TEXT');
+    ensureSqliteColumn('moving_orders', 'job_id', 'TEXT');
+    ensureSqliteColumn('heavy_cargo_orders', 'job_id', 'TEXT');
+    ensureSqliteColumn('route_stops', 'job_id', 'TEXT');
     sqliteDb.exec(`
       INSERT OR IGNORE INTO schema_migrations (version, applied_at)
       VALUES ('001_initial', CURRENT_TIMESTAMP), ('002_production_foundations', CURRENT_TIMESTAMP)
@@ -93,6 +96,7 @@ export async function runMigrations() {
   const foundationSql = fs.readFileSync(path.join(migrationsDir, '002_production_foundations.sql'), 'utf8');
   const postgisSql = fs.readFileSync(path.join(migrationsDir, '003_postgis.sql'), 'utf8');
   const codAndInternationalSql = fs.readFileSync(path.join(migrationsDir, '004_cod_state_machine.sql'), 'utf8');
+  const logisticsJobsSql = fs.readFileSync(path.join(migrationsDir, '005_logistics_jobs.sql'), 'utf8');
   const lockKey = 7874701;
 
   await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
@@ -120,6 +124,10 @@ export async function runMigrations() {
     if (!applied.has('004_cod_state_machine')) {
       await pgPool.query(codAndInternationalSql);
       await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['004_cod_state_machine']);
+    }
+    if (!applied.has('005_logistics_jobs')) {
+      await pgPool.query(logisticsJobsSql);
+      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['005_logistics_jobs']);
     }
   } finally {
     await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);
@@ -362,6 +370,42 @@ CREATE TABLE IF NOT EXISTS cash_closes (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_cash_closes_branch_created ON cash_closes(organization_id, branch_id, created_at);
+CREATE TABLE IF NOT EXISTS logistics_jobs (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  client_id TEXT,
+  service_type TEXT NOT NULL,
+  tracking_number TEXT UNIQUE NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'booked',
+  origin_json TEXT NOT NULL,
+  destination_json TEXT NOT NULL,
+  details_json TEXT NOT NULL DEFAULT '{}',
+  cost REAL NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'DOP',
+  assigned_driver_id TEXT,
+  assigned_route_id TEXT,
+  scheduled_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS logistics_job_events (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  description TEXT NOT NULL,
+  actor_type TEXT,
+  actor_id TEXT,
+  extra_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_org_status ON logistics_jobs(organization_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_org_driver_status ON logistics_jobs(organization_id, assigned_driver_id, status);
+CREATE INDEX IF NOT EXISTS idx_jobs_org_route ON logistics_jobs(organization_id, assigned_route_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_org_client ON logistics_jobs(organization_id, client_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_job_events_org_job_created ON logistics_job_events(organization_id, job_id, created_at);
 `;
 
 function ensureSqliteColumn(tableName: string, columnName: string, definition: string) {

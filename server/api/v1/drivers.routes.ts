@@ -51,7 +51,7 @@ driversRouter.get('/active-manifest', authenticate, requireScope('driver:read'),
       : await queryOneAsync('SELECT * FROM drivers WHERE organization_id = ? AND active = 1 ORDER BY name ASC LIMIT 1', [orgId]);
   if (!driver) return res.status(404).json({ success: false, error: 'Driver no encontrado.' });
   const route = await queryOneAsync(`SELECT * FROM routes WHERE driver_id = ? AND organization_id = ? AND status IN ('in_progress', 'draft') ORDER BY created_at DESC LIMIT 1`, [driver.id, orgId]);
-  const stops = route ? await queryAllAsync('SELECT * FROM route_stops WHERE route_id = ? ORDER BY sequence_order ASC', [route.id]) : [];
+  const stops = route ? await queryAllAsync(`SELECT rs.*, COALESCE(s.tracking_number, j.tracking_number) AS tracking_number, COALESCE(s.destination_json, j.destination_json) AS destination_json, COALESCE(s.package_json, j.details_json) AS package_json, COALESCE(s.cod_amount, 0) AS cod_amount, COALESCE(s.service_type, j.service_type) AS service_type FROM route_stops rs LEFT JOIN shipments s ON s.id = rs.shipment_id AND s.organization_id = ? LEFT JOIN logistics_jobs j ON j.id = rs.job_id AND j.organization_id = ? WHERE rs.route_id = ? ORDER BY rs.sequence_order ASC`, [orgId, orgId, route.id]) : [];
   return res.json({ success: true, driver, route, stops: stops.map((s) => ({ ...s, address: safeJson(s.address_json), pod: s.pod_json ? safeJson(s.pod_json) : null })) });
 }));
 
@@ -67,6 +67,7 @@ driversRouter.post('/routes/:routeId/start', authenticate, requireScope('driver:
     await tx.execute(`UPDATE routes SET status = 'in_progress', updated_at = ? WHERE id = ? AND organization_id = ? AND status IN ('draft', 'published', 'assigned')`, [now, route.id, orgId]);
     await tx.execute(`UPDATE drivers SET status = 'on_route', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND organization_id = ?`, [route.driver_id, orgId]);
     await tx.execute(`UPDATE shipments SET status = 'out_for_delivery', updated_at = ? WHERE assigned_route_id = ? AND organization_id = ? AND status NOT IN ('delivered', 'cancelled')`, [now, route.id, orgId]);
+    await tx.execute(`UPDATE logistics_jobs SET status = 'in_transit', updated_at = ? WHERE assigned_route_id = ? AND organization_id = ? AND status NOT IN ('completed', 'cancelled')`, [now, route.id, orgId]);
     await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'route.started', 'route', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, route.id, JSON.stringify({ routeId: route.id, driverId: route.driver_id }), now]);
   });
   return res.json({ success: true, routeId: route.id, status: 'in_progress', startedAt: now });
@@ -101,30 +102,41 @@ driversRouter.post('/stops/:stopId/complete', authenticate, requireScope('driver
   const storedSignatureUrl = await storeDataUrl(parsed.data.pod.signatureUrl, 'signatures', 800_000);
   const storedPhotoUrl = await storeDataUrl(parsed.data.pod.photoUrl, 'pod-photos', 2_000_000);
   const response = await transactionAsync(async (tx) => {
-    const stop = await tx.queryOne<any>(`SELECT rs.*, r.organization_id, r.driver_id, r.status AS route_status, s.tracking_number, s.cod_amount, s.cod_currency FROM route_stops rs JOIN routes r ON r.id = rs.route_id AND r.organization_id = ? LEFT JOIN shipments s ON s.id = rs.shipment_id AND s.organization_id = r.organization_id WHERE rs.id = ?`, [orgId, req.params.stopId]);
+    const stop = await tx.queryOne<any>(`SELECT rs.*, r.organization_id, r.driver_id, r.status AS route_status, COALESCE(s.tracking_number, j.tracking_number) AS tracking_number, s.cod_amount, s.cod_currency, j.service_type AS job_service_type, j.status AS job_status, j.details_json AS job_details_json FROM route_stops rs JOIN routes r ON r.id = rs.route_id AND r.organization_id = ? LEFT JOIN shipments s ON s.id = rs.shipment_id AND s.organization_id = r.organization_id LEFT JOIN logistics_jobs j ON j.id = rs.job_id AND j.organization_id = r.organization_id WHERE rs.id = ?`, [orgId, req.params.stopId]);
     if (!stop) throw Object.assign(new Error('Parada no encontrada en esta organización.'), { statusCode: 404 });
     const driver = stop.driver_id ? await tx.queryOne<any>('SELECT id, user_id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [stop.driver_id, orgId]) : null;
     if (['DRIVER', 'COURIER'].includes(role) && (!driver || driver.user_id !== req.user!.userId)) throw Object.assign(new Error('No estás autorizado para completar esta parada.'), { statusCode: 403 });
     if (!['in_progress', 'published'].includes(String(stop.route_status))) throw Object.assign(new Error('La ruta no está activa.'), { statusCode: 409 });
     if (!['pending', 'arrived'].includes(String(stop.status))) throw Object.assign(new Error('La parada ya fue procesada.'), { statusCode: 409 });
-    if (!stop.shipment_id || !stop.tracking_number) throw Object.assign(new Error('La parada no tiene un envío asociado para generar tracking.'), { statusCode: 422 });
+    if ((!stop.shipment_id && !stop.job_id) || !stop.tracking_number) throw Object.assign(new Error('La parada no tiene un envío o trabajo asociado para generar tracking.'), { statusCode: 422 });
     const codAmount = Number(stop.cod_amount || 0);
+    if (stop.job_id && Number(parsed.data.collectedCod) > 0) throw Object.assign(new Error('Los trabajos especiales no tienen COD configurado.'), { statusCode: 422 });
     if (codAmount > 0 && Math.abs(Number(parsed.data.collectedCod) - codAmount) > 0.01) throw Object.assign(new Error('El monto COD cobrado debe coincidir con el monto de la guía.'), { statusCode: 409 });
 
     const pod = { ...parsed.data.pod, signatureUrl: storedSignatureUrl, photoUrl: storedPhotoUrl, deliveredAt: now, actorId: req.user!.userId, codAmountCollected: parsed.data.collectedCod };
     const stopUpdated = await tx.execute(`UPDATE route_stops SET status = 'completed', completed_at = ?, pod_json = ?, notes = ? WHERE id = ? AND route_id = ? AND status IN ('pending', 'arrived')`, [now, JSON.stringify(pod), parsed.data.pod.notes || null, stop.id, stop.route_id]);
     if (stopUpdated.changes !== 1) throw Object.assign(new Error('La parada cambió mientras se registraba el POD.'), { statusCode: 409 });
-    const shipmentUpdated = await tx.execute(`UPDATE shipments SET status = 'delivered', pod_json = ?, cod_collected = ?, payment_status = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status NOT IN ('delivered', 'cancelled')`, [JSON.stringify(pod), codAmount > 0 ? 1 : 0, codAmount > 0 ? 'collected' : 'not_applicable', now, stop.shipment_id, orgId]);
-    if (shipmentUpdated.changes !== 1) throw Object.assign(new Error('El envío no pudo cambiar a entregado.'), { statusCode: 409 });
+    if (stop.shipment_id) {
+      const shipmentUpdated = await tx.execute(`UPDATE shipments SET status = 'delivered', pod_json = ?, cod_collected = ?, payment_status = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status NOT IN ('delivered', 'cancelled')`, [JSON.stringify(pod), codAmount > 0 ? 1 : 0, codAmount > 0 ? 'collected' : 'not_applicable', now, stop.shipment_id, orgId]);
+      if (shipmentUpdated.changes !== 1) throw Object.assign(new Error('El envío no pudo cambiar a entregado.'), { statusCode: 409 });
+    } else {
+      const jobDetails = safeJson(stop.job_details_json);
+      jobDetails.pod = pod;
+      const jobUpdated = await tx.execute(`UPDATE logistics_jobs SET status = 'completed', details_json = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status NOT IN ('completed', 'cancelled')`, [JSON.stringify(jobDetails), now, stop.job_id, orgId]);
+      if (jobUpdated.changes !== 1) throw Object.assign(new Error('El trabajo no pudo cambiar a completado.'), { statusCode: 409 });
+      await tx.execute(`INSERT INTO logistics_job_events (id, organization_id, job_id, status, description, actor_type, actor_id, extra_json, created_at) VALUES (?, ?, ?, 'completed', 'Trabajo completado con POD registrado', 'driver', ?, ?, ?)`, [`jbe-${crypto.randomUUID()}`, orgId, stop.job_id, req.user!.userId, JSON.stringify({ pod }), now]);
+    }
     if (codAmount > 0) {
       const codUpdated = await tx.execute(`UPDATE cod_transactions SET status = 'collected_driver', driver_id = ?, collected_at = ?, method = ? WHERE shipment_id = ? AND organization_id = ? AND status = 'pending_collection'`, [stop.driver_id, now, parsed.data.codMethod, stop.shipment_id, orgId]);
       if (codUpdated.changes !== 1) throw Object.assign(new Error('El COD no está pendiente de cobro o ya fue procesado.'), { statusCode: 409 });
     }
-    await tx.execute(`INSERT INTO shipment_events (id, shipment_id, status, location, description, actor_type, actor_id, extra_json, created_at) VALUES (?, ?, 'delivered', ?, 'Entrega completada con POD registrado', 'driver', ?, ?, ?)`, [`evt-${crypto.randomUUID()}`, stop.shipment_id, parsed.data.pod.lat !== undefined ? `${parsed.data.pod.lat},${parsed.data.pod.lng}` : null, req.user!.userId, JSON.stringify({ codAmountCollected: parsed.data.collectedCod }), now]);
+    if (stop.shipment_id) await tx.execute(`INSERT INTO shipment_events (id, shipment_id, status, location, description, actor_type, actor_id, extra_json, created_at) VALUES (?, ?, 'delivered', ?, 'Entrega completada con POD registrado', 'driver', ?, ?, ?)`, [`evt-${crypto.randomUUID()}`, stop.shipment_id, parsed.data.pod.lat !== undefined ? `${parsed.data.pod.lat},${parsed.data.pod.lng}` : null, req.user!.userId, JSON.stringify({ codAmountCollected: parsed.data.collectedCod }), now]);
     const counts = await tx.queryOne<{ completed: number | string }>('SELECT COUNT(*) AS completed FROM route_stops WHERE route_id = ? AND status = \'completed\'', [stop.route_id]);
     await tx.execute('UPDATE routes SET completed_stops = ?, status = CASE WHEN total_stops > 0 AND ? >= total_stops THEN \'completed\' ELSE status END, updated_at = ? WHERE id = ? AND organization_id = ?', [Number(counts?.completed || 0), Number(counts?.completed || 0), now, stop.route_id, orgId]);
-    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'shipment.delivered', 'shipment', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, stop.shipment_id, JSON.stringify({ shipmentId: stop.shipment_id, trackingNumber: stop.tracking_number, stopId: stop.id, pod }), now]);
-    const result = { success: true, stopId: stop.id, shipmentId: stop.shipment_id, trackingNumber: stop.tracking_number, status: 'delivered', completedAt: now, codStatus: codAmount > 0 ? 'collected_driver' : 'not_applicable' };
+    const aggregateType = stop.shipment_id ? 'shipment' : 'logistics_job';
+    const aggregateId = stop.shipment_id || stop.job_id;
+    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, stop.shipment_id ? 'shipment.delivered' : 'job.completed', aggregateType, aggregateId, JSON.stringify({ shipmentId: stop.shipment_id || null, jobId: stop.job_id || null, trackingNumber: stop.tracking_number, stopId: stop.id, serviceType: stop.job_service_type || null, pod }), now]);
+    const result = { success: true, stopId: stop.id, shipmentId: stop.shipment_id || null, jobId: stop.job_id || null, trackingNumber: stop.tracking_number, status: 'delivered', completedAt: now, codStatus: codAmount > 0 ? 'collected_driver' : 'not_applicable' };
     if (idempotencyKey) await tx.execute(`INSERT INTO idempotency_keys (id, organization_id, idempotency_key, request_hash, status_code, response_json, created_at, expires_at) VALUES (?, ?, ?, ?, 200, ?, ?, ?)`, [`idem-${crypto.randomUUID()}`, orgId, idempotencyKey, requestHash, JSON.stringify(result), now, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()]);
     return result;
   });
@@ -139,7 +151,7 @@ driversRouter.post('/stops/:stopId/fail', authenticate, requireScope('driver:wri
   const role = normalizeRole(req.user?.role);
   const now = new Date().toISOString();
   const result = await transactionAsync(async (tx) => {
-    const stop = await tx.queryOne<any>(`SELECT rs.*, r.driver_id, r.status AS route_status, s.tracking_number FROM route_stops rs JOIN routes r ON r.id = rs.route_id AND r.organization_id = ? LEFT JOIN shipments s ON s.id = rs.shipment_id AND s.organization_id = r.organization_id WHERE rs.id = ?`, [orgId, req.params.stopId]);
+    const stop = await tx.queryOne<any>(`SELECT rs.*, r.driver_id, r.status AS route_status, COALESCE(s.tracking_number, j.tracking_number) AS tracking_number FROM route_stops rs JOIN routes r ON r.id = rs.route_id AND r.organization_id = ? LEFT JOIN shipments s ON s.id = rs.shipment_id AND s.organization_id = r.organization_id LEFT JOIN logistics_jobs j ON j.id = rs.job_id AND j.organization_id = r.organization_id WHERE rs.id = ?`, [orgId, req.params.stopId]);
     if (!stop) throw Object.assign(new Error('Parada no encontrada en esta organización.'), { statusCode: 404 });
     const driver = await tx.queryOne<any>('SELECT user_id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [stop.driver_id, orgId]);
     if (['DRIVER', 'COURIER'].includes(role) && (!driver || driver.user_id !== req.user!.userId)) throw Object.assign(new Error('No estás autorizado para registrar esta incidencia.'), { statusCode: 403 });
@@ -150,7 +162,11 @@ driversRouter.post('/stops/:stopId/fail', authenticate, requireScope('driver:wri
       await tx.execute(`UPDATE shipments SET status = 'failed', updated_at = ? WHERE id = ? AND organization_id = ? AND status NOT IN ('delivered', 'cancelled')`, [now, stop.shipment_id, orgId]);
       await tx.execute(`INSERT INTO shipment_events (id, shipment_id, status, location, description, actor_type, actor_id, extra_json, created_at) VALUES (?, ?, 'failed', NULL, ?, 'driver', ?, ?, ?)`, [`evt-${crypto.randomUUID()}`, stop.shipment_id, `Intento de entrega fallido: ${parsed.data.reason}`, req.user!.userId, JSON.stringify({ notes: parsed.data.notes || null }), now]);
     }
-    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'shipment.delivery_failed', 'route_stop', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, stop.id, JSON.stringify({ stopId: stop.id, shipmentId: stop.shipment_id, trackingNumber: stop.tracking_number, reason: parsed.data.reason, notes: parsed.data.notes || null }), now]);
+    if (stop.job_id) {
+      await tx.execute(`UPDATE logistics_jobs SET status = 'failed', updated_at = ? WHERE id = ? AND organization_id = ? AND status NOT IN ('completed', 'cancelled')`, [now, stop.job_id, orgId]);
+      await tx.execute(`INSERT INTO logistics_job_events (id, organization_id, job_id, status, description, actor_type, actor_id, extra_json, created_at) VALUES (?, ?, ?, 'failed', ?, 'driver', ?, ?, ?)`, [`jbe-${crypto.randomUUID()}`, orgId, stop.job_id, `Trabajo fallido: ${parsed.data.reason}`, req.user!.userId, JSON.stringify({ notes: parsed.data.notes || null }), now]);
+    }
+    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, stop.job_id ? 'job.failed' : 'shipment.delivery_failed', stop.job_id ? 'logistics_job' : 'route_stop', stop.job_id || stop.id, JSON.stringify({ stopId: stop.id, shipmentId: stop.shipment_id || null, jobId: stop.job_id || null, trackingNumber: stop.tracking_number, reason: parsed.data.reason, notes: parsed.data.notes || null }), now]);
     return { success: true, stopId: stop.id, status: 'failed', failedAt: now };
   });
   return res.json(result);
