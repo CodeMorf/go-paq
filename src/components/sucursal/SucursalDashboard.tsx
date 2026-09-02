@@ -1,120 +1,16 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Building2, DollarSign, Layers, Package, Store, Truck, AlertCircle } from 'lucide-react';
+import { ApiClient } from '../../api/client';
 import { useApp } from '../../context/AppContext';
-import { 
-  Building2, 
-  Store, 
-  Package, 
-  Layers, 
-  Truck, 
-  DollarSign, 
-  Barcode, 
-  Printer, 
-  Clock,
-  ArrowRight
-} from 'lucide-react';
 import { MetricCard, Card, Button } from '../ui/DesignSystem';
 
 export const SucursalDashboard: React.FC = () => {
-  const { selectedBranch, formatMoney, setActiveSubView } = useApp();
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="p-6 bg-linear-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl border border-slate-800 text-white flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <span className="text-[11px] font-mono font-bold text-indigo-400 uppercase tracking-widest block">
-            Terminal de Agencia • {selectedBranch.code}
-          </span>
-          <h2 className="text-xl font-black mt-1">
-            {selectedBranch.name}
-          </h2>
-          <p className="text-xs text-slate-400">
-            Encargado: {selectedBranch.managerName} • {selectedBranch.address}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            variant="primary"
-            size="md"
-            icon={<Store className="w-4 h-4" />}
-            onClick={() => setActiveSubView('mostrador')}
-          >
-            Recepción Rápida Mostrador
-          </Button>
-        </div>
-      </div>
-
-      {/* Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Paquetes en Sucursal"
-          value={`${selectedBranch.currentPackagesCount}`}
-          subtitle={`Capacidad max: ${selectedBranch.capacityMaxPackages}`}
-          icon={<Package className="w-5 h-5" />}
-          accent="indigo"
-          onClick={() => setActiveSubView('inventario')}
-        />
-        <MetricCard
-          title="Efectivo en Caja Actual"
-          value={formatMoney(selectedBranch.cashInDrawer, selectedBranch.currency)}
-          subtitle="Arqueo del turno abierto"
-          icon={<DollarSign className="w-5 h-5" />}
-          accent="emerald"
-          onClick={() => setActiveSubView('arqueo-caja')}
-        />
-        <MetricCard
-          title="Drivers en Ruta Local"
-          value={`${selectedBranch.activeDriversCount} Conductores`}
-          subtitle="Despachados hoy"
-          icon={<Truck className="w-5 h-5" />}
-          accent="blue"
-          onClick={() => setActiveSubView('despacho-drivers')}
-        />
-        <MetricCard
-          title="Entregas en Mostrador Hoy"
-          value="38 Paquetes"
-          subtitle="Pick-up en tienda"
-          icon={<Store className="w-5 h-5" />}
-          accent="purple"
-        />
-      </div>
-
-      {/* Quick Access Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <Card
-          onClick={() => setActiveSubView('mostrador')}
-          className="hover:border-indigo-500 cursor-pointer space-y-2"
-        >
-          <div className="p-3 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 rounded-xl w-fit">
-            <Store className="w-5 h-5" />
-          </div>
-          <h4 className="text-sm font-bold text-slate-900 dark:text-white">Punto de Venta Mostrador</h4>
-          <p className="text-xs text-slate-500">Recibe paquetes de clientes presenciales y emite sticker térmico de guía.</p>
-        </Card>
-
-        <Card
-          onClick={() => setActiveSubView('inventario')}
-          className="hover:border-indigo-500 cursor-pointer space-y-2"
-        >
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 rounded-xl w-fit">
-            <Layers className="w-5 h-5" />
-          </div>
-          <h4 className="text-sm font-bold text-slate-900 dark:text-white">Racks & Zonas de Almacén</h4>
-          <p className="text-xs text-slate-500">Ubica paquetes en estanterías por código de barra (Rack A1, B2, Jaula).</p>
-        </Card>
-
-        <Card
-          onClick={() => setActiveSubView('arqueo-caja')}
-          className="hover:border-indigo-500 cursor-pointer space-y-2"
-        >
-          <div className="p-3 bg-amber-50 dark:bg-amber-950 text-amber-600 rounded-xl w-fit">
-            <DollarSign className="w-5 h-5" />
-          </div>
-          <h4 className="text-sm font-bold text-slate-900 dark:text-white">Cierre & Arqueo de Caja</h4>
-          <p className="text-xs text-slate-500">Cuadre de efectivo de mostrador y cobros COD entregados por los drivers.</p>
-        </Card>
-      </div>
-    </div>
-  );
+  const { formatMoney, setActiveSubView } = useApp();
+  const [branch, setBranch] = useState<any>(null);
+  const [inventoryCount, setInventoryCount] = useState(0);
+  const [activeDrivers, setActiveDrivers] = useState(0);
+  const [codInCustody, setCodInCustody] = useState(0);
+  const [error, setError] = useState('');
+  useEffect(() => { Promise.all([ApiClient.getBranches(), ApiClient.getDrivers(), ApiClient.getCodLedger()]).then(async ([branches, drivers, cod]) => { const selected = branches.success ? branches.branches?.[0] : null; if (!selected) { setError(branches.success ? 'No hay una sucursal asignada.' : branches.error); return; } setBranch(selected); const inventory = await ApiClient.getBranchInventory(selected.id); if (inventory.success) setInventoryCount(inventory.count); if (drivers.success) setActiveDrivers((drivers.drivers || []).filter((driver: any) => ['on_route', 'in_motion', 'busy'].includes(driver.status)).length); if (cod.success) setCodInCustody((cod.transactions || []).filter((tx: any) => tx.branch_id === selected.id && ['collected_driver', 'received_branch', 'reconciled'].includes(tx.status)).reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0)); }); }, []);
+  return <div className="space-y-6">{error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 flex gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}<div className="p-6 bg-linear-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl border border-slate-800 text-white flex flex-wrap items-center justify-between gap-4"><div><span className="text-[11px] font-mono font-bold text-indigo-400 uppercase tracking-widest block">Terminal de agencia · {branch?.code || '—'}</span><h2 className="text-xl font-black mt-1">{branch?.name || 'Sucursal'}</h2><p className="text-xs text-slate-400">{branch?.city || '—'} · {branch?.address || 'Dirección no configurada'}</p></div><Button variant="primary" size="md" icon={<Store className="w-4 h-4" />} onClick={() => setActiveSubView('mostrador')}>Recepción mostrador</Button></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"><MetricCard title="Paquetes en sucursal" value={String(inventoryCount)} subtitle="Inventario consultado en servidor" icon={<Package className="w-5 h-5" />} accent="indigo" onClick={() => setActiveSubView('inventario')} /><MetricCard title="COD en custodia" value={formatMoney(codInCustody)} subtitle="Estados financieros no finales" icon={<DollarSign className="w-5 h-5" />} accent="emerald" onClick={() => setActiveSubView('caja')} /><MetricCard title="Drivers en ruta" value={String(activeDrivers)} subtitle="Telemetría/estado persistido" icon={<Truck className="w-5 h-5" />} accent="blue" onClick={() => setActiveSubView('despacho')} /><MetricCard title="Cierres de caja" value="Disponible" subtitle="Registrar un cierre real" icon={<Building2 className="w-5 h-5" />} accent="purple" onClick={() => setActiveSubView('caja')} /></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-5"><Card onClick={() => setActiveSubView('mostrador')} className="hover:border-indigo-500 cursor-pointer space-y-2"><Store className="w-5 h-5 text-indigo-600" /><h4 className="text-sm font-bold">Recepción mostrador</h4><p className="text-xs text-slate-500">Crea envíos con tarifa real y sucursal de origen.</p></Card><Card onClick={() => setActiveSubView('inventario')} className="hover:border-indigo-500 cursor-pointer space-y-2"><Layers className="w-5 h-5 text-emerald-600" /><h4 className="text-sm font-bold">Racks y almacén</h4><p className="text-xs text-slate-500">Recibe, ubica y despacha por tracking.</p></Card><Card onClick={() => setActiveSubView('caja')} className="hover:border-indigo-500 cursor-pointer space-y-2"><DollarSign className="w-5 h-5 text-amber-600" /><h4 className="text-sm font-bold">Cierre de caja</h4><p className="text-xs text-slate-500">Registra totales confirmados por el operador.</p></Card></div></div>;
 };

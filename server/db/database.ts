@@ -41,6 +41,12 @@ export function initDatabase() {
   if (sqliteDb) {
     sqliteDb.exec(schemaSql);
     sqliteDb.exec(sqliteFoundationSql);
+    ensureSqliteColumn('cod_transactions', 'received_branch_at', 'TEXT');
+    ensureSqliteColumn('cod_transactions', 'received_branch_by', 'TEXT');
+    ensureSqliteColumn('cod_transactions', 'reconciled_at', 'TEXT');
+    ensureSqliteColumn('cod_transactions', 'reconciled_by', 'TEXT');
+    ensureSqliteColumn('international_packages', 'merchant_name', 'TEXT');
+    ensureSqliteColumn('international_packages', 'prealert_at', 'TEXT');
     sqliteDb.exec(`
       INSERT OR IGNORE INTO schema_migrations (version, applied_at)
       VALUES ('001_initial', CURRENT_TIMESTAMP), ('002_production_foundations', CURRENT_TIMESTAMP)
@@ -352,3 +358,11 @@ CREATE TABLE IF NOT EXISTS cash_closes (
 );
 CREATE INDEX IF NOT EXISTS idx_cash_closes_branch_created ON cash_closes(organization_id, branch_id, created_at);
 `;
+
+function ensureSqliteColumn(tableName: string, columnName: string, definition: string) {
+  if (!sqliteDb) return;
+  const columns = sqliteDb.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === columnName)) {
+    sqliteDb.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ServiceType, Shipment } from '../../types';
+import { ServiceType } from '../../types';
 import { 
   Package, 
   MapPin, 
@@ -17,10 +17,10 @@ import {
 } from 'lucide-react';
 import { Button, Card, ServiceBadge } from '../ui/DesignSystem';
 import { CameraPackageScanner } from '../ui/CameraPackageScanner';
-import { calculateShippingRate } from '../../data/mockData';
+import { ApiClient } from '../../api/client';
 
 export const ShipmentCreator: React.FC = () => {
-  const { addShipment, formatMoney, addToast, setActiveSubView, setSelectedTracking } = useApp();
+  const { formatMoney, addToast, setActiveSubView, setSelectedTracking } = useApp();
 
   const [serviceType, setServiceType] = useState<ServiceType>('local');
   const [originName, setOriginName] = useState('TechStore Caribe');
@@ -44,13 +44,38 @@ export const ShipmentCreator: React.FC = () => {
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [calculatedQuote, setCalculatedQuote] = useState<any>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const isIntercity = destCity !== originCity;
-    const distanceKm = isIntercity ? 145 : 12;
-    const quote = calculateShippingRate(serviceType, weightKg, lengthCm, widthCm, heightCm, distanceKm);
-    setCalculatedQuote(quote);
-  }, [serviceType, weightKg, lengthCm, widthCm, heightCm, destCity, originCity]);
+    let active = true;
+    setQuoteLoading(true);
+    ApiClient.calculateQuote({
+      serviceType,
+      originCity,
+      destCity,
+      originCountry: 'DO',
+      destinationCountry: 'DO',
+      originAddress,
+      destinationAddress: destAddress,
+      senderName: originName,
+      recipientName: destName || undefined,
+      senderPhone: originPhone,
+      recipientPhone: destPhone || undefined,
+      weightKg,
+      lengthCm,
+      widthCm,
+      heightCm,
+      declaredValueUsd: 120,
+      isFragile: true,
+      codAmount: enableCod ? codAmount : 0
+    }).then(result => {
+      if (!active) return;
+      setCalculatedQuote(result.success ? result.quote : null);
+      setQuoteLoading(false);
+    });
+    return () => { active = false; };
+  }, [serviceType, originCity, originAddress, originName, originPhone, destCity, destAddress, destName, destPhone, weightKg, lengthCm, widthCm, heightCm, enableCod, codAmount]);
 
   const handleScanComplete = (data: { lengthCm: number; widthCm: number; heightCm: number; weightKg: number; category: string }) => {
     setLengthCm(data.lengthCm);
@@ -62,19 +87,20 @@ export const ShipmentCreator: React.FC = () => {
     addToast('success', 'Escaneo IA Exitoso', 'Las medidas y peso fueron calculados automáticamente.');
   };
 
-  const handleCreateShipment = (e: React.FormEvent) => {
+  const handleCreateShipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!destName || !destAddress) {
       addToast('error', 'Campos Incompletos', 'Por favor completa el nombre y dirección del destinatario.');
       return;
     }
 
-    const randomTrack = `NX-${Math.floor(10000000 + Math.random() * 90000000)}`;
-    const newShip: Shipment = {
-      id: `ship-${Date.now()}`,
-      trackingNumber: randomTrack,
+    if (!calculatedQuote) {
+      addToast('error', 'Cotización no disponible', 'El servidor todavía no ha confirmado una tarifa para este servicio.');
+      return;
+    }
+    setSubmitting(true);
+    const result = await ApiClient.createShipment({
       serviceType,
-      status: 'confirmed',
       origin: {
         name: originName,
         address: originAddress,
@@ -98,25 +124,16 @@ export const ShipmentCreator: React.FC = () => {
         declaredValueUsd: 120,
         isFragile: true
       },
-      shippingCost: calculatedQuote ? calculatedQuote.totalCost : 380,
-      currency: 'DOP',
-      codAmount: enableCod ? codAmount : undefined,
-      driverName: 'Carlos Méndez',
-      timeline: [
-        {
-          id: `ev-${Date.now()}`,
-          status: 'confirmed',
-          title: 'Envío Creado y Registrado',
-          description: 'Orden confirmada en el sistema. Guía lista para recolección.',
-          timestamp: new Date().toLocaleString(),
-          location: originCity
-        }
-      ],
-      createdAt: new Date().toISOString()
-    };
-
-    addShipment(newShip);
-    setSelectedTracking(randomTrack);
+      codAmount: enableCod ? codAmount : 0,
+      codCurrency: 'DOP'
+    }, `shipment-create-${crypto.randomUUID()}`);
+    setSubmitting(false);
+    if (!result.success) {
+      addToast('error', 'No se creó el envío', result.error);
+      return;
+    }
+    addToast('success', 'Envío guardado', `La guía ${result.shipment.trackingNumber} fue confirmada por el servidor.`);
+    setSelectedTracking(result.shipment.trackingNumber);
     setActiveSubView('tracking');
   };
 
@@ -342,35 +359,36 @@ export const ShipmentCreator: React.FC = () => {
               <span>Desglose de Cotización</span>
             </h3>
 
-            {calculatedQuote && (
+            {quoteLoading && <p className="text-xs text-slate-400">Consultando tarifa real…</p>}
+            {calculatedQuote && !quoteLoading && (
               <div className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
                 <div className="flex justify-between">
                   <span>Tarifa Base ({serviceType}):</span>
                   <span className="font-mono font-semibold">{formatMoney(calculatedQuote.baseRate)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Flete por Distancia / Zona:</span>
-                  <span className="font-mono font-semibold">{formatMoney(calculatedQuote.distanceCost)}</span>
+                  <span>Peso facturable:</span>
+                  <span className="font-mono font-semibold">{calculatedQuote.billableWeightKg} kg</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Peso ({weightKg} kg):</span>
                   <span className="font-mono font-semibold">{formatMoney(calculatedQuote.weightCost)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Recargo Combustible (Fuel):</span>
-                  <span className="font-mono font-semibold">{formatMoney(calculatedQuote.fuelSurcharge)}</span>
+                  <span>Seguro / recargos:</span>
+                  <span className="font-mono font-semibold">{formatMoney(Number(calculatedQuote.insuranceCost || 0) + Number(calculatedQuote.fragileSurcharge || 0) + Number(calculatedQuote.dangerousZoneSurcharge || 0))}</span>
                 </div>
                 {enableCod && (
                   <div className="flex justify-between text-amber-600 dark:text-amber-400 font-semibold">
                     <span>Comisión Manejo COD (2.5%):</span>
-                    <span className="font-mono">{formatMoney(Math.round(codAmount * 0.025))}</span>
+                    <span className="font-mono">{formatMoney(calculatedQuote.codFee || 0)}</span>
                   </div>
                 )}
 
                 <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center text-sm">
                   <span className="font-bold text-slate-900 dark:text-white">Total a Pagar Flete:</span>
                   <span className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
-                    {formatMoney(calculatedQuote.totalCost)}
+                    {formatMoney(calculatedQuote.total)}
                   </span>
                 </div>
               </div>
@@ -382,8 +400,9 @@ export const ShipmentCreator: React.FC = () => {
               className="w-full font-bold shadow-md"
               icon={<CheckCircle2 className="w-4 h-4" />}
               type="submit"
+              disabled={submitting || quoteLoading || !calculatedQuote}
             >
-              Generar Guía & Solicitar Despacho
+              {submitting ? 'Guardando en GoPaq…' : 'Generar Guía & Solicitar Despacho'}
             </Button>
           </div>
         </div>

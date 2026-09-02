@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { queryOneAsync, executeAsync, transactionAsync } from '../../db/database';
+import { queryAllAsync, queryOneAsync, executeAsync, transactionAsync } from '../../db/database';
 import { comparePassword, generateToken, hashPassword, TokenPayload } from '../../auth/jwt';
-import { authenticate, AuthenticatedRequest } from '../../auth/middleware';
+import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '../../auth/middleware';
 import { AuthArea, ROLE_GROUPS, normalizeRole } from '../../auth/roles';
 import { writeAuditLog } from '../../auth/audit';
 import { asyncHandler } from '../../core/http';
@@ -285,4 +285,16 @@ authRouter.get('/me', authenticate, asyncHandler(async (req: AuthenticatedReques
   `, [req.user.userId, req.organizationId]);
   if (!user) return res.status(404).json({ success: false, error: 'Usuario no encontrado.' });
   return res.json({ success: true, user: safeUser(user) });
+}));
+
+authRouter.get('/users', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN']), requireScope('team:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const users = await queryAllAsync(`
+    SELECT u.id, u.email, u.name, u.role, u.phone, u.branch_id, u.active,
+           u.created_at, u.updated_at, b.name AS branch_name
+    FROM users u
+    LEFT JOIN branches b ON b.id = u.branch_id AND b.organization_id = u.organization_id
+    WHERE u.organization_id = ?
+    ORDER BY u.created_at ASC
+  `, [req.organizationId]);
+  return res.json({ success: true, users });
 }));

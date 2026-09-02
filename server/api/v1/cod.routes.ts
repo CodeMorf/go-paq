@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
+import { isPostgres, queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
 import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '../../auth/middleware';
+import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
 
 export const codRouter = Router();
@@ -35,7 +36,103 @@ const settleSchema = z.object({
   notes: z.string().trim().max(500).optional()
 });
 
-codRouter.post('/settle', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS']), requireScope('cod:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+const transitionSchema = z.object({
+  transactionIds: z.array(z.string().trim().min(1).max(160)).min(1).max(500),
+  branchId: z.string().trim().min(1).max(160).optional(),
+  notes: z.string().trim().max(500).optional()
+});
+
+type CodTransition = 'received_branch' | 'reconciled';
+
+async function transitionCod(
+  req: AuthenticatedRequest,
+  res: any,
+  targetStatus: CodTransition,
+  expectedStatus: 'collected_driver' | 'received_branch'
+) {
+  const parsed = transitionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de transición COD inválidos.' });
+  const ids = [...new Set(parsed.data.transactionIds)];
+  if (ids.length !== parsed.data.transactionIds.length) return res.status(409).json({ success: false, error: 'La operación contiene transacciones repetidas.' });
+
+  const orgId = req.organizationId!;
+  const idempotencyKey = req.header('idempotency-key')?.trim();
+  if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 200)) return res.status(400).json({ success: false, error: 'Idempotency-Key inválida.' });
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
+  if (idempotencyKey) {
+    const previous = await queryOneAsync<{ request_hash: string; status_code: number | null; response_json: string | null }>('SELECT request_hash, status_code, response_json FROM idempotency_keys WHERE organization_id = ? AND idempotency_key = ?', [orgId, idempotencyKey]);
+    if (previous?.request_hash !== requestHash && previous) return res.status(409).json({ success: false, error: 'La Idempotency-Key ya fue usada con otro contenido.' });
+    if (previous?.response_json) return res.status(previous.status_code || 200).json(JSON.parse(previous.response_json));
+  }
+
+  const now = new Date().toISOString();
+  const branchRoles = ['BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'CASHIER'];
+  const role = normalizeRole(req.user?.role);
+  const scopedBranchId = branchRoles.includes(role) ? req.user?.branchId : parsed.data.branchId;
+  if (branchRoles.includes(role) && !scopedBranchId) return res.status(403).json({ success: false, error: 'La cuenta de sucursal no tiene una sucursal asignada.' });
+
+  const response = await transactionAsync(async (tx) => {
+    const changed: string[] = [];
+    for (const txId of ids) {
+      const row = await tx.queryOne<{ id: string; shipment_id: string; tracking_number: string; branch_id: string | null; status: string; amount: number }>(
+        `SELECT c.id, c.shipment_id, s.tracking_number, c.branch_id, c.status, c.amount
+         FROM cod_transactions c
+         JOIN shipments s ON s.id = c.shipment_id AND s.organization_id = c.organization_id
+         WHERE c.id = ? AND c.organization_id = ?${isPostgres ? ' FOR UPDATE' : ''}`,
+        [txId, orgId]
+      );
+      if (!row) throw Object.assign(new Error('Una o más transacciones no pertenecen a esta organización.'), { statusCode: 404 });
+      if (scopedBranchId && row.branch_id !== scopedBranchId) throw Object.assign(new Error('La cuenta no puede operar COD de otra sucursal.'), { statusCode: 403 });
+      if (parsed.data.branchId && row.branch_id !== parsed.data.branchId) throw Object.assign(new Error('La transacción COD no corresponde a la sucursal indicada.'), { statusCode: 409 });
+      if (row.status !== expectedStatus) throw Object.assign(new Error(`La transacción ${txId} debe estar en ${expectedStatus} para avanzar a ${targetStatus}.`), { statusCode: 409 });
+
+      const updated = targetStatus === 'received_branch'
+        ? await tx.execute(`UPDATE cod_transactions SET status = 'received_branch', received_branch_at = ?, received_branch_by = ?, notes = ? WHERE id = ? AND organization_id = ? AND status = 'collected_driver'`, [now, req.user!.userId, parsed.data.notes || null, txId, orgId])
+        : await tx.execute(`UPDATE cod_transactions SET status = 'reconciled', reconciled_at = ?, reconciled_by = ?, notes = ? WHERE id = ? AND organization_id = ? AND status = 'received_branch'`, [now, req.user!.userId, parsed.data.notes || null, txId, orgId]);
+      if (updated.changes !== 1) throw Object.assign(new Error(`La transacción ${txId} cambió mientras se procesaba.`), { statusCode: 409 });
+
+      await tx.execute(`INSERT INTO shipment_events (id, shipment_id, status, location, description, actor_type, actor_id, extra_json, created_at) VALUES (?, ?, ?, NULL, ?, 'user', ?, ?, ?)`, [
+        `evt-${crypto.randomUUID()}`,
+        row.shipment_id,
+        targetStatus,
+        targetStatus === 'received_branch' ? 'COD recibido en sucursal' : 'COD conciliado por operaciones',
+        req.user!.userId,
+        JSON.stringify({ codTransactionId: txId, amount: row.amount, branchId: row.branch_id }),
+        now
+      ]);
+      await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, ?, 'cod_transaction', ?, ?, 'pending', 0, ?)`, [
+        `out-${crypto.randomUUID()}`,
+        orgId,
+        `cod.${targetStatus}`,
+        txId,
+        JSON.stringify({ codTransactionId: txId, shipmentId: row.shipment_id, trackingNumber: row.tracking_number, amount: row.amount, branchId: row.branch_id, status: targetStatus, actorId: req.user!.userId }),
+        now
+      ]);
+      await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, ?, 'cod_transaction', ?, 'success', ?, ?, ?)`, [
+        `aud-${crypto.randomUUID()}`,
+        orgId,
+        req.user!.userId,
+        `cod.${targetStatus}`,
+        txId,
+        req.ip,
+        JSON.stringify({ amount: row.amount, branchId: row.branch_id }),
+        now
+      ]);
+      changed.push(txId);
+    }
+
+    const result = { success: true, status: targetStatus, transactionIds: changed, processedAt: now };
+    if (idempotencyKey) await tx.execute(`INSERT INTO idempotency_keys (id, organization_id, idempotency_key, request_hash, status_code, response_json, created_at, expires_at) VALUES (?, ?, ?, ?, 200, ?, ?, ?)`, [`idem-${crypto.randomUUID()}`, orgId, idempotencyKey, requestHash, JSON.stringify(result), now, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()]);
+    return result;
+  });
+  return res.json(response);
+}
+
+codRouter.post('/receive', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS', 'BRANCH_MANAGER', 'MANAGER', 'COUNTER', 'CASHIER']), requireScope('cod:receive'), asyncHandler(async (req: AuthenticatedRequest, res) => transitionCod(req, res, 'received_branch', 'collected_driver')));
+
+codRouter.post('/reconcile', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS', 'BRANCH_MANAGER']), requireScope('cod:reconcile'), asyncHandler(async (req: AuthenticatedRequest, res) => transitionCod(req, res, 'reconciled', 'received_branch')));
+
+codRouter.post('/settle', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS']), requireScope('cod:settle'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const parsed = settleSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, error: 'Datos de liquidación inválidos.' });
   const ids = [...new Set(parsed.data.transactionIds)];
@@ -56,13 +153,14 @@ codRouter.post('/settle', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'AD
 
   await transactionAsync(async (tx) => {
     for (const txId of ids) {
-      const row = await tx.queryOne<{ id: string; status: string; amount: number }>('SELECT id, status, amount FROM cod_transactions WHERE id = ? AND organization_id = ?', [txId, orgId]);
+      const row = await tx.queryOne<{ id: string; status: string; amount: number }>(`SELECT id, status, amount FROM cod_transactions WHERE id = ? AND organization_id = ?${isPostgres ? ' FOR UPDATE' : ''}`, [txId, orgId]);
       if (!row) throw Object.assign(new Error('Una o más transacciones no pertenecen a esta organización.'), { statusCode: 404 });
-      if (!['received_branch', 'reconciled'].includes(row.status)) throw Object.assign(new Error(`La transacción ${txId} no está lista para liquidarse.`), { statusCode: 409 });
-      const updated = await tx.execute(`UPDATE cod_transactions SET status = 'settled_merchant', settled_at = ?, settlement_reference = ?, notes = ? WHERE id = ? AND organization_id = ? AND status IN ('received_branch', 'reconciled')`, [now, reference, parsed.data.notes || 'Liquidación COD autorizada', txId, orgId]);
+      if (row.status !== 'reconciled') throw Object.assign(new Error(`La transacción ${txId} debe estar conciliada antes de liquidarse.`), { statusCode: 409 });
+      const updated = await tx.execute(`UPDATE cod_transactions SET status = 'settled_merchant', settled_at = ?, settlement_reference = ?, notes = ? WHERE id = ? AND organization_id = ? AND status = 'reconciled'`, [now, reference, parsed.data.notes || 'Liquidación COD autorizada', txId, orgId]);
       if (updated.changes !== 1) throw Object.assign(new Error(`La transacción ${txId} cambió mientras se liquidaba.`), { statusCode: 409 });
     }
     await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'cod.settled', 'cod_settlement', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, reference, JSON.stringify({ reference, transactionIds: ids }), now]);
+    await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, 'cod.settled', 'cod_settlement', ?, 'success', ?, ?, ?)`, [`aud-${crypto.randomUUID()}`, orgId, req.user!.userId, reference, req.ip, JSON.stringify({ transactionIds: ids }), now]);
     if (idempotencyKey) await tx.execute(`INSERT INTO idempotency_keys (id, organization_id, idempotency_key, request_hash, status_code, response_json, created_at, expires_at) VALUES (?, ?, ?, ?, 200, ?, ?, ?)`, [`idem-${crypto.randomUUID()}`, orgId, idempotencyKey, requestHash, JSON.stringify(response), now, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()]);
   });
   return res.json(response);

@@ -1,123 +1,41 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
-import { Layers, Barcode, Search, CheckCircle2, Box, Sparkles, Filter } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, Barcode, Layers, RefreshCw } from 'lucide-react';
+import { ApiClient } from '../../api/client';
 import { Button, Card } from '../ui/DesignSystem';
 
-export const BranchInventory: React.FC = () => {
-  const { selectedBranch, shipments, addToast } = useApp();
-  const [scanCode, setScanCode] = useState('');
-  const [selectedZone, setSelectedZone] = useState('all');
+const parse = (value: unknown) => { try { return typeof value === 'string' ? JSON.parse(value || '{}') : value || {}; } catch { return {}; } };
 
-  const handleScanBin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!scanCode) return;
-    addToast('success', 'Ubicación Asignada', `Paquete ${scanCode} asignado a Rack A-1 (Estante 3).`);
-    setScanCode('');
+export const BranchInventory: React.FC = () => {
+  const [branch, setBranch] = useState<any>(null);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [scanCode, setScanCode] = useState('');
+  const [location, setLocation] = useState('');
+  const [action, setAction] = useState<'receive' | 'store' | 'dispatch'>('store');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const branches = await ApiClient.getBranches();
+    const selected = branches.success ? branches.branches?.[0] : null;
+    if (!selected) { setError(branches.success ? 'No hay sucursal asignada a esta cuenta.' : branches.error); setLoading(false); return; }
+    setBranch(selected);
+    const result = await ApiClient.getBranchInventory(selected.id);
+    if (result.success) { setInventory(result.inventory || []); setError(''); } else setError(result.error);
+    setLoading(false);
+  };
+  useEffect(() => { void load(); }, []);
+
+  const handleScan = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!branch || !scanCode.trim()) return;
+    setSubmitting(true);
+    const result = await ApiClient.scanBranchShipment(branch.id, { trackingNumber: scanCode.trim(), action, location: location.trim() || undefined }, `branch-scan-${crypto.randomUUID()}`);
+    setSubmitting(false);
+    if (!result.success) { setError(result.error); return; }
+    setScanCode(''); setLocation(''); setError(''); await load();
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <Layers className="w-6 h-6 text-indigo-600" />
-            <span>Almacén de Tránsito & Racks • {selectedBranch.name}</span>
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Ubicación precisa de paquetes en estanterías, jaulas de seguridad y escaneo de entrada/salida
-          </p>
-        </div>
-
-        {/* Scan input */}
-        <form onSubmit={handleScanBin} className="flex gap-2">
-          <div className="relative">
-            <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Escanear Guía para Ubicar..."
-              value={scanCode}
-              onChange={(e) => setScanCode(e.target.value)}
-              className="pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold"
-            />
-          </div>
-          <Button variant="primary" size="sm" type="submit">
-            Ubicar
-          </Button>
-        </form>
-      </div>
-
-      {/* Racks Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {selectedBranch.zones?.map((zone) => (
-          <Card key={zone.id} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-mono font-bold text-xs bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-md">
-                Rack {zone.code}
-              </span>
-              <span className="text-xs text-slate-400 font-mono">
-                {zone.occupiedSlots} / {zone.totalSlots}
-              </span>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white">{zone.name}</h4>
-              <span className="text-[11px] text-slate-400 block uppercase font-mono">{zone.type}</span>
-            </div>
-
-            <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-600 rounded-full"
-                style={{ width: `${Math.round((zone.occupiedSlots / zone.totalSlots) * 100)}%` }}
-              />
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Packages inside Branch Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 space-y-4 shadow-xs">
-        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-          Paquetes en Custodia en Sucursal ({shipments.length})
-        </h4>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-950/80 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase">
-              <tr>
-                <th className="py-3 px-4">Guía Tracking</th>
-                <th className="py-3 px-4">Destinatario</th>
-                <th className="py-3 px-4">Ubicación / Rack</th>
-                <th className="py-3 px-4">Peso</th>
-                <th className="py-3 px-4">Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-              {shipments.map((s, idx) => (
-                <tr key={s.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                  <td className="py-3.5 px-4 font-mono font-bold text-slate-900 dark:text-white">
-                    {s.trackingNumber}
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-800 dark:text-slate-200">
-                    {s.destination.name}
-                  </td>
-                  <td className="py-3.5 px-4 font-mono text-indigo-600 dark:text-indigo-400 font-bold">
-                    Rack {idx % 2 === 0 ? 'A-1 (Nivel 2)' : 'B-2 (Nivel 1)'}
-                  </td>
-                  <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-300">
-                    {s.package.weightKg} KG
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                      En Almacén
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="space-y-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2"><Layers className="w-6 h-6 text-indigo-600" />Almacén y escaneo · {branch?.name || 'Sucursal'}</h2><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Recepciones, ubicación y despacho con estado persistido en el servidor.</p></div><Button variant="secondary" size="sm" icon={<RefreshCw className="w-4 h-4" />} onClick={() => void load()}>Actualizar</Button></div><form onSubmit={handleScan} className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4"><div className="relative flex-1 min-w-48"><Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input required value={scanCode} onChange={e => setScanCode(e.target.value)} placeholder="Guía o tracking" className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono" /></div><select value={action} onChange={e => setAction(e.target.value as any)} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs"><option value="receive">Recibir</option><option value="store">Almacenar</option><option value="dispatch">Despachar</option></select><input value={location} onChange={e => setLocation(e.target.value)} placeholder="Rack / ubicación (opcional)" className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs" /><Button variant="primary" size="sm" type="submit" disabled={submitting || !branch}>{submitting ? 'Procesando…' : 'Registrar escaneo'}</Button></form>{error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 flex gap-2"><AlertCircle className="w-4 h-4 shrink-0" />{error}</div>}<Card className="p-0 overflow-hidden"><div className="p-4 border-b border-slate-200 dark:border-slate-800"><h3 className="text-sm font-bold">Paquetes en custodia ({inventory.length})</h3></div>{loading ? <p className="p-6 text-sm text-slate-500">Cargando inventario desde GoPaq…</p> : !inventory.length ? <p className="p-6 text-sm text-slate-500">No hay paquetes en custodia en esta sucursal.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-50 dark:bg-slate-950 text-[11px] uppercase text-slate-500"><tr><th className="p-3">Tracking</th><th className="p-3">Destinatario</th><th className="p-3">Ubicación</th><th className="p-3">Peso</th><th className="p-3">Estado</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{inventory.map(item => { const packageData = parse(item.package); const currentLocation = parse(item.current_location_json); return <tr key={item.id}><td className="p-3 font-mono font-bold">{item.tracking_number || item.trackingNumber}</td><td className="p-3">{item.destination?.name || '—'}</td><td className="p-3 font-mono text-indigo-600">{currentLocation.location || 'Sin ubicación asignada'}</td><td className="p-3">{packageData.weightKg || '—'} kg</td><td className="p-3"><span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">{item.status}</span></td></tr>; })}</tbody></table></div>}</Card></div>;
 };

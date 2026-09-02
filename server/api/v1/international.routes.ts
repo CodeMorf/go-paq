@@ -26,6 +26,64 @@ internationalRouter.get('/packages', authenticate, requireScope('international:r
   return res.json({ success: true, count: packages.length, packages });
 }));
 
+const prealertSchema = z.object({
+  lockerId: z.string().trim().min(1).max(160),
+  merchantName: z.string().trim().min(2).max(160),
+  trackingNumber: z.string().trim().min(4).max(160),
+  originCountry: z.string().trim().length(2).default('US'),
+  description: z.string().trim().min(2).max(500),
+  declaredValueUsd: z.coerce.number().min(0).max(100000000).default(0),
+  weightLbs: z.coerce.number().positive().max(100000).default(1)
+});
+
+internationalRouter.post('/prealert', authenticate, requireScope('international:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const parsed = prealertSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de pre-alerta inválidos.' });
+  const orgId = req.organizationId!;
+  const role = normalizeRole(req.user?.role);
+  const clientScoped = ['CLIENT', 'CUSTOMER'].includes(role) || req.authType === 'api_key';
+  const idempotencyKey = req.header('idempotency-key')?.trim();
+  if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 200)) return res.status(400).json({ success: false, error: 'Idempotency-Key inválida.' });
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
+  if (idempotencyKey) {
+    const previous = await queryOneAsync<{ request_hash: string; status_code: number; response_json: string }>('SELECT request_hash, status_code, response_json FROM idempotency_keys WHERE organization_id = ? AND idempotency_key = ?', [orgId, idempotencyKey]);
+    if (previous?.request_hash !== requestHash && previous) return res.status(409).json({ success: false, error: 'La Idempotency-Key ya fue usada con otro contenido.' });
+    if (previous) return res.status(previous.status_code || 201).json(JSON.parse(previous.response_json));
+  }
+
+  const now = new Date().toISOString();
+  const result = await transactionAsync(async (tx) => {
+    const locker = await tx.queryOne<{ id: string; client_id: string; locker_code: string }>('SELECT id, client_id, locker_code FROM international_lockers WHERE id = ? AND organization_id = ?', [parsed.data.lockerId, orgId]);
+    if (!locker) throw Object.assign(new Error('Casillero no encontrado en esta organización.'), { statusCode: 404 });
+    if (clientScoped && locker.client_id !== req.clientId) throw Object.assign(new Error('No puedes crear una pre-alerta para otro cliente.'), { statusCode: 403 });
+    const clientId = locker.client_id;
+    const packageId = `intl-${crypto.randomUUID()}`;
+    const response = {
+      success: true,
+      package: {
+        id: packageId,
+        organizationId: orgId,
+        lockerId: locker.id,
+        lockerCode: locker.locker_code,
+        clientId,
+        merchantName: parsed.data.merchantName,
+        trackingNumber: parsed.data.trackingNumber,
+        originCountry: parsed.data.originCountry.toUpperCase(),
+        description: parsed.data.description,
+        declaredValueUsd: parsed.data.declaredValueUsd,
+        weightLbs: parsed.data.weightLbs,
+        status: 'received_miami',
+        prealertAt: now
+      }
+    };
+    await tx.execute(`INSERT INTO international_packages (id, organization_id, locker_id, client_id, tracking_number, origin_country, merchant_name, description, declared_value_usd, weight_lbs, status, prealert_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received_miami', ?, ?, ?)`, [packageId, orgId, locker.id, clientId, parsed.data.trackingNumber, parsed.data.originCountry.toUpperCase(), parsed.data.merchantName, parsed.data.description, parsed.data.declaredValueUsd, parsed.data.weightLbs, now, now, now]);
+    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'international.prealert_created', 'international_package', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, packageId, JSON.stringify({ packageId, clientId, lockerId: locker.id, trackingNumber: parsed.data.trackingNumber, status: 'received_miami' }), now]);
+    if (idempotencyKey) await tx.execute(`INSERT INTO idempotency_keys (id, organization_id, idempotency_key, request_hash, status_code, response_json, created_at, expires_at) VALUES (?, ?, ?, ?, 201, ?, ?, ?)`, [`idem-${crypto.randomUUID()}`, orgId, idempotencyKey, requestHash, JSON.stringify(response), now, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()]);
+    return response;
+  });
+  return res.status(201).json(result);
+}));
+
 const consolidateSchema = z.object({ packageIds: z.array(z.string().trim().min(1).max(160)).min(2).max(500), clientId: z.string().trim().min(1).max(160).optional(), notes: z.string().trim().max(500).optional() });
 
 internationalRouter.post('/consolidate', authenticate, requireScope('international:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {

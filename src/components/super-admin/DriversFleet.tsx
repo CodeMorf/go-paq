@@ -1,173 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, Battery, RefreshCw, Star, Truck, User } from 'lucide-react';
+import { ApiClient } from '../../api/client';
 import { useApp } from '../../context/AppContext';
-import { 
-  Truck, 
-  User, 
-  Phone, 
-  ShieldCheck, 
-  Battery, 
-  Star, 
-  DollarSign, 
-  CheckCircle2, 
-  AlertCircle,
-  Plus,
-  Wrench,
-  FileText
-} from 'lucide-react';
 import { Button, Card, MetricCard } from '../ui/DesignSystem';
-import { MOCK_VEHICLES } from '../../data/mockData';
 
 export const DriversFleet: React.FC = () => {
-  const { drivers, formatMoney } = useApp();
+  const { formatMoney } = useApp();
+  const [drivers, setDrivers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'drivers' | 'vehiculos'>('drivers');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <Truck className="w-6 h-6 text-indigo-600" />
-            <span>Conductores & Flota Vehicular</span>
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Control de flota propia y conductores terceros, liquidación de efectivo COD y estado telemático
-          </p>
-        </div>
+  const load = async () => {
+    setLoading(true);
+    const result = await ApiClient.getDrivers();
+    if (result.success) { setDrivers(result.drivers || []); setError(''); } else setError(result.error);
+    setLoading(false);
+  };
+  useEffect(() => { void load(); }, []);
+  const vehicles = Array.from(new Map(drivers.filter(driver => driver.vehicle_type || driver.vehicle_plate).map(driver => [`${driver.vehicle_type}-${driver.vehicle_plate}`, driver])).values());
 
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" icon={<Plus className="w-4 h-4" />}>
-            Nuevo Vehículo
-          </Button>
-          <Button variant="primary" size="sm" icon={<Plus className="w-4 h-4" />}>
-            Registrar Conductor
-          </Button>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold">
-        <button
-          onClick={() => setActiveTab('drivers')}
-          className={`pb-3 px-3 border-b-2 transition-colors ${
-            activeTab === 'drivers'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          Conductores Activos ({drivers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('vehiculos')}
-          className={`pb-3 px-3 border-b-2 transition-colors ${
-            activeTab === 'vehiculos'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          Flota de Vehículos ({MOCK_VEHICLES.length})
-        </button>
-      </div>
-
-      {/* Tab: Drivers */}
-      {activeTab === 'drivers' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {drivers.map((drv) => (
-            <Card key={drv.id} className="space-y-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <img
-                      src={drv.avatar}
-                      alt={drv.name}
-                      className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
-                    />
-                    <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-900 ${
-                      drv.status === 'busy' ? 'bg-indigo-500' : 'bg-emerald-500'
-                    }`} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
-                      {drv.name}
-                    </h4>
-                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      {drv.phone}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-xs font-bold text-amber-500 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-md">
-                  <Star className="w-3.5 h-3.5 fill-amber-500" />
-                  <span>{drv.rating}</span>
-                </div>
-              </div>
-
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Vehículo:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{drv.vehicleName.split(' ')[0]}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Placa:</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">{drv.licensePlate}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">COD Recaudado:</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(drv.codCollectedToday)}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-center text-xs pt-1">
-                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg text-emerald-700 dark:text-emerald-300">
-                  <span className="text-[10px] block text-emerald-600/80">Entregadas</span>
-                  <strong className="text-sm">{drv.completedDeliveriesToday}</strong>
-                </div>
-                <div className="p-2 bg-amber-50 dark:bg-amber-950/40 rounded-lg text-amber-700 dark:text-amber-300">
-                  <span className="text-[10px] block text-amber-600/80">Pendientes</span>
-                  <strong className="text-sm">{drv.pendingDeliveriesCount}</strong>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Tab: Vehículos */}
-      {activeTab === 'vehiculos' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {MOCK_VEHICLES.map((veh) => (
-            <Card key={veh.id} className="space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
-                    {veh.brand}
-                  </span>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {veh.model}
-                  </h4>
-                </div>
-                <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded font-mono font-bold text-xs text-slate-800 dark:text-slate-200">
-                  {veh.plate}
-                </span>
-              </div>
-
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1.5 text-xs font-mono">
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-sans">Capacidad:</span>
-                  <span className="text-slate-900 dark:text-white font-bold">{veh.capacityKg} KG / {veh.capacityM3} m³</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-sans">Kilometraje:</span>
-                  <span className="text-slate-700 dark:text-slate-300">{veh.mileageKm.toLocaleString()} KM</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400 font-sans">Conductor:</span>
-                  <span className="text-indigo-600 dark:text-indigo-400 font-sans font-bold">{veh.currentDriverName || 'Disponible'}</span>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <div className="space-y-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2"><Truck className="w-6 h-6 text-indigo-600" />Conductores y flota</h2><p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Conductores, vehículo y telemetría consultados desde el tenant actual.</p></div><Button variant="secondary" size="sm" icon={<RefreshCw className="w-4 h-4" />} onClick={() => void load()}>Actualizar</Button></div>{error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 flex gap-2"><AlertCircle className="w-4 h-4" />{error}</div>}<div className="grid grid-cols-1 sm:grid-cols-3 gap-4"><MetricCard title="Conductores activos" value={String(drivers.length)} subtitle="Registros del servidor" icon={<User className="w-5 h-5" />} accent="indigo" /><MetricCard title="Disponibles" value={String(drivers.filter(d => ['available', 'idle'].includes(d.status)).length)} subtitle="Estado persistido" icon={<Battery className="w-5 h-5" />} accent="emerald" /><MetricCard title="Vehículos identificados" value={String(vehicles.length)} subtitle="Desde asignaciones reales" icon={<Truck className="w-5 h-5" />} accent="purple" /></div><div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold"><button onClick={() => setActiveTab('drivers')} className={`pb-3 px-3 border-b-2 ${activeTab === 'drivers' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Conductores ({drivers.length})</button><button onClick={() => setActiveTab('vehiculos')} className={`pb-3 px-3 border-b-2 ${activeTab === 'vehiculos' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}>Vehículos ({vehicles.length})</button></div>{loading ? <Card><p className="text-sm text-slate-500">Cargando flota desde GoPaq…</p></Card> : activeTab === 'drivers' ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">{drivers.map(driver => <Card key={driver.id} className="space-y-4"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><User className="w-5 h-5" /></div><div><h4 className="text-sm font-bold">{driver.name}</h4><p className="text-[11px] text-slate-500">{driver.user_email || driver.email || 'Cuenta no enlazada'}</p></div></div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold">{driver.status || 'sin estado'}</span></div><div className="space-y-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3 text-xs"><div className="flex justify-between"><span className="text-slate-400">Vehículo:</span><span className="font-semibold">{driver.vehicle_type || 'No asignado'}</span></div><div className="flex justify-between"><span className="text-slate-400">Placa:</span><span className="font-mono font-bold">{driver.vehicle_plate || '—'}</span></div><div className="flex justify-between"><span className="text-slate-400">Posición:</span><span className="font-mono">{driver.current_lat != null && driver.current_lng != null ? `${Number(driver.current_lat).toFixed(5)}, ${Number(driver.current_lng).toFixed(5)}` : 'Sin GPS'}</span></div><div className="flex justify-between"><span className="text-slate-400">COD:</span><span className="font-mono">{formatMoney(Number(driver.cod_collected_today || 0))}</span></div></div><div className="flex items-center gap-1 text-xs text-amber-500"><Star className="w-3.5 h-3.5 fill-amber-500" />{driver.rating ?? 'Sin calificación'}</div></Card>)}</div> : <Card><h3 className="text-sm font-bold mb-4">Vehículos asociados a conductores</h3>{!vehicles.length ? <p className="text-sm text-slate-500">No hay vehículos registrados en este tenant.</p> : <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{vehicles.map(driver => <div key={driver.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-4"><p className="font-bold">{driver.vehicle_type || 'Vehículo'}</p><p className="mt-1 font-mono text-sm text-indigo-600">{driver.vehicle_plate || 'Sin placa'}</p><p className="mt-3 text-xs text-slate-500">Conductor: {driver.name}</p></div>)}</div>}</Card>}</div>;
 };

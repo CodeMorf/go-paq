@@ -199,12 +199,14 @@ async function runComprehensiveTestSuite() {
   assert(crossTenantSettlement.status === 404, 'COD TENANT ISOLATION: settlement cannot mutate another organization');
 
   const ownCodId = `cod-own-${Date.now()}`;
-  execute(`INSERT INTO cod_transactions (id, organization_id, shipment_id, amount, currency, status, created_at) VALUES (?, 'org-gopaq', 'shp-8924', 100, 'DOP', 'received_branch', CURRENT_TIMESTAMP)`, [ownCodId]);
+  execute(`INSERT INTO cod_transactions (id, organization_id, shipment_id, amount, currency, status, created_at) VALUES (?, 'org-gopaq', 'shp-8924', 100, 'DOP', 'collected_driver', CURRENT_TIMESTAMP)`, [ownCodId]);
   const settlementKey = `settlement-${Date.now()}`;
+  const receiveCod = await request(app).post('/api/v1/cod/receive').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', `${settlementKey}-receive`).send({ transactionIds: [ownCodId] });
+  const reconcileCod = await request(app).post('/api/v1/cod/reconcile').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', `${settlementKey}-reconcile`).send({ transactionIds: [ownCodId] });
   const ownSettlement = await request(app).post('/api/v1/cod/settle').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', settlementKey).send({ transactionIds: [ownCodId] });
   const repeatedSettlement = await request(app).post('/api/v1/cod/settle').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', settlementKey).send({ transactionIds: [ownCodId] });
   const settledRow = queryOne<{ status: string }>('SELECT status FROM cod_transactions WHERE id = ?', [ownCodId]);
-  assert(ownSettlement.status === 200 && repeatedSettlement.status === 200 && settledRow?.status === 'settled_merchant', 'COD IDEMPOTENCY: settlement is atomic and a retry does not double-settle');
+  assert(receiveCod.status === 200 && reconcileCod.status === 200 && ownSettlement.status === 200 && repeatedSettlement.status === 200 && settledRow?.status === 'settled_merchant', 'COD STATE MACHINE: driver collection, branch receipt, reconciliation and idempotent settlement persist atomically');
 
   // 19. Driver manifest -> route start -> POD/COD, all in one transaction
   const driverLogin = await request(app).post('/api/v1/auth/login').send({ email: 'driver@gopaq.local', password: 'GoPaq123!', area: 'driver' });
@@ -224,6 +226,20 @@ async function runComprehensiveTestSuite() {
 
   const publicBranches = await request(app).get('/api/v1/branches/public');
   assert(publicBranches.status === 200 && Array.isArray(publicBranches.body.branches), 'PUBLIC GATEWAY: branch directory returns only active public records');
+
+  const scanShipment = await request(app).post('/api/v1/shipments').set('Authorization', `Bearer ${token}`).send({ serviceType: 'local', origin: { name: 'Sucursal', city: 'Santo Domingo', address: 'Calle Test' }, destination: { name: 'Receptor', city: 'Santo Domingo', address: 'Calle Destino' }, package: { weightKg: 1, lengthCm: 20, widthCm: 20, heightCm: 10 } });
+  const scanTracking = scanShipment.body.shipment?.trackingNumber;
+  const scanKey = `branch-scan-${Date.now()}`;
+  const receiveScan = await request(app).post('/api/v1/branches/br-sdq-central/scan').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', scanKey).send({ trackingNumber: scanTracking, action: 'receive', location: 'Rack TEST-01' });
+  const repeatedScan = await request(app).post('/api/v1/branches/br-sdq-central/scan').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', scanKey).send({ trackingNumber: scanTracking, action: 'receive', location: 'Rack TEST-01' });
+  const scannedShipment = queryOne<{ status: string; branch_id: string }>('SELECT status, branch_id FROM shipments WHERE tracking_number = ?', [scanTracking]);
+  assert(receiveScan.status === 200 && repeatedScan.status === 200 && scannedShipment?.status === 'at_branch' && scannedShipment.branch_id === 'br-sdq-central', 'BRANCH SCAN: receive operation persists inventory location with idempotent replay');
+
+  const demoLockers = await request(app).get('/api/v1/international/lockers').set('Authorization', `Bearer ${demoRes.body.token}`);
+  const prealertKey = `prealert-${Date.now()}`;
+  const prealert = await request(app).post('/api/v1/international/prealert').set('Authorization', `Bearer ${demoRes.body.token}`).set('Idempotency-Key', prealertKey).send({ lockerId: demoLockers.body.lockers?.[0]?.id, merchantName: 'Tienda Demo', trackingNumber: `DEMO-${Date.now()}`, description: 'Paquete de prueba de flujo', declaredValueUsd: 25, weightLbs: 2 });
+  const repeatedPrealert = await request(app).post('/api/v1/international/prealert').set('Authorization', `Bearer ${demoRes.body.token}`).set('Idempotency-Key', prealertKey).send({ lockerId: demoLockers.body.lockers?.[0]?.id, merchantName: 'Tienda Demo', trackingNumber: prealert.body.package?.trackingNumber || `DEMO-${Date.now()}`, description: 'Paquete de prueba de flujo', declaredValueUsd: 25, weightLbs: 2 });
+  assert(demoLockers.status === 200 && prealert.status === 201 && repeatedPrealert.status === 201 && prealert.body.package?.status === 'received_miami', 'INTERNATIONAL PREALERT: client locker ownership, persistence and idempotent replay work through the API');
 
   console.log(`\n======================================================`);
   console.log(`TEST SUITE RESULTS: ${passed} PASSED | ${failed} FAILED`);
