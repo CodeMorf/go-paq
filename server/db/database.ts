@@ -107,10 +107,16 @@ export async function runMigrations() {
 export async function checkDatabase(): Promise<{ ok: boolean; engine: 'postgres' | 'sqlite'; postgisVersion?: string; error?: string }> {
   try {
     if (isPostgres) {
-      const row = await queryOneAsync<{ version: string; postgis_version: string | null }>(
-        `SELECT version(), CASE WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') THEN PostGIS_Extension_Version() ELSE NULL END AS postgis_version`
+      const row = await queryOneAsync<{ version: string }>('SELECT version()');
+      let postgisVersion: string | undefined;
+      const extension = await queryOneAsync<{ installed: boolean }>(
+        `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') AS installed`
       );
-      return { ok: !!row, engine: 'postgres', postgisVersion: row?.postgis_version || undefined };
+      if (extension?.installed) {
+        const postgis = await queryOneAsync<{ version: string }>('SELECT PostGIS_Extension_Version() AS version');
+        postgisVersion = postgis?.version || undefined;
+      }
+      return { ok: !!row, engine: 'postgres', postgisVersion };
     }
     return { ok: !!queryOne('SELECT 1 as live'), engine: 'sqlite' };
   } catch (error) {
