@@ -8,6 +8,7 @@
 - [x] El backend comprueba área, rol, organización, permisos y propiedad del recurso; no depende de ocultar botones.
 - [x] JWT de corta duración, refresh rotatorio en cookie HttpOnly, logout, expiración y auditoría de acceso.
 - [x] Registro de clientes limitado a la organización pública configurada; el formulario no puede elegir tenants internos.
+- [x] Registro público exige una sucursal activa; la selección se carga desde el API público y el backend persiste `branch_id` en usuario y cliente.
 - [x] Tenant demo `org-demo` aislado, reseteable y con restricciones sandbox.
 - [x] Aislamiento por `organization_id` en envíos, rutas, sucursales, clientes, COD, internacional y API keys.
 - [x] Idempotencia para creación de envíos, POD, COD, escaneos, prealertas y operaciones de integración.
@@ -16,7 +17,7 @@
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
-- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 41 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 43 pruebas API/seguridad, build Vite y `git diff --check` verificados.
 - [x] Configuración Global: 14 secciones con valores por tenant, API PATCH protegida, control de versión, auditoría, outbox e historial de revisiones.
 - [x] Google Maps: credencial de navegador separada de la configuración de negocio, cifrada en PostgreSQL, versionada/auditada y con estado público `NO CONFIGURADO` cuando no existe.
 - [x] El selector cruzado Admin/Portal/Agencia/Driver fue eliminado; cada área permanece en su propia ruta, sesión y guard de backend.
@@ -44,7 +45,7 @@
 - [x] `https://gopaq.lat/` responde HTTP 200 y sirve el build compilado.
 - [x] Logo oficial GoPaq usado en menú, portada, logins y áreas.
 - [x] Login productivo de Super Admin verificado; su intento de entrar al portal devuelve 403.
-- [x] Botón `Acceso de prueba` verificado en las cuatro áreas; cada sesión usa `org-demo` y el rol correspondiente.
+- [x] Las superficies de login no muestran `Acceso de prueba`; el endpoint demo existente permanece aislado en `org-demo` para pruebas internas controladas.
 - [ ] Google Maps público: falta registrar una clave real restringida en `/super-admin/configuracion` y verificar la carga contra Google; sin esa credencial el estado esperado es `NO CONFIGURADO`.
 - [x] Cliente: cotización backend, creación de shipment, persistencia e historial de tracking.
 - [x] Sucursal: recepción/escaneo idempotente e inventario persistido.

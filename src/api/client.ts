@@ -75,7 +75,7 @@ export class ApiClient {
     return this.request<{ message: string }>('/auth/password/reset', { method: 'POST', body: JSON.stringify({ token, password }) }, false);
   }
 
-  static async register(payload: { email: string; password: string; name: string; phone?: string; companyName?: string; organizationId?: string; tenantSlug?: string }): Promise<ApiResponse<{ token: string; user: any }>> {
+  static async register(payload: { email: string; password: string; name: string; phone?: string; companyName?: string; branchId: string; organizationId?: string; tenantSlug?: string }): Promise<ApiResponse<{ token: string; user: any }>> {
     const data = await this.request<{ token: string; user: any }>('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
     if (data.success && data.token) this.setToken(data.token);
     return data;

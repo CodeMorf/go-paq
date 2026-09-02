@@ -28,6 +28,8 @@ No se registran contraseñas, tokens JWT completos ni secretos de proveedores.
 
 La credencial de navegador de Google Maps se configura desde `/super-admin/configuracion`, no se compila dentro de Vite ni se guarda en Git. Se almacena cifrada en `organization_integration_credentials` con el protector de `WEBHOOK_ENCRYPTION_KEY`; el panel solo muestra una pista enmascarada. El endpoint público `/api/v1/configuration/maps` entrega esa clave únicamente al mapa público del tenant configurado, por lo que la clave debe tener restricciones HTTP referrer para `https://gopaq.lat/*` y solo las APIs necesarias. Si no existe una clave guardada, el estado correcto es `NO CONFIGURADO`.
 
+El registro público de clientes consulta `/api/v1/branches/public`, exige que el cliente seleccione una sucursal activa y persiste esa relación en `users.branch_id` y `clients.branch_id`. El mapa ordena por distancia únicamente cuando el dispositivo concede geolocalización y la sucursal tiene coordenadas verificadas; sin clave o coordenadas muestra el estado real y mantiene la selección manual.
+
 ## Migraciones y bootstrap
 
 ```bash

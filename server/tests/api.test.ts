@@ -60,9 +60,10 @@ async function runComprehensiveTestSuite() {
       email: testEmail,
       password: 'SecurePass123!',
       name: 'Cliente E-commerce Demo',
-      tenantSlug: 'gopaq-global'
+      tenantSlug: 'gopaq-global',
+      branchId: 'br-sdq-central'
     });
-  assert(registerRes.status === 201 && registerRes.body.token, 'POST /api/v1/auth/register resolves tenant and creates CLIENT user with 201');
+  assert(registerRes.status === 201 && registerRes.body.token && registerRes.body.user.branchId === 'br-sdq-central' && registerRes.body.user.branchName, 'POST /api/v1/auth/register persists CLIENT with the selected branch');
 
   // 4. Register: Duplicate Email Prevention
   const dupRegisterRes = await request(app)
@@ -70,9 +71,16 @@ async function runComprehensiveTestSuite() {
     .send({
       email: testEmail,
       password: 'SecurePass123!',
-      name: 'Cliente Duplicado'
+      name: 'Cliente Duplicado',
+      branchId: 'br-sdq-central'
     });
   assert(dupRegisterRes.status === 409, 'POST /api/v1/auth/register rejects duplicate email registration with 409');
+  const registeredClient = queryOne<{ branch_id: string }>('SELECT branch_id FROM clients WHERE email = ?', [testEmail]);
+  assert(registeredClient?.branch_id === 'br-sdq-central', 'CLIENT OWNERSHIP: registered client remains assigned to the selected branch in the database');
+  const invalidBranchRegister = await request(app)
+    .post('/api/v1/auth/register')
+    .send({ email: `invalid_branch_${Date.now()}@example.com`, password: 'SecurePass123!', name: 'Sucursal inválida', branchId: 'branch-does-not-exist' });
+  assert(invalidBranchRegister.status === 422, 'CLIENT OWNERSHIP: registration rejects a branch outside the public organization');
 
   // 5. Security: Unauthenticated access rejected
   const unauthRes = await request(app).get('/api/v1/shipments');

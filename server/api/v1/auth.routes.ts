@@ -26,7 +26,8 @@ const registerSchema = z.object({
   password: z.string().min(8).max(256),
   name: z.string().trim().min(2).max(160),
   phone: z.string().trim().max(40).optional(),
-  companyName: z.string().trim().max(160).optional()
+  companyName: z.string().trim().max(160).optional(),
+  branchId: z.string().trim().min(1).max(120)
 });
 
 const tokenSchema = z.object({ token: z.string().min(32).max(512), password: z.string().min(8).max(256) });
@@ -225,7 +226,8 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   const existing = await queryOneAsync('SELECT id FROM users WHERE email = ?', [email]);
   if (existing) return res.status(409).json({ success: false, error: 'El correo electrónico ya se encuentra registrado.' });
 
-  const branch = await queryOneAsync<{ id: string }>('SELECT id FROM branches WHERE organization_id = ? AND active = 1 ORDER BY is_hub DESC, created_at ASC LIMIT 1', [org.id]);
+  const branch = await queryOneAsync<{ id: string; name: string }>('SELECT id, name FROM branches WHERE id = ? AND organization_id = ? AND active = 1', [parsed.data.branchId, org.id]);
+  if (!branch) return res.status(422).json({ success: false, error: 'La sucursal seleccionada no está disponible para este registro.' });
   const entropy = crypto.randomBytes(8).toString('hex');
   const userId = `usr-cli-${entropy}`;
   const clientId = `cli-${entropy}`;
@@ -234,12 +236,12 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   const now = new Date().toISOString();
 
   await transactionAsync(async (tx) => {
-    await tx.execute(`INSERT INTO users (id, organization_id, branch_id, email, password_hash, name, role, phone, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'CLIENT', ?, 1, ?, ?)`, [userId, org.id, branch?.id || null, email, hashPassword(parsed.data.password), name, parsed.data.phone?.trim() || '', now, now]);
-    await tx.execute(`INSERT INTO clients (id, organization_id, branch_id, name, company_name, email, phone, tier, credit_limit, balance, cod_pending_balance, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'Standard', 0, 0, 0, 1, ?, ?)`, [clientId, org.id, branch?.id || null, name, parsed.data.companyName?.trim() || name, email, parsed.data.phone?.trim() || '', now, now]);
+    await tx.execute(`INSERT INTO users (id, organization_id, branch_id, email, password_hash, name, role, phone, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'CLIENT', ?, 1, ?, ?)`, [userId, org.id, branch.id, email, hashPassword(parsed.data.password), name, parsed.data.phone?.trim() || '', now, now]);
+    await tx.execute(`INSERT INTO clients (id, organization_id, branch_id, name, company_name, email, phone, tier, credit_limit, balance, cod_pending_balance, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'Standard', 0, 0, 0, 1, ?, ?)`, [clientId, org.id, branch.id, name, parsed.data.companyName?.trim() || name, email, parsed.data.phone?.trim() || '', now, now]);
     await tx.execute(`INSERT INTO international_lockers (id, organization_id, client_id, locker_code, us_address, es_address, it_address, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?)`, [`lck-${clientId}`, org.id, clientId, lockerCode, now]);
   });
 
-  const user = { id: userId, email, name, role: 'CLIENT', phone: parsed.data.phone || '', branch_id: branch?.id || null, client_id: clientId, organization_id: org.id, organization_name: org.name, organization_slug: org.slug, branch_name: null };
+  const user = { id: userId, email, name, role: 'CLIENT', phone: parsed.data.phone || '', branch_id: branch.id, client_id: clientId, organization_id: org.id, organization_name: org.name, organization_slug: org.slug, branch_name: branch.name };
   const session = await issueSession(user, req, res);
   await writeAuditLog({ organizationId: org.id, userId, action: 'auth.register', outcome: 'success', ipAddress: req.ip });
   return res.status(201).json({ success: true, ...session });
