@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { initDatabaseAsync, isPostgres, queryOneAsync, transactionAsync } from './database';
+import { closeDatabase, initDatabaseAsync, isPostgres, queryOneAsync, transactionAsync } from './database';
 import { hashPassword } from '../auth/jwt';
 
 /**
@@ -78,7 +78,11 @@ async function main() {
   console.log(JSON.stringify({ success: true, organizationId: 'org-gopaq', adminEmail: email, adminCreated: !existingUser }));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : 'production_bootstrap_failed');
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error(error instanceof Error ? error.message : 'production_bootstrap_failed');
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await closeDatabase();
+  });

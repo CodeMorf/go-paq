@@ -56,6 +56,17 @@ export async function initDatabaseAsync() {
   }
 }
 
+export async function closeDatabase() {
+  if (pgPool) {
+    await pgPool.end();
+    pgPool = null;
+  }
+  if (sqliteDb) {
+    sqliteDb.close();
+    sqliteDb = null;
+  }
+}
+
 /**
  * Apply production schema changes through an explicit, locked migration
  * history. SQLite remains available for local tests; PostgreSQL is the only
