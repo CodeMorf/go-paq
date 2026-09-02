@@ -123,7 +123,7 @@ export const ApiDocs: React.FC = () => {
               GoPaq DEVELOPER API REFERENCE
             </span>
             <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
-              v1.5 OpenAPI 3.1
+              v1.6 OpenAPI 3.1
             </span>
           </div>
         </div>
