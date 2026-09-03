@@ -6,8 +6,7 @@
 const API_BASE = '/api/v1';
 
 export type ApiResponse<T = Record<string, any>> =
-  | ({ success: true; error?: never } & T)
-  | ({ success: false; error: string } & Partial<T>);
+  (({ success: true; error?: never } & T) | ({ success: false; error: string } & Partial<T>)) & { status?: number };
 
 export class ApiClient {
   private static readonly tokenStorageKey = 'gopaq_access_token';
@@ -58,7 +57,7 @@ export class ApiClient {
         const refreshed = await this.request<{ token: string; user: any }>('/auth/refresh', { method: 'POST' }, false);
         if (refreshed.success && refreshed.token) return this.request<T>(endpoint, options, false);
       }
-      if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}` } as ApiResponse<T>;
+      if (!res.ok) return { success: false, error: data.error || `HTTP ${res.status}`, status: res.status } as ApiResponse<T>;
       if (endpoint === '/auth/refresh' && data.success && data.token) this.setToken(data.token);
       return data as ApiResponse<T>;
     } catch (err: any) {
@@ -172,7 +171,7 @@ export class ApiClient {
   static async getPublicBranches(): Promise<ApiResponse<{ branches: any[] }>> { return this.request<{ branches: any[] }>('/branches/public'); }
   static async getBranchInventory(branchId: string): Promise<ApiResponse<{ count: number; inventory: any[] }>> { return this.request<{ count: number; inventory: any[] }>(`/branches/${branchId}/inventory`); }
   static async scanBranchShipment(branchId: string, payload: { trackingNumber: string; action: 'receive' | 'store' | 'dispatch'; location?: string }, idempotencyKey?: string): Promise<ApiResponse<{ shipmentId: string; trackingNumber: string; clientName?: string | null; branchName?: string | null; status: string; action: string; previousStatus?: string; processedAt?: string; processedBy?: string }>> { return this.request<{ shipmentId: string; trackingNumber: string; clientName?: string | null; branchName?: string | null; status: string; action: string; previousStatus?: string; processedAt?: string; processedBy?: string }>(`/branches/${encodeURIComponent(branchId)}/scan`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
-  static async closeBranchCash(branchId: string, payload: any): Promise<ApiResponse<{ message: string; summary: any }>> { return this.request<{ message: string; summary: any }>(`/branches/${branchId}/cash-close`, { method: 'POST', body: JSON.stringify(payload) }); }
+  static async closeBranchCash(branchId: string, payload: any, idempotencyKey?: string): Promise<ApiResponse<{ message: string; summary: any }>> { return this.request<{ message: string; summary: any }>(`/branches/${branchId}/cash-close`, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(payload) }); }
   static async getClients(params?: Record<string, string | number>): Promise<ApiResponse<{ clients: any[]; pagination?: any }>> { const query = new URLSearchParams(Object.entries(params || {}).map(([key, value]) => [key, String(value)])).toString(); return this.request<{ clients: any[]; pagination?: any }>(`/clients${query ? `?${query}` : ''}`); }
   static async createClient(payload: any): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>('/clients', { method: 'POST', body: JSON.stringify(payload) }); }
   static async updateClient(clientId: string, payload: any): Promise<ApiResponse<{ client: any }>> { return this.request<{ client: any }>(`/clients/${encodeURIComponent(clientId)}`, { method: 'PATCH', body: JSON.stringify(payload) }); }

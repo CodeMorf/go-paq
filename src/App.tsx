@@ -93,13 +93,18 @@ const ProtectedArea: React.FC<{ section: Section }> = ({ section }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { activeSubView, setCurrentSection, setCurrentRole, setActiveSubView } = useApp();
-  const [state, setState] = useState<{ loading: boolean; user?: any; invalid?: boolean }>({ loading: true });
+  const [state, setState] = useState<{ loading: boolean; user?: any; invalid?: boolean; error?: string }>({ loading: true });
 
   useEffect(() => {
     let live = true;
     ApiClient.getMe().then(result => {
       if (!live) return;
-      if (!result.success || !result.user) { ApiClient.logout(); setState({ loading: false, invalid: true }); return; }
+      if (!result.success) {
+        if (result.status === 401) { void ApiClient.logout(); setState({ loading: false, invalid: true }); }
+        else setState({ loading: false, error: result.error || 'No fue posible validar la sesión.' });
+        return;
+      }
+      if (!result.user) { void ApiClient.logout(); setState({ loading: false, invalid: true }); return; }
       setState({ loading: false, user: result.user });
     });
     return () => { live = false; };
@@ -123,6 +128,7 @@ const ProtectedArea: React.FC<{ section: Section }> = ({ section }) => {
 
   if (state.loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Validando sesión…</div>;
   if (state.invalid) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (state.error) return <div className="min-h-screen bg-slate-950 p-6 text-white"><div className="mx-auto mt-20 max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 text-center"><h1 className="text-lg font-black">No se pudo validar la sesión</h1><p className="mt-2 text-sm text-slate-400">{state.error}</p><button type="button" onClick={() => window.location.reload()} className="mt-5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold">Reintentar</button></div></div>;
   const allowed = sectionForRole(state.user?.role);
   if (allowed !== section) return <Navigate to={destinationForRole(state.user?.role)} replace />;
   return <AreaContent section={section} user={state.user} />;
@@ -180,7 +186,7 @@ const AreaContent: React.FC<{ section: Section; user?: any }> = ({ section, user
   return <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased transition-colors duration-150">
     {user?.isDemo && <div className="sticky top-0 z-[100] bg-amber-400 px-4 py-2 text-center text-xs font-black tracking-wide text-amber-950">ENTORNO DEMO · Datos aislados · No se ejecutan pagos ni comunicaciones externas</div>}
     {body}<ToastContainer /><CommandPalette />
-    <Modal isOpen={isNewShipmentModalOpen} onClose={() => setIsNewShipmentModalOpen(false)} title="Crear Nuevo Envío" description="Wizard guiado para cotizar, registrar y generar guía de entrega." maxWidth="2xl"><ShipmentCreator /></Modal>
+    <Modal isOpen={isNewShipmentModalOpen} onClose={() => setIsNewShipmentModalOpen(false)} title="Crear Nuevo Envío" description="Wizard guiado para cotizar, registrar y generar guía de entrega." maxWidth="4xl"><ShipmentCreator /></Modal>
   </div>;
 };
 

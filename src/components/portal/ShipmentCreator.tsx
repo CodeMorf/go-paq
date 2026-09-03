@@ -19,6 +19,9 @@ import { Button, Card, ServiceBadge } from '../ui/DesignSystem';
 import { CameraPackageScanner } from '../ui/CameraPackageScanner';
 import { ApiClient } from '../../api/client';
 
+const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white';
+const compactInputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
+
 export const ShipmentCreator: React.FC = () => {
   const { formatMoney, addToast, setActiveSubView, setSelectedTracking } = useApp();
 
@@ -138,16 +141,18 @@ export const ShipmentCreator: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="mx-auto w-full max-w-6xl space-y-5">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-4 dark:border-indigo-900/60 dark:from-indigo-950/50 dark:via-slate-900 dark:to-slate-900 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-300">Nueva operación</p>
+          <h2 className="mt-1 flex items-center gap-2 text-xl font-extrabold text-slate-900 dark:text-white">
             <Package className="w-6 h-6 text-indigo-600" />
-            <span>Cotizador & Creación de Envíos</span>
+            <span>Cotizar y crear envío</span>
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Calcula la tarifa en tiempo real con recargos de combustible, seguro y cobro contra entrega (COD)
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-500 dark:text-slate-400">
+            Completa los datos esenciales. La tarifa se confirma en el servidor y la guía solo se genera después de guardar correctamente.
           </p>
         </div>
 
@@ -159,10 +164,14 @@ export const ShipmentCreator: React.FC = () => {
         >
           Escanear Paquete con Cámara IA
         </Button>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-indigo-100 pt-4 text-[11px] dark:border-indigo-900/60 sm:max-w-xl sm:gap-4">
+          {[['1', 'Servicio y dirección'], ['2', 'Paquete y COD'], ['3', 'Confirmación']].map(([step, label], index) => <div key={step} className="flex items-center gap-2 text-slate-600 dark:text-slate-300"><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${index === 0 ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 ring-1 ring-indigo-200 dark:bg-slate-900 dark:ring-indigo-800'}`}>{step}</span><span className="hidden font-semibold sm:inline">{label}</span></div>)}
+        </div>
       </div>
 
       {/* Service Type Switcher */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="flex snap-x gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-5 sm:overflow-visible">
         {[
           { type: 'local', label: 'Local Metropolitano', desc: 'Mismo día en ciudad' },
           { type: 'nacional', label: 'Nacional Express', desc: 'Interprovincial 24h' },
@@ -174,7 +183,7 @@ export const ShipmentCreator: React.FC = () => {
             key={item.type}
             type="button"
             onClick={() => setServiceType(item.type as ServiceType)}
-            className={`p-3 rounded-2xl border text-left transition-all ${
+            className={`min-w-[168px] snap-start rounded-2xl border p-3 text-left transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/15 sm:min-w-0 ${
               serviceType === item.type
                 ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
                 : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300'
@@ -186,197 +195,159 @@ export const ShipmentCreator: React.FC = () => {
         ))}
       </div>
 
-      <form onSubmit={handleCreateShipment} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <form onSubmit={handleCreateShipment} className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
         {/* Left 2 Cols: Origin, Destination & Package Specs */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-5">
           {/* Origin & Destination */}
-          <Card className="space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+          <Card className="space-y-5 p-4 sm:p-5">
+            <div><h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <MapPin className="w-4 h-4 text-indigo-600" />
-              <span>Direcciones de Origen & Destino</span>
-            </h3>
+              <span>Direcciones de origen y destino</span>
+            </h3><p className="mt-1 text-xs text-slate-400">Indica quién entrega, quién recibe y dónde ocurre cada tramo.</p></div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 gap-4 text-xs xl:grid-cols-2">
               {/* Origin */}
-              <div className="space-y-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Punto de Origen (Remitente)</span>
-                <input
-                  type="text"
-                  value={originName}
-                  onChange={(e) => setOriginName(e.target.value)}
-                  placeholder="Nombre / Empresa Remitente"
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs"
-                />
-                <input
-                  type="text"
-                  value={originAddress}
-                  onChange={(e) => setOriginAddress(e.target.value)}
-                  placeholder="Dirección completa"
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs"
-                />
-                <select
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+                <div><span className="font-black text-slate-800 dark:text-slate-200">Origen</span><p className="mt-0.5 text-[11px] text-slate-500">Datos del remitente</p></div>
+                <label className="block font-semibold text-slate-600 dark:text-slate-300">Nombre o empresa<input aria-label="Nombre o empresa remitente" type="text" value={originName} onChange={(e) => setOriginName(e.target.value)} placeholder="Ej. María Pérez o Tienda GoPaq" className={compactInputClass} /></label>
+                <label className="block font-semibold text-slate-600 dark:text-slate-300">Dirección completa<input aria-label="Dirección del remitente" type="text" value={originAddress} onChange={(e) => setOriginAddress(e.target.value)} placeholder="Calle, número, sector y referencia" className={compactInputClass} /></label>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="block font-semibold text-slate-600 dark:text-slate-300">Ciudad<select
                   value={originCity}
                   onChange={(e) => setOriginCity(e.target.value)}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs"
+                  className={compactInputClass}
                 >
                   <option>Santo Domingo</option>
                   <option>Santiago de los Caballeros</option>
                   <option>Punta Cana / Bávaro</option>
                   <option>La Romana</option>
                   <option>Puerto Plata</option>
-                </select>
+                </select></label><label className="block font-semibold text-slate-600 dark:text-slate-300">Teléfono<input aria-label="Teléfono del remitente" type="tel" value={originPhone} onChange={(e) => setOriginPhone(e.target.value)} placeholder="809…" className={compactInputClass} /></label></div>
               </div>
 
               {/* Destination */}
-              <div className="space-y-2 p-3 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40 rounded-xl">
-                <span className="font-bold text-indigo-950 dark:text-indigo-200">Punto de Destino (Receptor)</span>
-                <input
-                  type="text"
-                  required
-                  value={destName}
-                  onChange={(e) => setDestName(e.target.value)}
-                  placeholder="Nombre del Destinatario *"
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs"
-                />
-                <input
-                  type="text"
-                  required
-                  value={destAddress}
-                  onChange={(e) => setDestAddress(e.target.value)}
-                  placeholder="Dirección de Entrega *"
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <select
+              <div className="space-y-3 rounded-2xl border border-indigo-200/70 bg-indigo-50/50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/20">
+                <div><span className="font-black text-indigo-950 dark:text-indigo-200">Destino</span><p className="mt-0.5 text-[11px] text-indigo-700/70 dark:text-indigo-300/70">Datos del receptor</p></div>
+                <label className="block font-semibold text-indigo-950/80 dark:text-indigo-100">Nombre o empresa<input required aria-label="Nombre o empresa destinataria" type="text" value={destName} onChange={(e) => setDestName(e.target.value)} placeholder="Ej. Juan Rodríguez" className={compactInputClass} /></label>
+                <label className="block font-semibold text-indigo-950/80 dark:text-indigo-100">Dirección de entrega<input required aria-label="Dirección del destinatario" type="text" value={destAddress} onChange={(e) => setDestAddress(e.target.value)} placeholder="Calle, número, sector y referencia" className={compactInputClass} /></label>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="block font-semibold text-indigo-950/80 dark:text-indigo-100">Ciudad<select
                     value={destCity}
                     onChange={(e) => setDestCity(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs"
+                    className={compactInputClass}
                   >
                     <option>Santo Domingo</option>
                     <option>Santiago de los Caballeros</option>
                     <option>Punta Cana / Bávaro</option>
                     <option>La Romana</option>
                     <option>Puerto Plata</option>
-                  </select>
-                  <input
-                    type="tel"
-                    value={destPhone}
-                    onChange={(e) => setDestPhone(e.target.value)}
-                    placeholder="Teléfono móvil"
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs"
-                  />
-                </div>
+                  </select></label><label className="block font-semibold text-indigo-950/80 dark:text-indigo-100">Teléfono<input required aria-label="Teléfono del destinatario" type="tel" value={destPhone} onChange={(e) => setDestPhone(e.target.value)} placeholder="809…" className={compactInputClass} /></label></div>
               </div>
             </div>
           </Card>
 
           {/* Package Measurements & Weight */}
-          <Card className="space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+          <Card className="space-y-5 p-4 sm:p-5">
+            <div><h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <Scale className="w-4 h-4 text-indigo-600" />
-              <span>Dimensiones, Peso & Categoría</span>
-            </h3>
+              <span>Paquete, peso y categoría</span>
+            </h3><p className="mt-1 text-xs text-slate-400">Usa medidas reales; el servidor determina el peso facturable y el precio final.</p></div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div>
-                <label className="text-slate-400 block mb-1">Peso Físico (KG)</label>
+            <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+              <div><label className="mb-1 block font-semibold text-slate-600 dark:text-slate-300">Peso físico (kg)</label>
                 <input
                   type="number"
+                  min="0.1"
                   step="0.1"
                   value={weightKg}
                   onChange={(e) => setWeightKg(Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-mono font-bold"
+                  className={inputClass}
                 />
               </div>
-              <div>
-                <label className="text-slate-400 block mb-1">Largo (CM)</label>
+              <div><label className="mb-1 block font-semibold text-slate-600 dark:text-slate-300">Largo (cm)</label>
                 <input
                   type="number"
+                  min="1"
                   value={lengthCm}
                   onChange={(e) => setLengthCm(Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-mono font-bold"
+                  className={inputClass}
                 />
               </div>
-              <div>
-                <label className="text-slate-400 block mb-1">Ancho (CM)</label>
+              <div><label className="mb-1 block font-semibold text-slate-600 dark:text-slate-300">Ancho (cm)</label>
                 <input
                   type="number"
+                  min="1"
                   value={widthCm}
                   onChange={(e) => setWidthCm(Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-mono font-bold"
+                  className={inputClass}
                 />
               </div>
-              <div>
-                <label className="text-slate-400 block mb-1">Alto (CM)</label>
+              <div><label className="mb-1 block font-semibold text-slate-600 dark:text-slate-300">Alto (cm)</label>
                 <input
                   type="number"
+                  min="1"
                   value={heightCm}
                   onChange={(e) => setHeightCm(Number(e.target.value))}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-mono font-bold"
+                  className={inputClass}
                 />
               </div>
             </div>
 
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">Contenido o categoría del paquete<input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Ej. documentos, ropa, electrónica" className={inputClass} /></label>
+
             {/* COD Toggle Section */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs dark:border-amber-900/50 dark:bg-amber-950/20">
+              <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
                   checked={enableCod}
                   onChange={(e) => setEnableCod(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                  className="mt-0.5 h-4 w-4 cursor-pointer rounded accent-amber-600"
                 />
                 <div>
-                  <span className="font-bold text-slate-900 dark:text-white block">
-                    Cobro Contra Entrega (COD - Cash On Delivery)
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    El conductor cobrará el valor del producto al entregar y se transferirá a tu cuenta.
-                  </span>
+                  <span className="block font-black text-amber-950 dark:text-amber-200">Cobro contra entrega (COD)</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-amber-800/80 dark:text-amber-300/80">El conductor cobrará al entregar. El monto y la comisión quedan registrados en el flujo financiero.</span>
                 </div>
               </label>
 
               {enableCod && (
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-amber-600 dark:text-amber-400">Monto a Cobrar:</span>
+                <label className="w-full text-xs font-bold text-amber-900 dark:text-amber-200 sm:w-auto">Monto a cobrar (DOP)
                   <input
                     type="number"
+                    min="1"
+                    step="0.01"
                     value={codAmount}
                     onChange={(e) => setCodAmount(Number(e.target.value))}
-                    className="w-32 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 rounded-lg p-2 font-mono font-bold text-slate-900 dark:text-white text-xs"
+                    className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-3 py-2.5 font-mono text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-amber-500/15 dark:border-amber-800 dark:bg-slate-900 dark:text-white sm:w-40"
                   />
-                </div>
+                </label>
               )}
             </div>
           </Card>
         </div>
 
         {/* Right 1 Col: Quotation Summary & Confirmation */}
-        <div className="space-y-4">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-md space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <div className="space-y-4 lg:sticky lg:top-2 lg:self-start">
+          <div className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-md dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+            <div className="flex items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
               <Calculator className="w-4 h-4 text-indigo-600" />
-              <span>Desglose de Cotización</span>
-            </h3>
+              <span>Desglose de cotización</span>
+            </h3><p className="mt-1 text-[11px] text-slate-500">Confirmación del motor de tarifas</p></div><DollarSign className="h-5 w-5 text-indigo-200" /></div>
 
-            {quoteLoading && <p className="text-xs text-slate-400">Consultando tarifa real…</p>}
+            {quoteLoading && <div className="space-y-2" aria-live="polite"><div className="h-3 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /><div className="h-3 w-2/3 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /><p className="text-xs text-slate-400">Consultando tarifa real…</p></div>}
             {calculatedQuote && !quoteLoading && (
-              <div className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
-                <div className="flex justify-between">
-                  <span>Tarifa Base ({serviceType}):</span>
-                  <span className="font-mono font-semibold">{formatMoney(calculatedQuote.baseRate)}</span>
-                </div>
-                <div className="flex justify-between">
+              <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex items-start justify-between gap-3"><span>Tarifa base <span className="text-slate-400">({serviceType})</span></span>
+                  <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatMoney(calculatedQuote.baseRate)}</span></div>
+                <div className="flex items-start justify-between gap-3">
                   <span>Peso facturable:</span>
-                  <span className="font-mono font-semibold">{calculatedQuote.billableWeightKg} kg</span>
+                  <span className="font-mono font-semibold text-slate-900 dark:text-white">{calculatedQuote.billableWeightKg} kg</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <span>Peso ({weightKg} kg):</span>
-                  <span className="font-mono font-semibold">{formatMoney(calculatedQuote.weightCost)}</span>
+                  <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatMoney(calculatedQuote.weightCost)}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <span>Seguro / recargos:</span>
-                  <span className="font-mono font-semibold">{formatMoney(Number(calculatedQuote.insuranceCost || 0) + Number(calculatedQuote.fragileSurcharge || 0) + Number(calculatedQuote.dangerousZoneSurcharge || 0))}</span>
+                  <span className="font-mono font-semibold text-slate-900 dark:text-white">{formatMoney(Number(calculatedQuote.insuranceCost || 0) + Number(calculatedQuote.fragileSurcharge || 0) + Number(calculatedQuote.dangerousZoneSurcharge || 0))}</span>
                 </div>
                 {enableCod && (
                   <div className="flex justify-between text-amber-600 dark:text-amber-400 font-semibold">
@@ -385,19 +356,21 @@ export const ShipmentCreator: React.FC = () => {
                   </div>
                 )}
 
-                <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center text-sm">
-                  <span className="font-bold text-slate-900 dark:text-white">Total a Pagar Flete:</span>
-                  <span className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
+                <div className="flex items-end justify-between gap-3 border-t border-slate-200 pt-4 text-sm dark:border-slate-700">
+                  <span className="font-black text-slate-900 dark:text-white">Total del flete</span>
+                  <span className="font-mono text-2xl font-black text-indigo-600 dark:text-indigo-400">
                     {formatMoney(calculatedQuote.total)}
                   </span>
                 </div>
               </div>
             )}
 
+            {!quoteLoading && !calculatedQuote && <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-500 dark:border-slate-700 dark:bg-slate-950">Completa una dirección, peso y dimensiones válidas para obtener una cotización confirmada por el servidor.</div>}
+
             <Button
               variant="primary"
               size="lg"
-              className="w-full font-bold shadow-md"
+              className="w-full font-black shadow-md"
               icon={<CheckCircle2 className="w-4 h-4" />}
               type="submit"
               disabled={submitting || quoteLoading || !calculatedQuote}
