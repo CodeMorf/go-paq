@@ -11,7 +11,7 @@ El despliegue usa Docker Compose en una red privada (`gopaq_private`) con:
 - `redis`: Redis con contraseña, AOF, sin puerto publicado al host.
 - Nginx/aaPanel existente: único punto público para `80` y `443`, con proxy hacia `127.0.0.1:4000`.
 
-La versión actualmente verificada en producción es `d0cdebb`. El vhost de GoPaq se mantiene separado del resto de sitios del VPS; antes de ajustar el límite de solicitud se creó una copia fechada y se validó/recargó únicamente el Nginx que ya atiende `gopaq.lat`. El límite vigente del vhost es `client_max_body_size 4m` para dejar margen al transporte base64 de fotos/POD comprimidas.
+La versión actualmente verificada en producción es `86913c4`. El vhost de GoPaq se mantiene separado del resto de sitios del VPS; antes de ajustar el límite de solicitud se creó una copia fechada y se validó/recargó únicamente el Nginx que ya atiende `gopaq.lat`. El límite vigente del vhost es `client_max_body_size 4m` para dejar margen al transporte base64 de fotos/POD comprimidas.
 
 PostgreSQL es la fuente persistente de verdad. Redis se usa para colas, locks, rate limiting y realtime; no contiene el estado definitivo de envíos, POD, COD o pagos.
 
@@ -32,6 +32,7 @@ Variables críticas: `DATABASE_URL` (generada por Compose), `REDIS_URL` (generad
 No se registran contraseñas, tokens JWT completos ni secretos de proveedores.
 
 La credencial de navegador de Google Maps se configura desde `/super-admin/configuracion`, no se compila dentro de Vite ni se guarda en Git. Se almacena cifrada en `organization_integration_credentials` con el protector de `WEBHOOK_ENCRYPTION_KEY`; el panel solo muestra una pista enmascarada. El endpoint público `/api/v1/configuration/maps` entrega esa clave únicamente al mapa público del tenant configurado, por lo que la clave debe tener restricciones HTTP referrer para `https://gopaq.lat/*` y solo las APIs necesarias. Si no existe una clave guardada, el estado correcto es `NO CONFIGURADO`.
+La migración `014_normalize_geography_active` corrige instalaciones históricas que tenían `countries.active`, `provinces.active` y `service_zones.active` como booleanos. Quita el default booleano, convierte los valores a `INTEGER 0/1` y repone el default `1` dentro de la misma transacción; en una base nueva es un no-op seguro.
 Las coordenadas se administran en la misma sección de configuración mediante `PATCH /api/v1/branches/:id/location`, protegido para `SUPER_ADMIN`, `OWNER` y `ADMIN`, con auditoría y outbox. Latitud y longitud deben ser verificadas por el administrador; el sistema no convierte direcciones genéricas en pins ni inventa ubicaciones. En PostgreSQL el endpoint sincroniza además `branches.location` como `geography(Point, 4326)`.
 
 El registro público de clientes consulta `/api/v1/branches/public`, exige que el cliente seleccione una sucursal activa y persiste esa relación en `users.branch_id` y `clients.branch_id`. El mapa ordena por distancia únicamente cuando el dispositivo concede geolocalización y la sucursal tiene coordenadas verificadas; sin clave o coordenadas muestra el estado real y mantiene la selección manual.

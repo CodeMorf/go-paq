@@ -1,6 +1,6 @@
 # Checklist de producción GoPaq
 
-Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. La verificación del release `d0cdebb` se ejecutó desde `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
+Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. La verificación del release `86913c4` se ejecutó desde `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
 
 ## Código, seguridad y CI local
 
@@ -14,6 +14,7 @@
 - [x] Idempotencia para creación de envíos, POD, COD, escaneos, prealertas y operaciones de integración.
 - [x] Entrega/POD + tracking + COD + outbox en transacción atómica.
 - [x] Migraciones explícitas con historial y advisory lock; PostGIS se valida durante readiness.
+- [x] Migración `014_normalize_geography_active`: normaliza instalaciones antiguas con `active BOOLEAN` a `INTEGER 0/1`, incluyendo defaults, dentro de la transacción de migraciones.
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
@@ -32,7 +33,7 @@
 ## VPS y despliegue verificados
 
 - [x] Rama desplegada: `Morf/production-hardening`.
-- [x] Release desplegado: `d0cdebb` (`fix(security): await redis readiness before rate limiting`), sobre `Morf/production-hardening`, con las correcciones de consistencia de runtime, idempotencia de caja/despacho, pricing especializado, clientes en matriz tarifaria y seguridad incorporadas.
+- [x] Release desplegado: `86913c4` (`fix(db): handle legacy geography defaults`), sobre `Morf/production-hardening`, con la normalización geográfica, CORS seguro, consistencia de runtime, idempotencia de caja/despacho, pricing especializado, clientes en matriz tarifaria, cierre ordenado y readiness sanitizada incorporadas.
 - [x] Ubuntu 26.04 LTS; 4 vCPU; 7.8 GiB RAM; aproximadamente 109 GiB libres en el volumen raíz al auditar.
 - [x] Docker Engine y Compose activos; servicios con `restart: unless-stopped`.
 - [x] PostgreSQL 18.6 verificado desde la base en ejecución.
@@ -58,6 +59,7 @@
 - [ ] Coordenadas de sucursales: falta confirmar y guardar desde `/super-admin/configuracion` la ubicación exacta de cada sucursal productiva; sin coordenadas el mapa permanece sin pines y no calcula cercanía.
 - [x] Cliente: cotización backend, creación de shipment, persistencia e historial de tracking.
 - [x] Catálogo público: `/api/v1/geography?country=DO` entrega 32 provincias y 3 zonas por provincia desde PostgreSQL.
+- [x] Migración geográfica validada en producción: las tres columnas `active` antiguas eran booleanas y quedaron normalizadas a enteros; una base PostgreSQL vacía ejecuta migraciones → bootstrap → seed dominicano y produce 32 provincias/96 zonas.
 - [x] Cotizador público: `/api/v1/quotes` aplica `RD-NACIONAL-LB-60`; simulación administrativa valida 1,252 DOP de subtotal a 60 lb y rechaza 28 kg por sobrepasar el límite.
 - [x] Sucursal: recepción/escaneo idempotente e inventario persistido.
 - [x] Dispatcher: creación, asignación y despacho de ruta; Witylogix reporta `provider_unavailable` cuando no hay credenciales.
@@ -68,9 +70,11 @@
 - [x] Reinicio de API/worker y Redis: readiness recuperado y datos persistentes conservados en PostgreSQL.
 - [x] Control post-reinicio: Redis quedó `healthy`, API `healthy`, worker `running`; los conteos de organizaciones, usuarios, sucursales, tarifas y migraciones permanecieron iguales.
 - [x] Rate limiting público verificado con headers `RateLimit` y claves reales bajo `gopaq:ratelimit:*` en Redis; los logs recientes de API y worker no registraron errores críticos.
+- [x] CORS: `https://gopaq.lat` conserva el encabezado permitido; un origen externo recibe respuesta normal sin `Access-Control-Allow-Origin` y no provoca HTTP 500.
 - [x] Carrera de arranque reproducida después de reiniciar API: 24 solicitudes concurrentes respondieron sin error del store, Redis registró las claves y el contenedor terminó `healthy`.
 - [x] Aceptación operativa en `org-demo`: quote → shipment → tracking → recepción → ruta/despacho → manifiesto Driver → POD → tracking entregado; mudanza y carga pesada también completaron cotización, orden, despacho, POD y tracking. El tenant fue reseteado y sembrado después de la prueba.
 - [x] Backup y restore posteriores al release: dump PostgreSQL creado con modo `0600` y restaurado en base temporal con 2 organizaciones; la base temporal fue eliminada automáticamente.
+- [x] CI `33703205510` verde para `86913c4`: checks, 66 pruebas API, build, E2E desktop/móvil, auditoría, migraciones, bootstrap, seed geográfico y smoke Docker.
 
 ## Pendientes reales antes de ampliar tráfico
 
