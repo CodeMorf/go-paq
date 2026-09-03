@@ -63,6 +63,15 @@ jobs:
         run: docker compose --env-file .env.production build
       - name: Start PostgreSQL and Redis
         run: docker compose --env-file .env.production up -d postgres redis
+      - name: Wait for data services
+        run: |
+          for attempt in $(seq 1 60); do
+            postgres_health=$(docker inspect --format='{{.State.Health.Status}}' gopaq-postgres 2>/dev/null || true)
+            redis_health=$(docker inspect --format='{{.State.Health.Status}}' gopaq-redis 2>/dev/null || true)
+            if [ "$postgres_health" = healthy ] && [ "$redis_health" = healthy ]; then break; fi
+            if [ "$attempt" = 60 ]; then docker compose --env-file .env.production ps; exit 1; fi
+            sleep 2
+          done
       - name: Apply migrations
         run: |
           docker compose --env-file .env.production run --rm --no-deps gopaq-migrate
