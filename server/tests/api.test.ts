@@ -6,7 +6,7 @@ import { execute, queryOne, queryOneAsync, queryAllAsync, executeAsync, transact
 import { KarrioAdapter } from '../integrations/karrio/karrio.adapter';
 import { GoPaqRoutingEngine } from '../modules/routing/routing.engine';
 
-async function runComprehensiveTestSuite() {
+  async function runComprehensiveTestSuite() {
   console.log('🧪 Starting GoPaq Core Real HTTP & Security Test Suite...\n');
 
   // Seed DB
@@ -27,6 +27,31 @@ async function runComprehensiveTestSuite() {
       failed++;
     }
   }
+
+  // Infrastructure contracts: liveness is process-only, readiness checks
+  // dependencies, and every response can be correlated without exposing data.
+  const infrastructureHealthRes = await request(app)
+    .get('/api/health')
+    .set('x-request-id', 'test-health-request-01');
+  assert(infrastructureHealthRes.status === 200 && infrastructureHealthRes.body.status === 'ok' && infrastructureHealthRes.headers['x-request-id'] === 'test-health-request-01', 'OBSERVABILITY: health returns 200 with the caller correlation id');
+
+  const livezRes = await request(app).get('/api/livez');
+  assert(livezRes.status === 200 && livezRes.body.status === 'ok', 'OPERATIONS: /api/livez confirms the process is alive');
+
+  const readyzRes = await request(app).get('/api/readyz');
+  assert(readyzRes.status === 200 && readyzRes.body.status === 'ready' && readyzRes.body.database && readyzRes.body.redis, 'OPERATIONS: /api/readyz confirms database, Redis and migrations');
+
+  const configuredOrigin = (process.env.CORS_ORIGINS || 'http://localhost:3000').split(',')[0].trim();
+  const allowedCorsRes = await request(app).get('/api/health').set('Origin', configuredOrigin);
+  assert(allowedCorsRes.headers['access-control-allow-origin'] === configuredOrigin, 'SECURITY: configured CORS origin is explicitly allowed');
+  const blockedCorsRes = await request(app).get('/api/health').set('Origin', 'https://origin-not-allowed.example');
+  assert(!blockedCorsRes.headers['access-control-allow-origin'], 'SECURITY: untrusted CORS origin does not receive an allow-origin header');
+
+  const resetAttempts = [];
+  for (let attempt = 0; attempt < 6; attempt++) {
+    resetAttempts.push(await request(app).post('/api/v1/auth/password/forgot').send({ email: `unknown-reset-${Date.now()}-${attempt}@example.com` }));
+  }
+  assert(resetAttempts.slice(0, 5).every((response) => response.status === 202) && resetAttempts[5].status === 429, 'SECURITY: password recovery is limited to five requests per window');
 
   // 1. Auth: Valid Login
   const loginRes = await request(app)

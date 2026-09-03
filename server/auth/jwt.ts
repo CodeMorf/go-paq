@@ -4,12 +4,24 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is missing in production mode.');
+const configuredJwtSecret = process.env.JWT_SECRET?.trim();
+const forbiddenSecrets = new Set([
+  'changeme',
+  'secret',
+  'replace_with_a_random_secret_min_32_chars',
+  'local-development-only-gopaq-secret'
+]);
+
+function isSecureProductionSecret(value: string | undefined): value is string {
+  return Boolean(value && value.length >= 32 && !forbiddenSecrets.has(value.toLowerCase()));
+}
+
+if (process.env.NODE_ENV === 'production' && !isSecureProductionSecret(configuredJwtSecret)) {
+  console.error('FATAL: JWT_SECRET debe ser un secreto de producción de al menos 32 caracteres y no puede ser un valor predeterminado.');
   process.exit(1);
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'local-development-only-gopaq-secret');
+const JWT_SECRET = configuredJwtSecret || (process.env.NODE_ENV === 'production' ? '' : 'local-development-only-gopaq-secret');
 const JWT_EXPIRES_IN = (process.env.JWT_ACCESS_TTL || '15m') as SignOptions['expiresIn'];
 
 export interface TokenPayload {

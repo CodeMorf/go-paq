@@ -23,7 +23,7 @@ import { integrationsRouter } from '../api/v1/integrations.routes';
 import { configurationRouter } from '../api/v1/configuration.routes';
 import { dangerousZonesRouter, ratesRouter } from '../api/v1/masterData.routes';
 import { geographyRouter } from '../api/v1/geography.routes';
-import { requestId, publicError } from './http';
+import { asyncHandler, requestId, publicError } from './http';
 import { checkDatabase, isPostgres, queryOneAsync } from '../db/database';
 import Redis from 'ioredis';
 import { RedisRateLimitStore } from './redisRateLimit';
@@ -33,14 +33,16 @@ app.set('trust proxy', 1);
 
 const useRedisRateLimit = process.env.NODE_ENV === 'production' && !!process.env.REDIS_URL;
 const authRedisStore = useRedisRateLimit ? new RedisRateLimitStore('gopaq:ratelimit:auth') : undefined;
+const forgotPasswordRedisStore = useRedisRateLimit ? new RedisRateLimitStore('gopaq:ratelimit:password-reset') : undefined;
 const publicRedisStore = useRedisRateLimit ? new RedisRateLimitStore('gopaq:ratelimit:public') : undefined;
 const authRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: 'draft-7', legacyHeaders: false, store: authRedisStore, passOnStoreError: false, message: { success: false, error: 'Demasiados intentos. Espera unos minutos antes de volver a intentar.' } });
+const forgotPasswordRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false, store: forgotPasswordRedisStore, passOnStoreError: false, message: { success: false, error: 'Demasiadas solicitudes de recuperación. Espera unos minutos antes de volver a intentar.' } });
 const publicRateLimit = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, store: publicRedisStore, passOnStoreError: true, message: { success: false, error: 'Límite temporal alcanzado. Intenta nuevamente en unos segundos.' } });
 
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001').split(',').map((o) => o.trim());
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*') || process.env.NODE_ENV !== 'production') callback(null, true);
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
     // An untrusted origin must not turn into a 500. CORS should simply omit
     // the allow-origin header so the browser blocks the caller without
     // converting a normal API response into an application error.
@@ -75,7 +77,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'GoPaq Core Logistics API', version: process.env.GOPAQ_VERSION || '2.0.0', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/ready', async (_req, res) => {
+app.get('/api/livez', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+const readinessHandler = async (_req: express.Request, res: express.Response) => {
   const database = await checkDatabase();
   let redis = { ok: process.env.NODE_ENV !== 'production' && !process.env.REDIS_URL, configured: !!process.env.REDIS_URL, error: undefined as string | undefined };
   if (process.env.REDIS_URL) {
@@ -108,11 +114,18 @@ app.get('/api/ready', async (_req, res) => {
     ...((process.env.NODE_ENV !== 'production' && redis.error) ? { error: redis.error } : {})
   };
   return res.status(ready ? 200 : 503).json({ success: ready, status: ready ? 'ready' : 'not_ready', database: safeDatabase, redis: safeRedis, migrations: migrationsReady });
-});
+};
+
+app.get(['/api/ready', '/api/readyz'], asyncHandler(readinessHandler));
 
 const apiV1 = express.Router();
 apiV1.use(publicRateLimit);
-apiV1.use('/auth', authRateLimit);
+apiV1.use('/auth/login', authRateLimit);
+apiV1.use('/auth/register', authRateLimit);
+apiV1.use('/auth/demo', authRateLimit);
+apiV1.use('/auth/refresh', authRateLimit);
+apiV1.use('/auth/password/reset', authRateLimit);
+apiV1.use('/auth/password/forgot', forgotPasswordRateLimit);
 apiV1.use('/auth', authRouter);
 apiV1.use('/shipments', shipmentsRouter);
 apiV1.use('/quotes', quotesRouter);
@@ -148,6 +161,9 @@ if (fs.existsSync(indexFile)) {
 }
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[API Error]:', err instanceof Error ? err.message : 'unknown_error');
+  console.error('[API Error]', {
+    requestId: res.locals.requestId,
+    message: err instanceof Error ? err.message : 'unknown_error'
+  });
   res.status(err?.statusCode && Number.isInteger(err.statusCode) ? err.statusCode : 500).json({ success: false, error: publicError(err) });
 });
