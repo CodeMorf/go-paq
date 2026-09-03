@@ -77,16 +77,16 @@ async function main() {
   await transactionAsync(async (tx) => {
     await tx.execute(`
       INSERT INTO countries (id, iso2, iso3, name, official_name, active, created_at, updated_at)
-      VALUES ('country-do', 'DO', 'DOM', 'República Dominicana', 'República Dominicana', TRUE, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET iso2 = EXCLUDED.iso2, iso3 = EXCLUDED.iso3, name = EXCLUDED.name, official_name = EXCLUDED.official_name, active = TRUE, updated_at = EXCLUDED.updated_at
+      VALUES ('country-do', 'DO', 'DOM', 'República Dominicana', 'República Dominicana', 1, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET iso2 = EXCLUDED.iso2, iso3 = EXCLUDED.iso3, name = EXCLUDED.name, official_name = EXCLUDED.official_name, active = 1, updated_at = EXCLUDED.updated_at
     `, [now, now]);
 
     for (const province of provinces) {
       const provinceId = `province-do-${province.code.toLowerCase()}`;
       await tx.execute(`
         INSERT INTO provinces (id, country_id, code, name, capital, active, created_at, updated_at)
-        VALUES (?, 'country-do', ?, ?, ?, TRUE, ?, ?)
-        ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, capital = EXCLUDED.capital, active = TRUE, updated_at = EXCLUDED.updated_at
+        VALUES (?, 'country-do', ?, ?, ?, 1, ?, ?)
+        ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, capital = EXCLUDED.capital, active = 1, updated_at = EXCLUDED.updated_at
       `, [provinceId, province.code, province.name, province.capital, now, now]);
 
       for (const zone of zoneLabels) {
@@ -94,8 +94,8 @@ async function main() {
         const zoneCode = `DO-${province.code}-${zone.number}`;
         await tx.execute(`
           INSERT INTO service_zones (id, province_id, code, name, zone_number, description, active, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?)
-          ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, zone_number = EXCLUDED.zone_number, description = EXCLUDED.description, active = TRUE, updated_at = EXCLUDED.updated_at
+          VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+          ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, zone_number = EXCLUDED.zone_number, description = EXCLUDED.description, active = 1, updated_at = EXCLUDED.updated_at
         `, [zoneId, provinceId, zoneCode, zone.name, zone.number, zone.description, now, now]);
       }
     }
@@ -143,9 +143,9 @@ async function main() {
     }
   });
 
-  const country = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM countries WHERE iso2 = 'DO' AND active = TRUE`);
-  const provinceCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM provinces WHERE country_id = 'country-do' AND active = TRUE`);
-  const zoneCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM service_zones z JOIN provinces p ON p.id = z.province_id WHERE p.country_id = 'country-do' AND z.active = TRUE`);
+  const country = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM countries WHERE iso2 = 'DO' AND active = 1`);
+  const provinceCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM provinces WHERE country_id = 'country-do' AND active = 1`);
+  const zoneCount = await queryOneAsync<{ count: string }>(`SELECT COUNT(*)::text AS count FROM service_zones z JOIN provinces p ON p.id = z.province_id WHERE p.country_id = 'country-do' AND z.active = 1`);
   const configuredRate = await queryOneAsync<{ id: string }>(`SELECT id FROM rates_matrix WHERE organization_id = ? AND rule_code = ? AND active = 1`, [organizationId, nationalPoundRate.ruleCode]);
   console.log(JSON.stringify({
     success: true,
