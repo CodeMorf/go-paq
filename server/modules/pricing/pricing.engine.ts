@@ -17,6 +17,7 @@ export interface QuoteInput {
   clientId?: string;
   branchId?: string;
   serviceVariant?: string;
+  extraCharges?: Record<string, number>;
 }
 
 export interface QuoteResult {
@@ -38,6 +39,39 @@ export interface QuoteResult {
   ruleCode?: string;
 }
 
+export async function getPricingRate(input: Pick<QuoteInput, 'serviceType' | 'originCity' | 'destCity' | 'clientId' | 'branchId' | 'serviceVariant'>, organizationId: string = 'org-gopaq') {
+  let rate = await queryOneAsync<any>(`
+    SELECT * FROM rates_matrix
+    WHERE organization_id = ? AND service_type = ?
+    AND active = 1
+    AND (origin_zone = '*' OR lower(origin_zone) = lower(?))
+    AND (dest_zone = '*' OR lower(dest_zone) = lower(?))
+    AND (client_id IS NULL OR client_id = ?)
+    AND (branch_id IS NULL OR branch_id = ?)
+    AND (service_variant IS NULL OR service_variant = ?)
+    ORDER BY priority ASC, CASE WHEN client_id IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN branch_id IS NOT NULL THEN 0 ELSE 1 END, created_at DESC
+    LIMIT 1
+  `, [organizationId, input.serviceType, input.originCity || '*', input.destCity || '*', input.clientId || null, input.branchId || null, input.serviceVariant || null]);
+  // Legacy matrices may use internal zone codes while quotes receive city names.
+  if (!rate) rate = await queryOneAsync<any>(`SELECT * FROM rates_matrix WHERE organization_id = ? AND service_type = ? AND active = 1 AND (client_id IS NULL OR client_id = ?) AND (branch_id IS NULL OR branch_id = ?) AND (service_variant IS NULL OR service_variant = ?) ORDER BY priority ASC, created_at DESC LIMIT 1`, [organizationId, input.serviceType, input.clientId || null, input.branchId || null, input.serviceVariant || null]);
+  if (!rate) throw Object.assign(new Error('La tarifa de este servicio no está configurada.'), { statusCode: 503 });
+  return rate;
+}
+
+export function getConfiguredUnitRate(rate: any, aliases: string[]): number {
+  try {
+    const surcharges = JSON.parse(rate?.surcharges_json || '{}') as Record<string, { type?: string; value?: number }>;
+    const normalizedAliases = aliases.map((alias) => alias.toLowerCase().trim().replace(/[\s-]+/g, '_'));
+    const entry = Object.entries(surcharges).find(([name, rule]) => {
+      const normalizedName = name.toLowerCase().trim().replace(/[\s-]+/g, '_');
+      return normalizedAliases.includes(normalizedName) && ['fixed', 'unit'].includes(String(rule?.type || 'fixed'));
+    });
+    return entry ? Math.max(0, Number(entry[1]?.value || 0)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function calculatePricing(input: QuoteInput, organizationId: string = 'org-gopaq'): Promise<QuoteResult> {
   await assertServiceEnabled(organizationId, input.serviceType);
   const configuration = await getOrganizationConfiguration(organizationId);
@@ -53,24 +87,7 @@ export async function calculatePricing(input: QuoteInput, organizationId: string
   const volWeight = (input.lengthCm * input.widthCm * input.heightCm) / 5000;
   const billableWeight = Math.max(input.weightKg, volWeight);
 
-  // Fetch rate matrix from DB
-  let rate = await queryOneAsync<any>(`
-    SELECT * FROM rates_matrix 
-    WHERE organization_id = ? AND service_type = ?
-    AND active = 1
-    AND (origin_zone = '*' OR lower(origin_zone) = lower(?))
-    AND (dest_zone = '*' OR lower(dest_zone) = lower(?))
-    AND (client_id IS NULL OR client_id = ?)
-    AND (branch_id IS NULL OR branch_id = ?)
-    AND (service_variant IS NULL OR service_variant = ?)
-    ORDER BY priority ASC, CASE WHEN client_id IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN branch_id IS NOT NULL THEN 0 ELSE 1 END, created_at DESC
-    LIMIT 1
-  `, [organizationId, input.serviceType, input.originCity || '*', input.destCity || '*', input.clientId || null, input.branchId || null, input.serviceVariant || null]);
-  // Legacy matrices may use internal zone codes while quotes receive city
-  // names. A service-level rule is the safe fallback; it remains tenant
-  // scoped and ordered by the configured priority.
-  if (!rate) rate = await queryOneAsync<any>(`SELECT * FROM rates_matrix WHERE organization_id = ? AND service_type = ? AND active = 1 AND (client_id IS NULL OR client_id = ?) AND (branch_id IS NULL OR branch_id = ?) AND (service_variant IS NULL OR service_variant = ?) ORDER BY priority ASC, created_at DESC LIMIT 1`, [organizationId, input.serviceType, input.clientId || null, input.branchId || null, input.serviceVariant || null]);
-  if (!rate) throw Object.assign(new Error('La tarifa de este servicio no está configurada.'), { statusCode: 503 });
+  const rate = await getPricingRate(input, organizationId);
 
   const pricingMode = String(rate.pricing_mode || 'base_plus_weight');
   const billingWeight = String(rate.weight_unit || 'kg') === 'lb' ? billableWeight * 2.2046226218 : billableWeight;
@@ -115,12 +132,12 @@ export async function calculatePricing(input: QuoteInput, organizationId: string
     codFee = Math.max(50, Math.round(input.codAmount * (Number(finance.codCommissionRate ?? 2) / 100)));
   }
 
-  let configurableSurcharge = 0;
+  let configurableSurcharge = Object.values(input.extraCharges || {}).reduce((total, value) => total + Math.max(0, Number(value || 0)), 0);
   try {
     const surcharges = JSON.parse(rate.surcharges_json || '{}') as Record<string, { type: 'fixed' | 'percent' | 'unit'; value: number }>;
     const surchargeBase = base + weightCost + distanceCost + fragileSurcharge + insuranceCost + dangerousZoneSurcharge + codFee;
-    configurableSurcharge = Object.values(surcharges).reduce((total, rule) => total + (rule.type === 'percent' ? surchargeBase * Number(rule.value || 0) / 100 : Number(rule.value || 0)), 0);
-  } catch { configurableSurcharge = 0; }
+    configurableSurcharge += Object.values(surcharges).reduce((total, rule) => total + (rule.type === 'percent' ? surchargeBase * Number(rule.value || 0) / 100 : Number(rule.value || 0)), 0);
+  } catch { /* malformed optional surcharge configuration does not erase explicit extra charges */ }
   const subtotal = Math.max(Number(rate.min_charge || 0), base + weightCost + distanceCost + fragileSurcharge + insuranceCost + dangerousZoneSurcharge + codFee + configurableSurcharge);
   const tax = Math.round(subtotal * (taxRate / 100) * 100) / 100;
   const total = subtotal + tax;

@@ -7,6 +7,7 @@ import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '.
 import { AuthArea, ROLE_GROUPS, normalizeRole } from '../../auth/roles';
 import { writeAuditLog } from '../../auth/audit';
 import { asyncHandler } from '../../core/http';
+import { getPublicOrganizationId } from '../../core/publicTenant';
 
 export const authRouter = Router();
 
@@ -220,7 +221,7 @@ authRouter.post('/register', asyncHandler(async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, error: 'Datos de registro inválidos.' });
 
-  const publicOrgId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const publicOrgId = getPublicOrganizationId();
   const org = await queryOneAsync<{ id: string; name: string; slug: string }>('SELECT id, name, slug FROM organizations WHERE id = ? AND active = 1 AND id <> \'org-demo\'', [publicOrgId]);
   if (!org) return res.status(503).json({ success: false, error: 'Registro público no configurado.' });
 

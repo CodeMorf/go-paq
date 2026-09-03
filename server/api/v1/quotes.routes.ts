@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { calculatePricing } from '../../modules/pricing/pricing.engine';
 import { KarrioAdapter } from '../../integrations/karrio/karrio.adapter';
 import { asyncHandler } from '../../core/http';
+import { getPublicOrganizationId } from '../../core/publicTenant';
 
 export const quotesRouter = Router();
 
@@ -82,7 +83,7 @@ quotesRouter.post('/', asyncHandler(async (req, res) => {
     clientId,
     branchId,
     serviceVariant
-  }, process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq');
+  }, getPublicOrganizationId());
 
   const needsCarrierRates = serviceType === 'internacional' || String(originCountry).toUpperCase() !== String(destinationCountry).toUpperCase();
   if (!needsCarrierRates) return res.json({ success: true, quote, carrierRates: null });

@@ -30,16 +30,17 @@ services:
     container_name: gopaq-karrio-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${KARRIO_DATABASE_NAME:-karrio}
-      POSTGRES_USER: ${KARRIO_DATABASE_USERNAME:-karrio}
-      POSTGRES_PASSWORD: ${KARRIO_DATABASE_PASSWORD:-karrio_change_me}
+      POSTGRES_DB: ${KARRIO_DATABASE_NAME:?KARRIO_DATABASE_NAME is required}
+      POSTGRES_USER: ${KARRIO_DATABASE_USERNAME:?KARRIO_DATABASE_USERNAME is required}
+      POSTGRES_PASSWORD: ${KARRIO_DATABASE_PASSWORD:?KARRIO_DATABASE_PASSWORD is required}
     volumes:
       - karrio_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${KARRIO_DATABASE_USERNAME:-karrio} -d ${KARRIO_DATABASE_NAME:-karrio}"]
+      test: ["CMD-SHELL", "pg_isready -U ${KARRIO_DATABASE_USERNAME:?KARRIO_DATABASE_USERNAME is required} -d ${KARRIO_DATABASE_NAME:?KARRIO_DATABASE_NAME is required}"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks: [gopaq_private]
 
   karrio-redis:
     image: redis:7-alpine
@@ -52,13 +53,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks: [gopaq_private]
 
   karrio-api:
     image: karrio.docker.scarf.sh/karrio/server:${KARRIO_TAG:-2026.1.32}
     container_name: gopaq-karrio-api
     restart: unless-stopped
-    ports:
-      - "${KARRIO_HTTP_PORT:-5002}:5002"
     depends_on:
       karrio-db:
         condition: service_healthy
@@ -67,15 +67,15 @@ services:
     environment:
       DEBUG_MODE: "False"
       DETACHED_WORKER: "True"
-      SECRET_KEY: ${KARRIO_SECRET_KEY:-change-this-karrio-secret}
+      SECRET_KEY: ${KARRIO_SECRET_KEY:?KARRIO_SECRET_KEY is required}
       REDIS_HOST: karrio-redis
       REDIS_PORT: 6379
       DATABASE_HOST: karrio-db
       DATABASE_PORT: 5432
-      DATABASE_NAME: ${KARRIO_DATABASE_NAME:-karrio}
+      DATABASE_NAME: ${KARRIO_DATABASE_NAME:?KARRIO_DATABASE_NAME is required}
       DATABASE_ENGINE: postgresql_psycopg2
-      DATABASE_USERNAME: ${KARRIO_DATABASE_USERNAME:-karrio}
-      DATABASE_PASSWORD: ${KARRIO_DATABASE_PASSWORD:-karrio_change_me}
+      DATABASE_USERNAME: ${KARRIO_DATABASE_USERNAME:?KARRIO_DATABASE_USERNAME is required}
+      DATABASE_PASSWORD: ${KARRIO_DATABASE_PASSWORD:?KARRIO_DATABASE_PASSWORD is required}
       KARRIO_HTTP_PORT: 5002
       ENABLE_ALL_PLUGINS_BY_DEFAULT: "True"
     healthcheck:
@@ -84,6 +84,7 @@ services:
       timeout: 10s
       retries: 8
       start_period: 60s
+    networks: [gopaq_private]
 
   karrio-worker:
     image: karrio.docker.scarf.sh/karrio/server:${KARRIO_TAG:-2026.1.32}
@@ -98,28 +99,30 @@ services:
       REDIS_PORT: 6379
       DATABASE_HOST: karrio-db
       DATABASE_PORT: 5432
-      DATABASE_NAME: ${KARRIO_DATABASE_NAME:-karrio}
+      DATABASE_NAME: ${KARRIO_DATABASE_NAME:?KARRIO_DATABASE_NAME is required}
       DATABASE_ENGINE: postgresql_psycopg2
-      DATABASE_USERNAME: ${KARRIO_DATABASE_USERNAME:-karrio}
-      DATABASE_PASSWORD: ${KARRIO_DATABASE_PASSWORD:-karrio_change_me}
+      DATABASE_USERNAME: ${KARRIO_DATABASE_USERNAME:?KARRIO_DATABASE_USERNAME is required}
+      DATABASE_PASSWORD: ${KARRIO_DATABASE_PASSWORD:?KARRIO_DATABASE_PASSWORD is required}
       ENABLE_ALL_PLUGINS_BY_DEFAULT: "True"
     command: "/bin/bash ./worker"
+    networks: [gopaq_private]
 
   witylogix-db:
     image: postgis/postgis:16-3.4-alpine
     container_name: gopaq-witylogix-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${WITYLOGIX_POSTGRES_USER:-witylogix}
-      POSTGRES_PASSWORD: ${WITYLOGIX_POSTGRES_PASSWORD:-witylogix_change_me}
-      POSTGRES_DB: ${WITYLOGIX_POSTGRES_DB:-witylogix}
+      POSTGRES_USER: ${WITYLOGIX_POSTGRES_USER:?WITYLOGIX_POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${WITYLOGIX_POSTGRES_PASSWORD:?WITYLOGIX_POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${WITYLOGIX_POSTGRES_DB:?WITYLOGIX_POSTGRES_DB is required}
     volumes:
       - witylogix_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${WITYLOGIX_POSTGRES_USER:-witylogix} -d ${WITYLOGIX_POSTGRES_DB:-witylogix}"]
+      test: ["CMD-SHELL", "pg_isready -U ${WITYLOGIX_POSTGRES_USER:?WITYLOGIX_POSTGRES_USER is required} -d ${WITYLOGIX_POSTGRES_DB:?WITYLOGIX_POSTGRES_DB is required}"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks: [gopaq_private]
 
   witylogix-redis:
     image: redis:7-alpine
@@ -133,6 +136,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks: [gopaq_private]
 
   witylogix-migrate:
     build:
@@ -145,8 +149,9 @@ services:
       witylogix-db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${WITYLOGIX_POSTGRES_USER:-witylogix}:${WITYLOGIX_POSTGRES_PASSWORD:-witylogix_change_me}@witylogix-db:5432/${WITYLOGIX_POSTGRES_DB:-witylogix}
+      DATABASE_URL: postgresql://${WITYLOGIX_POSTGRES_USER:?WITYLOGIX_POSTGRES_USER is required}:${WITYLOGIX_POSTGRES_PASSWORD:?WITYLOGIX_POSTGRES_PASSWORD is required}@witylogix-db:5432/${WITYLOGIX_POSTGRES_DB:?WITYLOGIX_POSTGRES_DB is required}
     command: ["pnpm", "--filter", "@witylogix/db", "db:migrate:deploy"]
+    networks: [gopaq_private]
 
   witylogix-api:
     build:
@@ -154,8 +159,6 @@ services:
       dockerfile: infra/docker/Dockerfile.api
     container_name: gopaq-witylogix-api
     restart: unless-stopped
-    ports:
-      - "${WITYLOGIX_API_PORT:-3001}:3001"
     depends_on:
       witylogix-migrate:
         condition: service_completed_successfully
@@ -165,9 +168,9 @@ services:
       NODE_ENV: production
       PORT: 3001
       LOG_LEVEL: ${WITYLOGIX_LOG_LEVEL:-info}
-      DATABASE_URL: postgresql://${WITYLOGIX_POSTGRES_USER:-witylogix}:${WITYLOGIX_POSTGRES_PASSWORD:-witylogix_change_me}@witylogix-db:5432/${WITYLOGIX_POSTGRES_DB:-witylogix}
+      DATABASE_URL: postgresql://${WITYLOGIX_POSTGRES_USER:?WITYLOGIX_POSTGRES_USER is required}:${WITYLOGIX_POSTGRES_PASSWORD:?WITYLOGIX_POSTGRES_PASSWORD is required}@witylogix-db:5432/${WITYLOGIX_POSTGRES_DB:?WITYLOGIX_POSTGRES_DB is required}
       REDIS_URL: redis://witylogix-redis:6379
-      JWT_SECRET: ${WITYLOGIX_JWT_SECRET:-change-this-witylogix-jwt-secret}
+      JWT_SECRET: ${WITYLOGIX_JWT_SECRET:?WITYLOGIX_JWT_SECRET is required}
       MAPBOX_ACCESS_TOKEN: ${WITYLOGIX_MAPBOX_ACCESS_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
@@ -175,6 +178,7 @@ services:
       timeout: 5s
       retries: 8
       start_period: 60s
+    networks: [gopaq_private]
 
 volumes:
   karrio_postgres_data:

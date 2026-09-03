@@ -40,4 +40,4 @@ The frontend checks `/api/v1/auth/me` before rendering protected areas and redir
 
 ## Database note
 
-GoPaq Core currently defaults to persistent SQLite in the production compose because several legacy API handlers are synchronous. The included asynchronous PostgreSQL adapter remains available for the staged migration. Karrio and Witylogix themselves run on PostgreSQL/PostGIS in the OSS stack.
+GoPaq Core uses PostgreSQL/PostGIS in the production compose. SQLite remains available only for local development and tests. Karrio and Witylogix run as independent PostgreSQL-backed services in the optional OSS stack, and their HTTP ports stay inside the private Docker network.

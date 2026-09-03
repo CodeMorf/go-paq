@@ -6,6 +6,8 @@ import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/mid
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
 import { assertServiceEnabled } from '../../modules/configuration/configuration.service';
+import { calculatePricing, getConfiguredUnitRate, getPricingRate } from '../../modules/pricing/pricing.engine';
+import { getPublicOrganizationId } from '../../core/publicTenant';
 
 export const movingRouter = Router();
 
@@ -45,21 +47,21 @@ const orderSchema = z.object({
   notes: z.string().trim().max(1000).optional()
 });
 
-function calculateMovingQuote(input: z.infer<typeof quoteSchema>) {
-  const baseRate = 4500;
-  const volumeCost = input.volumeM3 * 450;
-  const floorFee = !input.hasElevator && input.floors > 1 ? (input.floors - 1) * 600 : 0;
-  const crewCost = input.crewCount * 1200;
-  const distanceCost = input.distanceKm * 85;
-  const total = baseRate + volumeCost + floorFee + crewCost + distanceCost;
-  return { baseRate, volumeCost, floorFee, crewCost, distanceCost, total, currency: 'DOP', recommendedVehicle: input.volumeM3 > 25 ? 'Camión 5 Toneladas' : 'Camión 3.5 Toneladas' };
+async function calculateMovingQuote(input: z.infer<typeof quoteSchema>, organizationId: string) {
+  const rate = await getPricingRate({ serviceType: 'mudanza', originCity: '*', destCity: '*' }, organizationId);
+  const volumeCost = input.volumeM3 * Math.max(0, Number(rate.per_vol_rate || 0));
+  const floorFee = !input.hasElevator && input.floors > 1 ? (input.floors - 1) * getConfiguredUnitRate(rate, ['floor_no_elevator', 'floor', 'piso_sin_ascensor', 'piso_sin_elevador']) : 0;
+  const crewCost = input.crewCount * getConfiguredUnitRate(rate, ['crew_member', 'crew', 'ayudante', 'ayudantes']);
+  const pricing = await calculatePricing({ serviceType: 'mudanza', originCity: '*', destCity: '*', weightKg: 0.001, lengthCm: 1, widthCm: 1, heightCm: 1, distanceKm: input.distanceKm, extraCharges: { volume: volumeCost, floors: floorFee, crew: crewCost } }, organizationId);
+  return { baseRate: pricing.baseRate, volumeCost, floorFee, crewCost, distanceCost: pricing.distanceCost, configurableSurcharge: pricing.configurableSurcharge, subtotal: pricing.subtotal, tax: pricing.tax, total: pricing.total, currency: pricing.currency, ruleCode: pricing.ruleCode, recommendedVehicle: input.volumeM3 > 25 ? 'Camión 5 Toneladas' : 'Camión 3.5 Toneladas' };
 }
 
 movingRouter.post('/quote', asyncHandler(async (req, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de cotización de mudanza inválidos.' });
-  await assertServiceEnabled(process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq', 'mudanza');
-  return res.json({ success: true, quote: calculateMovingQuote(parsed.data) });
+  const organizationId = getPublicOrganizationId();
+  await assertServiceEnabled(organizationId, 'mudanza');
+  return res.json({ success: true, quote: await calculateMovingQuote(parsed.data, organizationId) });
 }));
 
 movingRouter.post('/orders', authenticate, requireScope('moving:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -85,7 +87,7 @@ movingRouter.post('/orders', authenticate, requireScope('moving:write'), asyncHa
   const orderId = `mov-${crypto.randomUUID()}`;
   const jobId = `job-${crypto.randomUUID()}`;
   const trackingNumber = `GP-MOV-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-  const quote = calculateMovingQuote(parsed.data);
+  const quote = await calculateMovingQuote(parsed.data, orgId);
   const vehicleType = parsed.data.vehicleType || quote.recommendedVehicle;
   const response = await transactionAsync(async (tx) => {
     await tx.execute(`INSERT INTO moving_orders (id, organization_id, client_id, tracking_number, status, origin_json, destination_json, moving_date, volume_m3, floors, elevator, crew_count, vehicle_type, estimated_cost, currency, inventory_json, job_id, created_at) VALUES (?, ?, ?, ?, 'booked', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DOP', ?, ?, ?)`, [orderId, orgId, clientId, trackingNumber, JSON.stringify(parsed.data.origin), JSON.stringify(parsed.data.destination), parsed.data.movingDate, parsed.data.volumeM3, parsed.data.floors, parsed.data.hasElevator ? 1 : 0, parsed.data.crewCount, vehicleType, quote.total, JSON.stringify(parsed.data.inventory), jobId, now]);

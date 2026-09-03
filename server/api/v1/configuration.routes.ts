@@ -16,6 +16,7 @@ import {
   updateOrganizationConfiguration
 } from '../../modules/configuration/configuration.service';
 import { normalizeRole } from '../../auth/roles';
+import { getPublicOrganizationId } from '../../core/publicTenant';
 
 export const configurationRouter = Router();
 
@@ -54,7 +55,7 @@ configurationRouter.get('/', authenticate, requireRole(readRoles), asyncHandler(
 // This endpoint intentionally returns only a restricted Google Maps browser
 // key to the public map client. It never exposes any other tenant settings.
 configurationRouter.get('/maps', asyncHandler(async (_req, res) => {
-  const organizationId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const organizationId = getPublicOrganizationId();
   const googleMaps = await getPublicGoogleMapsConfiguration(organizationId);
   if (googleMaps.status === 'provider_unavailable') {
     return res.status(503).json({ success: false, error: 'Google Maps no está disponible en este momento.' });
@@ -65,7 +66,7 @@ configurationRouter.get('/maps', asyncHandler(async (_req, res) => {
 // Only public-safe visual settings are returned here. No tenant business,
 // credentials, user data or operational configuration is exposed.
 configurationRouter.get('/public', asyncHandler(async (_req, res) => {
-  const organizationId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const organizationId = getPublicOrganizationId();
   const branding = await getPublicBrandingConfiguration(organizationId);
   return res.json({ success: true, branding });
 }));
@@ -73,7 +74,7 @@ configurationRouter.get('/public', asyncHandler(async (_req, res) => {
 configurationRouter.get('/public/branding/:kind', asyncHandler(async (req, res) => {
   const kind = req.params.kind === 'favicon' ? 'favicon' : req.params.kind === 'logo' ? 'logo' : null;
   if (!kind) return res.status(404).end();
-  const organizationId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const organizationId = getPublicOrganizationId();
   const asset = await getPublicBrandingAsset(organizationId, kind);
   if (!asset) return res.status(404).end();
   res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');

@@ -95,6 +95,13 @@ export function initDatabase() {
     ensureSqliteColumn('drivers', 'card_number', 'TEXT');
     ensureSqliteColumn('drivers', 'card_issued_at', 'TEXT');
     sqliteDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_drivers_org_card_number ON drivers(organization_id, card_number) WHERE card_number IS NOT NULL`);
+    ensureSqliteColumn('cash_closes', 'close_date', 'TEXT');
+    sqliteDb.exec(`UPDATE cash_closes SET close_date = substr(created_at, 1, 10) WHERE close_date IS NULL OR close_date = ''`);
+    sqliteDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_closes_one_per_day ON cash_closes(organization_id, branch_id, close_date)');
+    sqliteDb.exec(`CREATE TABLE IF NOT EXISTS route_dispatches (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL, route_id TEXT NOT NULL, request_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'dispatching', provider TEXT NOT NULL DEFAULT 'witylogix', remote_route_id TEXT, remote_order_ids_json TEXT NOT NULL DEFAULT '[]', integration_json TEXT NOT NULL DEFAULT '{}', error TEXT, response_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE (organization_id, route_id))`);
+    sqliteDb.exec('CREATE INDEX IF NOT EXISTS idx_route_dispatches_org_status ON route_dispatches(organization_id, status, updated_at)');
+    sqliteDb.exec(`UPDATE rates_matrix SET pricing_mode = 'hybrid', included_distance_km = 0, distance_rate = 85, surcharges_json = '{"floor_no_elevator":{"type":"unit","value":600},"crew_member":{"type":"unit","value":1200}}' WHERE id = 'rate-moving' AND service_type = 'mudanza' AND base_rate = 4500 AND per_vol_rate = 850 AND COALESCE(distance_rate, 0) = 0 AND COALESCE(surcharges_json, '{}') = '{}'`);
+    sqliteDb.exec(`UPDATE rates_matrix SET pricing_mode = 'base_plus_weight', surcharges_json = '{"pallet":{"type":"unit","value":750},"equipment":{"type":"fixed","value":2500}}' WHERE id = 'rate-heavy' AND service_type = 'carga_pesada' AND base_rate = 8500 AND per_kg_rate = 18 AND per_vol_rate = 500 AND COALESCE(surcharges_json, '{}') = '{}'`);
     sqliteDb.exec(`
       INSERT OR IGNORE INTO schema_migrations (version, applied_at)
       VALUES
@@ -107,7 +114,10 @@ export function initDatabase() {
         ('007_google_maps_credentials', CURRENT_TIMESTAMP),
         ('008_admin_master_data', CURRENT_TIMESTAMP),
         ('009_geographic_catalog_and_weight_cap', CURRENT_TIMESTAMP),
-        ('010_driver_photo_upload_and_cards', CURRENT_TIMESTAMP)
+        ('010_driver_photo_upload_and_cards', CURRENT_TIMESTAMP),
+        ('011_cash_close_idempotency', CURRENT_TIMESTAMP),
+        ('012_special_service_pricing', CURRENT_TIMESTAMP),
+        ('013_route_dispatches', CURRENT_TIMESTAMP)
     `);
   }
 }
@@ -157,60 +167,82 @@ export async function runMigrations() {
   const adminMasterDataSql = fs.readFileSync(path.join(migrationsDir, '008_admin_master_data.sql'), 'utf8');
   const geographicCatalogSql = fs.readFileSync(path.join(migrationsDir, '009_geographic_catalog_and_weight_cap.sql'), 'utf8');
   const driverPhotoCardsSql = fs.readFileSync(path.join(migrationsDir, '010_driver_photo_upload_and_cards.sql'), 'utf8');
+  const cashCloseSql = fs.readFileSync(path.join(migrationsDir, '011_cash_close_idempotency.sql'), 'utf8');
+  const specialServicePricingSql = fs.readFileSync(path.join(migrationsDir, '012_special_service_pricing.sql'), 'utf8');
+  const routeDispatchesSql = fs.readFileSync(path.join(migrationsDir, '013_route_dispatches.sql'), 'utf8');
   const lockKey = 7874701;
 
-  await pgPool.query('SELECT pg_advisory_lock($1)', [lockKey]);
+  const migrationClient = await pgPool.connect();
   try {
-    await pgPool.query(`
+    await migrationClient.query('SELECT pg_advisory_lock($1)', [lockKey]);
+    await migrationClient.query('BEGIN');
+    await migrationClient.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version TEXT PRIMARY KEY,
         applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    const applied = new Set((await pgPool.query('SELECT version FROM schema_migrations')).rows.map((row) => row.version));
+    const applied = new Set((await migrationClient.query('SELECT version FROM schema_migrations')).rows.map((row) => row.version));
     if (!applied.has('001_initial')) {
-      await pgPool.query(postgresBaseSchema);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['001_initial']);
+      await migrationClient.query(postgresBaseSchema);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['001_initial']);
     }
     if (!applied.has('002_production_foundations')) {
-      await pgPool.query(foundationSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['002_production_foundations']);
+      await migrationClient.query(foundationSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['002_production_foundations']);
     }
     if (!applied.has('003_postgis')) {
-      await pgPool.query(postgisSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['003_postgis']);
+      await migrationClient.query(postgisSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['003_postgis']);
     }
     if (!applied.has('004_cod_state_machine')) {
-      await pgPool.query(codAndInternationalSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['004_cod_state_machine']);
+      await migrationClient.query(codAndInternationalSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['004_cod_state_machine']);
     }
     if (!applied.has('005_logistics_jobs')) {
-      await pgPool.query(logisticsJobsSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['005_logistics_jobs']);
+      await migrationClient.query(logisticsJobsSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['005_logistics_jobs']);
     }
     if (!applied.has('006_configuration_center')) {
-      await pgPool.query(configurationCenterSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['006_configuration_center']);
+      await migrationClient.query(configurationCenterSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['006_configuration_center']);
     }
     if (!applied.has('007_google_maps_credentials')) {
-      await pgPool.query(googleMapsCredentialsSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['007_google_maps_credentials']);
+      await migrationClient.query(googleMapsCredentialsSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['007_google_maps_credentials']);
     }
     if (!applied.has('008_admin_master_data')) {
-      await pgPool.query(adminMasterDataSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['008_admin_master_data']);
+      await migrationClient.query(adminMasterDataSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['008_admin_master_data']);
     }
     if (!applied.has('009_geographic_catalog_and_weight_cap')) {
-      await pgPool.query(geographicCatalogSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['009_geographic_catalog_and_weight_cap']);
+      await migrationClient.query(geographicCatalogSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['009_geographic_catalog_and_weight_cap']);
     }
     if (!applied.has('010_driver_photo_upload_and_cards')) {
-      await pgPool.query(driverPhotoCardsSql);
-      await pgPool.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['010_driver_photo_upload_and_cards']);
+      await migrationClient.query(driverPhotoCardsSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['010_driver_photo_upload_and_cards']);
     }
+    if (!applied.has('011_cash_close_idempotency')) {
+      await migrationClient.query(cashCloseSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['011_cash_close_idempotency']);
+    }
+    if (!applied.has('012_special_service_pricing')) {
+      await migrationClient.query(specialServicePricingSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['012_special_service_pricing']);
+    }
+    if (!applied.has('013_route_dispatches')) {
+      await migrationClient.query(routeDispatchesSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['013_route_dispatches']);
+    }
+    await migrationClient.query('COMMIT');
+  } catch (error) {
+    await migrationClient.query('ROLLBACK');
+    throw error;
   } finally {
-    await pgPool.query('SELECT pg_advisory_unlock($1)', [lockKey]);
+    await migrationClient.query('SELECT pg_advisory_unlock($1)', [lockKey]);
+    migrationClient.release();
   }
 }
 
@@ -447,6 +479,7 @@ CREATE TABLE IF NOT EXISTS cash_closes (
   total_transfers REAL NOT NULL,
   grand_total REAL NOT NULL,
   notes TEXT,
+  close_date TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_cash_closes_branch_created ON cash_closes(organization_id, branch_id, created_at);

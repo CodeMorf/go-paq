@@ -6,6 +6,8 @@ import { authenticate, AuthenticatedRequest, requireScope } from '../../auth/mid
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
 import { assertServiceEnabled } from '../../modules/configuration/configuration.service';
+import { calculatePricing, getConfiguredUnitRate, getPricingRate } from '../../modules/pricing/pricing.engine';
+import { getPublicOrganizationId } from '../../core/publicTenant';
 
 export const heavyCargoRouter = Router();
 
@@ -39,15 +41,14 @@ const orderSchema = quoteSchema.extend({
   notes: z.string().trim().max(1000).optional()
 });
 
-function calculateHeavyQuote(input: z.infer<typeof quoteSchema>) {
+async function calculateHeavyQuote(input: z.infer<typeof quoteSchema>, organizationId: string) {
   const volumeM3 = input.lengthM * input.widthM * input.heightM;
-  const baseRate = 8500;
-  const palletsCost = input.palletsCount * 750;
-  const weightCost = input.totalWeightKg * 18;
-  const volumeCost = volumeM3 * 500;
-  const equipmentCost = input.equipmentRequired ? 2500 : 0;
-  const total = baseRate + palletsCost + weightCost + volumeCost + equipmentCost;
-  return { baseRate, palletsCost, weightCost, volumeCost, equipmentCost, volumeM3, total, currency: 'DOP' };
+  const rate = await getPricingRate({ serviceType: 'carga_pesada', originCity: '*', destCity: '*' }, organizationId);
+  const palletsCost = input.palletsCount * getConfiguredUnitRate(rate, ['pallet', 'pallet_unit', 'pallets', 'tarima', 'tarimas']);
+  const volumeCost = volumeM3 * Math.max(0, Number(rate.per_vol_rate || 0));
+  const equipmentCost = input.equipmentRequired ? getConfiguredUnitRate(rate, ['equipment', 'equipment_fee', 'equipo', 'montacargas', 'manejo_especial']) : 0;
+  const pricing = await calculatePricing({ serviceType: 'carga_pesada', originCity: '*', destCity: '*', weightKg: input.totalWeightKg, lengthCm: 1, widthCm: 1, heightCm: 1, extraCharges: { pallets: palletsCost, volume: volumeCost, equipment: equipmentCost } }, organizationId);
+  return { baseRate: pricing.baseRate, palletsCost, weightCost: pricing.weightCost, volumeCost, equipmentCost, volumeM3, distanceCost: pricing.distanceCost, configurableSurcharge: pricing.configurableSurcharge, subtotal: pricing.subtotal, tax: pricing.tax, total: pricing.total, currency: pricing.currency, ruleCode: pricing.ruleCode };
 }
 
 heavyCargoRouter.get('/orders', authenticate, requireScope('heavy_cargo:read'), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -61,8 +62,9 @@ heavyCargoRouter.get('/orders', authenticate, requireScope('heavy_cargo:read'), 
 heavyCargoRouter.post('/quote', asyncHandler(async (req, res) => {
   const parsed = quoteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(422).json({ success: false, error: 'Datos de cotización de carga pesada inválidos.' });
-  await assertServiceEnabled(process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq', 'carga_pesada');
-  return res.json({ success: true, quote: calculateHeavyQuote(parsed.data) });
+  const organizationId = getPublicOrganizationId();
+  await assertServiceEnabled(organizationId, 'carga_pesada');
+  return res.json({ success: true, quote: await calculateHeavyQuote(parsed.data, organizationId) });
 }));
 
 heavyCargoRouter.post('/orders', authenticate, requireScope('heavy_cargo:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -88,7 +90,7 @@ heavyCargoRouter.post('/orders', authenticate, requireScope('heavy_cargo:write')
   const orderId = `hvy-${crypto.randomUUID()}`;
   const jobId = `job-${crypto.randomUUID()}`;
   const trackingNumber = `GP-HVY-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-  const quote = calculateHeavyQuote(parsed.data);
+  const quote = await calculateHeavyQuote(parsed.data, orgId);
   const response = await transactionAsync(async (tx) => {
     await tx.execute(`INSERT INTO heavy_cargo_orders (id, organization_id, client_id, tracking_number, status, cargo_type, pallets_count, total_weight_kg, dimensions_json, equipment_required, origin_json, destination_json, cost, currency, job_id, created_at) VALUES (?, ?, ?, ?, 'booked', ?, ?, ?, ?, ?, ?, ?, ?, 'DOP', ?, ?)`, [orderId, orgId, clientId, trackingNumber, parsed.data.cargoType, parsed.data.palletsCount, parsed.data.totalWeightKg, JSON.stringify({ lengthM: parsed.data.lengthM, widthM: parsed.data.widthM, heightM: parsed.data.heightM, volumeM3: quote.volumeM3 }), parsed.data.equipmentRequired || null, JSON.stringify(parsed.data.origin), JSON.stringify(parsed.data.destination), quote.total, jobId, now]);
     await tx.execute(`INSERT INTO logistics_jobs (id, organization_id, client_id, service_type, tracking_number, source_type, source_id, status, origin_json, destination_json, details_json, cost, currency, scheduled_at, created_at, updated_at) VALUES (?, ?, ?, 'carga_pesada', ?, 'heavy_cargo_order', ?, 'booked', ?, ?, ?, ?, 'DOP', ?, ?, ?)`, [jobId, orgId, clientId, trackingNumber, orderId, JSON.stringify(parsed.data.origin), JSON.stringify(parsed.data.destination), JSON.stringify({ ...parsed.data, quote, notes: parsed.data.notes || null }), quote.total, parsed.data.scheduledDate, now, now]);

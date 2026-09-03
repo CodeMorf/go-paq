@@ -285,8 +285,14 @@ async function runComprehensiveTestSuite() {
     .post('/api/v1/branches')
     .set('Authorization', `Bearer ${demoRes.body.token}`)
     .send({ code: `CLIENT-${Date.now()}`, name: 'No autorizada', city: 'Santo Domingo', address: 'Calle no autorizada' });
+  const cashClosePayload = { totalCash: 1200, totalPos: 350, totalTransfers: 90, notes: 'Cierre de prueba idempotente' };
+  const cashCloseKey = `cash-close-${Date.now()}`;
+  const cashClose = await request(app).post(`/api/v1/branches/${createdBranch.body.branch?.id}/cash-close`).set('Authorization', `Bearer ${token}`).set('Idempotency-Key', cashCloseKey).send(cashClosePayload);
+  const cashCloseReplay = await request(app).post(`/api/v1/branches/${createdBranch.body.branch?.id}/cash-close`).set('Authorization', `Bearer ${token}`).set('Idempotency-Key', cashCloseKey).send(cashClosePayload);
+  const cashCloseDuplicateDay = await request(app).post(`/api/v1/branches/${createdBranch.body.branch?.id}/cash-close`).set('Authorization', `Bearer ${token}`).set('Idempotency-Key', `cash-close-second-${Date.now()}`).send(cashClosePayload);
   assert(createdBranch.status === 201 && createdBranchRow?.organization_id === 'org-gopaq' && duplicateBranch.status === 409, 'BRANCH MASTER DATA: admin creates a durable tenant branch and duplicate codes are rejected');
   assert(clientBranchCreate.status === 403, 'BRANCH MASTER DATA RBAC: client cannot create a branch');
+  assert(cashClose.status === 201 && cashCloseReplay.status === 201 && cashClose.body.summary?.id === cashCloseReplay.body.summary?.id && cashCloseDuplicateDay.status === 409, 'CASH CLOSE: persisted close is protected against replay and a second close on the same branch/day');
 
   const createdDriver = await request(app)
     .post('/api/v1/drivers')
@@ -462,13 +468,14 @@ async function runComprehensiveTestSuite() {
   const demoAdmin = await request(app).post('/api/v1/auth/demo').send({ area: 'super-admin' });
   const specialRoute = await request(app).post('/api/v1/routes').set('Authorization', `Bearer ${demoAdmin.body.token}`).send({ name: 'Ruta especial demo', branchId: 'br-demo-central', driverId: 'drv-demo', jobIds: [movingOrder.body.order?.jobId, heavyOrder.body.order?.jobId] });
   const specialDispatch = specialRoute.body.route?.id ? await request(app).post(`/api/v1/routes/${specialRoute.body.route.id}/dispatch`).set('Authorization', `Bearer ${demoAdmin.body.token}`).send({}) : { status: 0, body: {} };
+  const specialDispatchReplay = specialRoute.body.route?.id ? await request(app).post(`/api/v1/routes/${specialRoute.body.route.id}/dispatch`).set('Authorization', `Bearer ${demoAdmin.body.token}`).send({}) : { status: 0, body: {} };
   const demoDriver = await request(app).post('/api/v1/auth/demo').send({ area: 'driver' });
   const specialManifest = specialRoute.body.route?.id ? await request(app).get('/api/v1/drivers/active-manifest').set('Authorization', `Bearer ${demoDriver.body.token}`) : { status: 0, body: {} };
   const specialStop = specialManifest.body.stops?.[0];
   const specialComplete = specialStop ? await request(app).post(`/api/v1/drivers/stops/${specialStop.id}/complete`).set('Authorization', `Bearer ${demoDriver.body.token}`).set('Idempotency-Key', `special-pod-${Date.now()}`).send({ pod: { recipientName: 'Receptor Demo', signatureUrl: 'storage://demo-signature' } }) : { status: 0, body: {} };
   const movingStatus = movingOrder.body.order?.jobId ? queryOne<{ status: string }>('SELECT status FROM logistics_jobs WHERE id = ?', [movingOrder.body.order.jobId]) : null;
   assert(movingOrder.status === 201 && movingReplay.status === 201 && movingOrder.body.order?.id === movingReplay.body.order?.id && heavyOrder.status === 201, 'SPECIAL SERVICES: moving and heavy-cargo bookings persist with idempotency');
-  assert(specialRoute.status === 201 && specialDispatch.status === 200 && specialManifest.status === 200 && specialComplete.status === 200 && movingStatus?.status === 'completed', 'UNIFIED JOB FLOW: special service jobs can be dispatched and completed with real POD');
+  assert(specialRoute.status === 201 && specialDispatch.status === 200 && specialDispatchReplay.status === 200 && specialDispatchReplay.body.integration?.status === specialDispatch.body.integration?.status && specialManifest.status === 200 && specialComplete.status === 200 && movingStatus?.status === 'completed', 'UNIFIED JOB FLOW: special service jobs can be dispatched and completed with real POD');
   const specialTracking = await request(app).get(`/api/v1/tracking/${movingOrder.body.order?.trackingNumber}`);
   assert(specialTracking.status === 200 && specialTracking.body.shipment.kind === 'logistics_job' && specialTracking.body.shipment.status === 'completed' && specialTracking.body.shipment.events.some((event: any) => event.status === 'completed'), 'CANONICAL TRACKING: special service completion is visible through the public tracking engine');
 

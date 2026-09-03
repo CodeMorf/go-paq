@@ -26,25 +26,16 @@ import { geographyRouter } from '../api/v1/geography.routes';
 import { requestId, publicError } from './http';
 import { checkDatabase, isPostgres, queryOneAsync } from '../db/database';
 import Redis from 'ioredis';
+import { RedisRateLimitStore } from './redisRateLimit';
 
 export const app = express();
 app.set('trust proxy', 1);
 
-const authRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 12,
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  message: { success: false, error: 'Demasiados intentos. Espera unos minutos antes de volver a intentar.' }
-});
-
-const publicRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 120,
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  message: { success: false, error: 'Límite temporal alcanzado. Intenta nuevamente en unos segundos.' }
-});
+const useRedisRateLimit = process.env.NODE_ENV === 'production' && !!process.env.REDIS_URL;
+const authRedisStore = useRedisRateLimit ? new RedisRateLimitStore('gopaq:ratelimit:auth') : undefined;
+const publicRedisStore = useRedisRateLimit ? new RedisRateLimitStore('gopaq:ratelimit:public') : undefined;
+const authRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: 'draft-7', legacyHeaders: false, store: authRedisStore, passOnStoreError: false, message: { success: false, error: 'Demasiados intentos. Espera unos minutos antes de volver a intentar.' } });
+const publicRateLimit = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false, store: publicRedisStore, passOnStoreError: true, message: { success: false, error: 'Límite temporal alcanzado. Intenta nuevamente en unos segundos.' } });
 
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001').split(',').map((o) => o.trim());
 app.use(cors({
@@ -54,7 +45,24 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      connectSrc: ["'self'", 'https://maps.googleapis.com', 'https://maps.gstatic.com', 'wss:', 'https:'],
+      fontSrc: ["'self'", 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://maps.googleapis.com', 'https://maps.gstatic.com', 'https://*.googleapis.com', 'https://*.gstatic.com'],
+      objectSrc: ["'none'"],
+      scriptSrc: ["'self'", 'https://maps.googleapis.com', 'https://maps.gstatic.com'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      frameAncestors: ["'self'"],
+      formAction: ["'self'"]
+    }
+  } : false,
+  crossOriginEmbedderPolicy: false
+}));
+app.use((_req, res, next) => { res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=()'); next(); });
 app.use(requestId);
 // Driver photo uploads are compressed in the browser and capped at 2 MB after
 // decoding; the small transport headroom avoids rejecting valid base64 data URLs.

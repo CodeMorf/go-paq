@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
+import { isPostgres, queryAllAsync, queryOneAsync, transactionAsync } from '../../db/database';
 import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '../../auth/middleware';
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
@@ -53,12 +53,14 @@ routesRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN
     await tx.execute(`INSERT INTO routes (id, organization_id, branch_id, driver_id, vehicle_id, name, date, status, total_stops, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', 0, ?, ?)`, [routeId, orgId, input.branchId, input.driverId || null, input.vehicleId || null, input.name || `Ruta ${dateStr}`, dateStr, now, now]);
     let position = 0;
     for (const shipmentId of uniqueShipmentIds) {
-      const shipment = await tx.queryOne<any>('SELECT id, destination_json FROM shipments WHERE id = ? AND organization_id = ?', [shipmentId, orgId]);
+      const shipment = await tx.queryOne<any>('SELECT id, destination_json, status, assigned_route_id FROM shipments WHERE id = ? AND organization_id = ?', [shipmentId, orgId]);
       if (!shipment) throw Object.assign(new Error('Uno de los envíos no pertenece a esta organización.'), { statusCode: 422 });
+      if (shipment.assigned_route_id || ['delivered', 'cancelled'].includes(String(shipment.status))) throw Object.assign(new Error('Uno de los envíos ya está asignado a una ruta o no puede ser despachado.'), { statusCode: 409 });
       const destination = safeJson(shipment.destination_json);
       position += 1;
+      const claimed = await tx.execute('UPDATE shipments SET assigned_route_id = ?, assigned_driver_id = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND assigned_route_id IS NULL AND status NOT IN (\'delivered\', \'cancelled\')', [routeId, input.driverId || null, now, shipment.id, orgId]);
+      if (claimed.changes !== 1) throw Object.assign(new Error('El envío cambió mientras se asignaba a la ruta.'), { statusCode: 409 });
       await tx.execute(`INSERT INTO route_stops (id, route_id, shipment_id, sequence_order, type, address_json, contact_name, contact_phone, status) VALUES (?, ?, ?, ?, 'delivery', ?, ?, ?, 'pending')`, [`stp-${crypto.randomUUID()}`, routeId, shipment.id, position, shipment.destination_json, String(destination.name || 'Destinatario'), String(destination.phone || '')]);
-      await tx.execute('UPDATE shipments SET assigned_route_id = ?, assigned_driver_id = ?, updated_at = ? WHERE id = ? AND organization_id = ?', [routeId, input.driverId || null, now, shipment.id, orgId]);
     }
     for (const jobId of uniqueJobIds) {
       const job = await tx.queryOne<any>('SELECT id, tracking_number, destination_json, details_json, cost, service_type, status, assigned_route_id FROM logistics_jobs WHERE id = ? AND organization_id = ?', [jobId, orgId]);
@@ -79,7 +81,10 @@ routesRouter.post('/', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN
 routesRouter.post('/:id/dispatch', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'OPERATIONS', 'BRANCH_MANAGER', 'MANAGER', 'DISPATCHER']), requireScope('routes:write'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
   const orgId = req.organizationId!;
-  const driverId = typeof req.body?.driverId === 'string' ? req.body.driverId : undefined;
+  const dispatchInput = z.object({ driverId: z.string().trim().min(1).max(120).optional() }).strict().safeParse(req.body || {});
+  if (!dispatchInput.success) return res.status(422).json({ success: false, error: 'Datos de despacho inválidos.' });
+  const driverId = dispatchInput.data.driverId;
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify({ routeId: id, driverId: driverId || null })).digest('hex');
   const route = await queryOneAsync<any>('SELECT * FROM routes WHERE id = ? AND organization_id = ?', [id, orgId]);
   if (!route) return res.status(404).json({ success: false, error: 'Ruta no encontrada.' });
   const role = normalizeRole(req.user?.role);
@@ -87,35 +92,62 @@ routesRouter.post('/:id/dispatch', authenticate, requireRole(['SUPER_ADMIN', 'OW
   const effectiveDriverId = driverId || route.driver_id;
   if (!effectiveDriverId) return res.status(422).json({ success: false, error: 'La ruta necesita un driver asignado antes de despachar.' });
   if (!(await queryOneAsync('SELECT id FROM drivers WHERE id = ? AND organization_id = ? AND active = 1', [effectiveDriverId, orgId]))) return res.status(422).json({ success: false, error: 'Driver inválido para esta organización.' });
+
+  const reservation = await transactionAsync(async (tx) => {
+    const currentRoute = await tx.queryOne<any>(`SELECT * FROM routes WHERE id = ? AND organization_id = ?${isPostgres ? ' FOR UPDATE' : ''}`, [id, orgId]);
+    if (!currentRoute) throw Object.assign(new Error('Ruta no encontrada.'), { statusCode: 404 });
+    const previous = await tx.queryOne<any>(`SELECT * FROM route_dispatches WHERE route_id = ? AND organization_id = ?${isPostgres ? ' FOR UPDATE' : ''}`, [id, orgId]);
+    if (previous?.request_hash && previous.request_hash !== requestHash) throw Object.assign(new Error('La ruta ya fue preparada para otro driver.'), { statusCode: 409 });
+    if (previous?.status === 'completed' && previous.response_json) return { replay: true, response: JSON.parse(previous.response_json) };
+    if (previous?.status === 'dispatching' && new Date(previous.updated_at).getTime() > Date.now() - 15 * 60 * 1000) throw Object.assign(new Error('El despacho de esta ruta ya está en proceso.'), { statusCode: 409 });
+    if (!previous && !['draft', 'assigned'].includes(String(currentRoute.status))) throw Object.assign(new Error('La ruta ya no está disponible para despacho.'), { statusCode: 409 });
+    if (previous) {
+      await tx.execute(`UPDATE route_dispatches SET status = 'dispatching', error = NULL, response_json = NULL, request_hash = ?, updated_at = ? WHERE id = ? AND organization_id = ?`, [requestHash, new Date().toISOString(), previous.id, orgId]);
+    } else {
+      await tx.execute(`INSERT INTO route_dispatches (id, organization_id, route_id, request_hash, status, provider, created_at, updated_at) VALUES (?, ?, ?, ?, 'dispatching', 'witylogix', ?, ?)`, [`rtd-${crypto.randomUUID()}`, orgId, id, requestHash, new Date().toISOString(), new Date().toISOString()]);
+    }
+    return { replay: false, response: null };
+  });
+  if (reservation.replay) return res.json(reservation.response);
+
   const stops = await queryAllAsync(`SELECT rs.*, COALESCE(s.tracking_number, j.tracking_number) AS tracking_number, COALESCE(s.destination_json, j.destination_json) AS destination_json, COALESCE(s.package_json, j.details_json) AS package_json, COALESCE(s.shipping_cost, j.cost) AS shipping_cost, COALESCE(s.service_type, j.service_type) AS service_type FROM route_stops rs LEFT JOIN shipments s ON s.id = rs.shipment_id AND s.organization_id = ? LEFT JOIN logistics_jobs j ON j.id = rs.job_id AND j.organization_id = ? WHERE rs.route_id = ? ORDER BY rs.sequence_order ASC`, [orgId, orgId, id]);
   const integration = { provider: 'witylogix', configured: WitylogixBridge.isConfigured(), synchronized: false, routeId: null as string | null, status: WitylogixBridge.isConfigured() ? 'pending' : 'provider_unavailable', error: null as string | null };
+  const remoteOrderIds: string[] = [];
+  const markDispatchFailed = async (message: string) => {
+    await transactionAsync(async (tx) => {
+      await tx.execute(`UPDATE route_dispatches SET status = 'failed', error = ?, integration_json = ?, updated_at = ? WHERE route_id = ? AND organization_id = ?`, [message, JSON.stringify(integration), new Date().toISOString(), id, orgId]);
+    });
+  };
   if (integration.configured && stops.length > 0) {
-    const remoteOrderIds: string[] = [];
     for (const stop of stops) {
       if (!stop.tracking_number) continue;
       const destination = safeJson(stop.destination_json);
       const pkg = safeJson(stop.package_json);
-      const created = await WitylogixBridge.createDeliveryOrder({ shopifyOrderId: `gopaq:${stop.tracking_number}`, shopifyOrderNumber: stop.tracking_number, customerName: String(destination.name || 'Cliente GoPaq'), customerEmail: destination.email ? String(destination.email) : undefined, customerPhone: destination.phone ? String(destination.phone) : undefined, addressLine1: String(destination.street || destination.address || destination.reference || ''), city: destination.city ? String(destination.city) : undefined, province: destination.provinceState ? String(destination.provinceState) : undefined, postalCode: destination.postalCode ? String(destination.postalCode) : undefined, country: String(destination.country || 'DO'), latitude: typeof destination.lat === 'number' ? destination.lat : undefined, longitude: typeof destination.lng === 'number' ? destination.lng : undefined, totalPrice: Number(stop.shipping_cost || 0), totalWeight: Number(pkg.weightKg || 0), itemCount: 1, lineItems: [], notes: `GoPaq shipment ${stop.tracking_number}`, tags: ['gopaq'] });
-      if ('error' in created) { integration.error = created.error; integration.status = 'provider_unavailable'; return res.status(502).json({ success: false, error: 'El proveedor externo no confirmó el despacho.', integration }); }
+      const created = await WitylogixBridge.createDeliveryOrder({ shopifyOrderId: `gopaq:${stop.tracking_number}`, shopifyOrderNumber: stop.tracking_number, customerName: String(destination.name || 'Cliente GoPaq'), customerEmail: destination.email ? String(destination.email) : undefined, customerPhone: destination.phone ? String(destination.phone) : undefined, addressLine1: String(destination.street || destination.address || destination.reference || ''), city: destination.city ? String(destination.city) : undefined, province: destination.provinceState ? String(destination.provinceState) : undefined, postalCode: destination.postalCode ? String(destination.postalCode) : undefined, country: String(destination.country || 'DO'), latitude: typeof destination.lat === 'number' ? destination.lat : undefined, longitude: typeof destination.lng === 'number' ? destination.lng : undefined, totalPrice: Number(stop.shipping_cost || 0), totalWeight: Number(pkg.weightKg || 0), itemCount: 1, lineItems: [], notes: `GoPaq shipment ${stop.tracking_number}`, tags: ['gopaq'] }, `gopaq-route-${id}-stop-${stop.id}`);
+      if ('error' in created) { integration.error = created.error; integration.status = 'provider_unavailable'; await markDispatchFailed(created.error); return res.status(502).json({ success: false, error: 'El proveedor externo no confirmó el despacho.', integration }); }
       const remoteId = (created.data as any)?.id || (created.data as any)?.data?.id;
-      if (!remoteId) { integration.error = 'missing_remote_id'; integration.status = 'provider_unavailable'; return res.status(502).json({ success: false, error: 'El proveedor externo no devolvió un ID de despacho.', integration }); }
+      if (!remoteId) { integration.error = 'missing_remote_id'; integration.status = 'provider_unavailable'; await markDispatchFailed(integration.error); return res.status(502).json({ success: false, error: 'El proveedor externo no devolvió un ID de despacho.', integration }); }
       remoteOrderIds.push(remoteId);
     }
-    const remoteRoute = await WitylogixBridge.createRoute({ name: route.name || `GoPaq ${id}`, date: route.date || new Date().toISOString().slice(0, 10), orderIds: remoteOrderIds });
-    if ('error' in remoteRoute) { integration.error = remoteRoute.error; integration.status = 'provider_unavailable'; return res.status(502).json({ success: false, error: 'El proveedor externo no confirmó la ruta.', integration }); }
+    const remoteRoute = await WitylogixBridge.createRoute({ name: route.name || `GoPaq ${id}`, date: route.date || new Date().toISOString().slice(0, 10), orderIds: remoteOrderIds }, `gopaq-route-${id}`);
+    if ('error' in remoteRoute) { integration.error = remoteRoute.error; integration.status = 'provider_unavailable'; await markDispatchFailed(remoteRoute.error); return res.status(502).json({ success: false, error: 'El proveedor externo no confirmó la ruta.', integration }); }
     integration.routeId = (remoteRoute.data as any)?.id || (remoteRoute.data as any)?.data?.id || null;
-    if (!integration.routeId) return res.status(502).json({ success: false, error: 'El proveedor externo no devolvió un ID de ruta.', integration });
+    if (!integration.routeId) { integration.error = 'missing_remote_route_id'; integration.status = 'provider_unavailable'; await markDispatchFailed(integration.error); return res.status(502).json({ success: false, error: 'El proveedor externo no devolvió un ID de ruta.', integration }); }
     integration.synchronized = true;
     integration.status = 'online';
   }
   const now = new Date().toISOString();
-  await transactionAsync(async (tx) => {
-    await tx.execute(`UPDATE routes SET status = 'in_progress', driver_id = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status IN ('draft', 'assigned')`, [effectiveDriverId, now, id, orgId]);
+  const response = await transactionAsync(async (tx) => {
+    const routeUpdate = await tx.execute(`UPDATE routes SET status = 'in_progress', driver_id = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND status IN ('draft', 'assigned')`, [effectiveDriverId, now, id, orgId]);
+    if (routeUpdate.changes !== 1) throw Object.assign(new Error('La ruta cambió mientras se despachaba.'), { statusCode: 409 });
     await tx.execute(`UPDATE shipments SET status = 'out_for_delivery', updated_at = ? WHERE assigned_route_id = ? AND organization_id = ? AND status NOT IN ('delivered', 'cancelled')`, [now, id, orgId]);
     await tx.execute(`UPDATE logistics_jobs SET status = 'in_transit', assigned_driver_id = ?, updated_at = ? WHERE assigned_route_id = ? AND organization_id = ? AND status NOT IN ('completed', 'cancelled')`, [effectiveDriverId, now, id, orgId]);
     await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'route.dispatched', 'route', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, id, JSON.stringify({ routeId: id, driverId: effectiveDriverId, integration }), now]);
+    const payload = { success: true, message: integration.synchronized ? 'Ruta despachada y confirmada por Witylogix.' : 'Ruta despachada en GoPaq; Witylogix está NO CONFIGURADO.', integration };
+    await tx.execute(`UPDATE route_dispatches SET status = 'completed', remote_route_id = ?, remote_order_ids_json = ?, integration_json = ?, response_json = ?, error = NULL, updated_at = ? WHERE route_id = ? AND organization_id = ?`, [integration.routeId, JSON.stringify(remoteOrderIds), JSON.stringify(integration), JSON.stringify(payload), now, id, orgId]);
+    return payload;
   });
-  return res.json({ success: true, message: integration.synchronized ? 'Ruta despachada y confirmada por Witylogix.' : 'Ruta despachada en GoPaq; Witylogix está NO CONFIGURADO.', integration });
+  return res.json(response);
 }));
 
 function safeJson(value: unknown): Record<string, any> { try { return typeof value === 'string' ? JSON.parse(value || '{}') : (value as Record<string, any>) || {}; } catch { return {}; } }

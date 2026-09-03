@@ -6,6 +6,7 @@ import { authenticate, AuthenticatedRequest, requireRole, requireScope } from '.
 import { normalizeRole } from '../../auth/roles';
 import { asyncHandler } from '../../core/http';
 import { readStoredFile, storeDataUrl } from '../../storage/storage.adapter';
+import { getPublicOrganizationId } from '../../core/publicTenant';
 
 export const branchesRouter = Router();
 
@@ -19,7 +20,7 @@ function branchResponse(branch: any) {
 
 // Public branch directory intentionally returns only public contact/location data.
 branchesRouter.get('/public', asyncHandler(async (_req, res) => {
-  const orgId = process.env.GOPAQ_PUBLIC_ORG_ID || 'org-gopaq';
+  const orgId = getPublicOrganizationId();
   const branches = await queryAllAsync(`SELECT id, code, name, city, address, phone, latitude, longitude, is_hub, country, province, sector, postal_code, whatsapp, email, branch_type FROM branches WHERE organization_id = ? AND active = 1 ORDER BY is_hub DESC, name ASC`, [orgId]);
   return res.json({ success: true, branches: branches.map(branchResponse) });
 }));
@@ -130,7 +131,9 @@ branchesRouter.patch('/:id', authenticate, requireRole(['SUPER_ADMIN', 'OWNER', 
   const updated = await transactionAsync(async (tx) => {
     const result = isPostgres && latitude !== null && longitude !== null
       ? await tx.execute(`UPDATE branches SET name = ?, city = ?, address = ?, phone = ?, manager_name = ?, manager_phone = ?, manager_email = ?, country = ?, province = ?, sector = ?, postal_code = ?, whatsapp = ?, email = ?, business_hours_json = ?, branch_type = ?, logo_storage_key = ?, latitude = ?, longitude = ?, is_hub = ?, location = ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [...values.slice(0, 16), latitude, longitude, values[18], longitude, latitude, ...values.slice(19)])
-      : await tx.execute(`UPDATE branches SET name = ?, city = ?, address = ?, phone = ?, manager_name = ?, manager_phone = ?, manager_email = ?, country = ?, province = ?, sector = ?, postal_code = ?, whatsapp = ?, email = ?, business_hours_json = ?, branch_type = ?, logo_storage_key = ?, latitude = ?, longitude = ?, is_hub = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, values);
+      : isPostgres
+        ? await tx.execute(`UPDATE branches SET name = ?, city = ?, address = ?, phone = ?, manager_name = ?, manager_phone = ?, manager_email = ?, country = ?, province = ?, sector = ?, postal_code = ?, whatsapp = ?, email = ?, business_hours_json = ?, branch_type = ?, logo_storage_key = ?, latitude = ?, longitude = ?, is_hub = ?, location = NULL, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, values)
+        : await tx.execute(`UPDATE branches SET name = ?, city = ?, address = ?, phone = ?, manager_name = ?, manager_phone = ?, manager_email = ?, country = ?, province = ?, sector = ?, postal_code = ?, whatsapp = ?, email = ?, business_hours_json = ?, branch_type = ?, logo_storage_key = ?, latitude = ?, longitude = ?, is_hub = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, values);
     if (result.changes !== 1) throw Object.assign(new Error('La sucursal cambió mientras se guardaba.'), { statusCode: 409 });
     await tx.execute(`INSERT INTO audit_logs (id, organization_id, user_id, action, resource_type, resource_id, outcome, ip_address, metadata_json, created_at) VALUES (?, ?, ?, 'branch.updated', 'branch', ?, 'success', ?, ?, ?)`, [`aud-${crypto.randomUUID()}`, organizationId, req.user!.userId, branchId, req.ip, JSON.stringify({ fields: Object.keys(parsed.data).filter((field) => field !== 'logo') }), now]);
     await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'branch.updated', 'branch', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, organizationId, branchId, JSON.stringify({ branchId, organizationId }), now]);
@@ -203,7 +206,9 @@ branchesRouter.patch('/:id/location', authenticate, requireRole(['SUPER_ADMIN', 
       // PostGIS receives longitude first, latitude second (X/Y).
       updated = await tx.execute(`UPDATE branches SET address = COALESCE(?, address), latitude = ?, longitude = ?, location = ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.address || null, parsed.data.latitude, parsed.data.longitude, parsed.data.longitude, parsed.data.latitude, now, branchId, organizationId]);
     } else {
-      updated = await tx.execute(`UPDATE branches SET address = COALESCE(?, address), latitude = ?, longitude = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.address || null, parsed.data.latitude, parsed.data.longitude, now, branchId, organizationId]);
+      updated = isPostgres
+        ? await tx.execute(`UPDATE branches SET address = COALESCE(?, address), latitude = ?, longitude = ?, location = NULL, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.address || null, parsed.data.latitude, parsed.data.longitude, now, branchId, organizationId])
+        : await tx.execute(`UPDATE branches SET address = COALESCE(?, address), latitude = ?, longitude = ?, updated_at = ? WHERE id = ? AND organization_id = ? AND active = 1`, [parsed.data.address || null, parsed.data.latitude, parsed.data.longitude, now, branchId, organizationId]);
     }
     if (updated.changes !== 1) throw Object.assign(new Error('La sucursal cambió mientras se guardaba su ubicación.'), { statusCode: 409 });
 
@@ -295,14 +300,44 @@ branchesRouter.post('/:id/cash-close', authenticate, requireRole(['SUPER_ADMIN',
   if (req.user?.branchId && ['BRANCH_MANAGER', 'CASHIER'].includes(role) && req.user.branchId !== id) return res.status(403).json({ success: false, error: 'La cuenta no puede cerrar otra sucursal.' });
   if (!(await queryOneAsync('SELECT id FROM branches WHERE id = ? AND organization_id = ? AND active = 1', [id, orgId]))) return res.status(404).json({ success: false, error: 'Sucursal no encontrada.' });
   const totals = parsed.data;
+  const idempotencyKey = req.header('idempotency-key')?.trim();
+  if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 200)) return res.status(400).json({ success: false, error: 'Idempotency-Key inválida.' });
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex');
+  if (idempotencyKey) {
+    const previous = await queryOneAsync<{ request_hash: string; status_code: number | null; response_json: string | null }>('SELECT request_hash, status_code, response_json FROM idempotency_keys WHERE organization_id = ? AND idempotency_key = ?', [orgId, idempotencyKey]);
+    if (previous?.request_hash !== requestHash && previous) return res.status(409).json({ success: false, error: 'La Idempotency-Key ya fue usada con otro contenido.' });
+    if (previous?.response_json) return res.status(previous.status_code || 201).json(JSON.parse(previous.response_json));
+    if (previous) return res.status(409).json({ success: false, error: 'El cierre con esta Idempotency-Key está en proceso. Reintenta en unos segundos.' });
+  }
+  const closeDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santo_Domingo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const grandTotal = totals.totalCash + totals.totalPos + totals.totalTransfers;
   const now = new Date().toISOString();
   const closeId = `cash-${crypto.randomUUID()}`;
-  await transactionAsync(async (tx) => {
-    await tx.execute(`INSERT INTO cash_closes (id, organization_id, branch_id, closed_by, total_cash, total_pos, total_transfers, grand_total, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [closeId, orgId, id, req.user!.userId, totals.totalCash, totals.totalPos, totals.totalTransfers, grandTotal, totals.notes || null, now]);
-    await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'branch.cash_closed', 'cash_close', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, closeId, JSON.stringify({ closeId, branchId: id, grandTotal }), now]);
-  });
-  return res.status(201).json({ success: true, message: 'Cierre de caja guardado en el servidor.', summary: { id: closeId, branchId: id, ...totals, grandTotal, timestamp: now, closedBy: req.user?.name } });
+  try {
+    const response = await transactionAsync(async (tx) => {
+      if (idempotencyKey) {
+        const reservation = await tx.execute(`INSERT INTO idempotency_keys (id, organization_id, idempotency_key, request_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (organization_id, idempotency_key) DO NOTHING`, [`idem-${crypto.randomUUID()}`, orgId, idempotencyKey, requestHash, now, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()]);
+        if (reservation.changes !== 1) {
+          const existing = await tx.queryOne<{ request_hash: string; status_code: number | null; response_json: string | null }>('SELECT request_hash, status_code, response_json FROM idempotency_keys WHERE organization_id = ? AND idempotency_key = ?', [orgId, idempotencyKey]);
+          if (existing?.request_hash !== requestHash) throw Object.assign(new Error('La Idempotency-Key ya fue usada con otro contenido.'), { statusCode: 409 });
+          if (existing?.response_json) return { statusCode: existing.status_code || 201, payload: JSON.parse(existing.response_json) };
+          throw Object.assign(new Error('El cierre con esta Idempotency-Key está en proceso. Reintenta en unos segundos.'), { statusCode: 409 });
+        }
+      }
+      const alreadyClosed = await tx.queryOne<{ id: string; close_date: string }>('SELECT id, close_date FROM cash_closes WHERE organization_id = ? AND branch_id = ? AND close_date = ?', [orgId, id, closeDate]);
+      if (alreadyClosed) throw Object.assign(new Error(`La sucursal ya tiene un cierre registrado para ${closeDate}.`), { statusCode: 409 });
+      await tx.execute(`INSERT INTO cash_closes (id, organization_id, branch_id, closed_by, total_cash, total_pos, total_transfers, grand_total, notes, close_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [closeId, orgId, id, req.user!.userId, totals.totalCash, totals.totalPos, totals.totalTransfers, grandTotal, totals.notes || null, closeDate, now]);
+      await tx.execute(`INSERT INTO outbox_events (id, organization_id, event_type, aggregate_type, aggregate_id, payload_json, status, attempts, created_at) VALUES (?, ?, 'branch.cash_closed', 'cash_close', ?, ?, 'pending', 0, ?)`, [`out-${crypto.randomUUID()}`, orgId, closeId, JSON.stringify({ closeId, branchId: id, grandTotal, closeDate }), now]);
+      const payload = { success: true, message: 'Cierre de caja guardado en el servidor.', summary: { id: closeId, branchId: id, ...totals, grandTotal, closeDate, timestamp: now, closedBy: req.user?.name } };
+      if (idempotencyKey) await tx.execute('UPDATE idempotency_keys SET status_code = ?, response_json = ? WHERE organization_id = ? AND idempotency_key = ?', [201, JSON.stringify(payload), orgId, idempotencyKey]);
+      return { statusCode: 201, payload };
+    });
+    return res.status(response.statusCode).json(response.payload);
+  } catch (error: any) {
+    const isUniqueCloseConflict = error?.code === '23505' || String(error?.message || '').includes('idx_cash_closes_one_per_day');
+    if (isUniqueCloseConflict) return res.status(409).json({ success: false, error: `La sucursal ya tiene un cierre registrado para ${closeDate}.` });
+    throw error;
+  }
 }));
 
 function safeJson(value: unknown): Record<string, unknown> {

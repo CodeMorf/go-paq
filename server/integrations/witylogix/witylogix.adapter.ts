@@ -47,9 +47,9 @@ export class WitylogixBridge {
   }
 
   static health() { return this.request(this.config().healthPath, { method: 'GET' }); }
-  static createDeliveryOrder(order: any) { return this.request(this.config().ordersPath, { method: 'POST', body: JSON.stringify(order) }); }
+  static createDeliveryOrder(order: any, idempotencyKey?: string) { return this.request(this.config().ordersPath, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(order) }); }
   static listDrivers() { return this.request(this.config().driversPath, { method: 'GET' }); }
-  static createRoute(route: any) { return this.request(this.config().routesPath, { method: 'POST', body: JSON.stringify(route) }); }
+  static createRoute(route: any, idempotencyKey?: string) { return this.request(this.config().routesPath, { method: 'POST', headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined, body: JSON.stringify(route) }); }
 
   static async dispatchToRemoteService(routeData: any): Promise<{ success: boolean; remoteId?: string; error?: string }> {
     const result = await this.createRoute(routeData);
