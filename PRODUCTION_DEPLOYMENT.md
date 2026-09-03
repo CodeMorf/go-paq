@@ -11,7 +11,11 @@ El despliegue usa Docker Compose en una red privada (`gopaq_private`) con:
 - `redis`: Redis con contraseña, AOF, sin puerto publicado al host.
 - Nginx/aaPanel existente: único punto público para `80` y `443`, con proxy hacia `127.0.0.1:4000`.
 
+La versión actualmente verificada en producción es `d88d1e7`. El vhost de GoPaq se mantiene separado del resto de sitios del VPS; antes de ajustar el límite de solicitud se creó una copia fechada y se validó/recargó únicamente el Nginx que ya atiende `gopaq.lat`. El límite vigente del vhost es `client_max_body_size 4m` para dejar margen al transporte base64 de fotos/POD comprimidas.
+
 PostgreSQL es la fuente persistente de verdad. Redis se usa para colas, locks, rate limiting y realtime; no contiene el estado definitivo de envíos, POD, COD o pagos.
+
+En producción el rate limiting de autenticación y API pública usa Redis mediante ventanas fijas atómicas; si Redis no responde, autenticación no se degrada silenciosamente y el endpoint de readiness queda no listo.
 
 ## Directorios y secretos
 
@@ -46,6 +50,8 @@ docker compose --env-file .env.production run --rm \
 docker compose --env-file .env.production run --rm gopaq-migrate npm run seed:demo
 docker compose --env-file .env.production up -d gopaq-api gopaq-worker
 ```
+
+Para un release concreto, construir y levantar con `GOPAQ_VERSION=<commit-verificado>`; el health check debe mostrar esa versión antes del smoke test público.
 
 El bootstrap es idempotente y no reemplaza la contraseña existente. `seed:demo` solo afecta `org-demo`; no se ejecuta automáticamente al arrancar. La migración `007_google_maps_credentials` se aplica después de la migración `006_configuration_center` bajo el mismo advisory lock.
 
