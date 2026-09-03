@@ -573,3 +573,4 @@ CREATE INDEX IF NOT EXISTS idx_shipments_org_branch_status_updated ON shipments(
 CREATE INDEX IF NOT EXISTS idx_shipment_events_shipment_created ON shipment_events(shipment_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_route_stops_route_status_sequence ON route_stops(route_id, status, sequence_order);
 CREATE INDEX IF NOT EXISTS idx_route_stops_shipment ON route_stops(shipment_id);
+CREATE INDEX IF NOT EXISTS idx_cod_org_shipment ON cod_transactions(organization_id, shipment_id);

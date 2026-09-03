@@ -173,6 +173,7 @@ export async function runMigrations() {
   const routeDispatchesSql = fs.readFileSync(path.join(migrationsDir, '013_route_dispatches.sql'), 'utf8');
   const geographyActiveNormalizationSql = fs.readFileSync(path.join(migrationsDir, '014_normalize_geography_active.sql'), 'utf8');
   const operationalQueryIndexesSql = fs.readFileSync(path.join(migrationsDir, '015_operational_query_indexes.sql'), 'utf8');
+  const codShipmentIndexSql = fs.readFileSync(path.join(migrationsDir, '016_cod_shipment_index.sql'), 'utf8');
   const lockKey = 7874701;
 
   const migrationClient = await pgPool.connect();
@@ -246,6 +247,10 @@ export async function runMigrations() {
     if (!applied.has('015_operational_query_indexes')) {
       await migrationClient.query(operationalQueryIndexesSql);
       await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['015_operational_query_indexes']);
+    }
+    if (!applied.has('016_cod_shipment_index')) {
+      await migrationClient.query(codShipmentIndexSql);
+      await migrationClient.query('INSERT INTO schema_migrations (version) VALUES ($1)', ['016_cod_shipment_index']);
     }
     await migrationClient.query('COMMIT');
   } catch (error) {
