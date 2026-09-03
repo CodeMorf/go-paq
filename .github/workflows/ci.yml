@@ -13,8 +13,8 @@ jobs:
   check-test-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -40,8 +40,8 @@ jobs:
     needs: check-test-build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -63,16 +63,22 @@ jobs:
         run: docker compose --env-file .env.production build
       - name: Start PostgreSQL and Redis
         run: docker compose --env-file .env.production up -d postgres redis
-      - name: Apply migrations and explicit production seeds
+      - name: Apply migrations
         run: |
-          docker compose --env-file .env.production run --rm gopaq-migrate
+          docker compose --env-file .env.production run --rm --no-deps gopaq-migrate
+      - name: Bootstrap isolated production tenant
+        run: |
           docker compose --env-file .env.production run --rm \
+            --no-deps \
             -e GOPAQ_BOOTSTRAP_CONFIRM=I_UNDERSTAND \
             -e GOPAQ_BOOTSTRAP_ADMIN_EMAIL=ci-admin@gopaq.test \
             -e GOPAQ_BOOTSTRAP_ADMIN_NAME='CI Admin' \
             -e GOPAQ_BOOTSTRAP_ADMIN_PASSWORD='ci-admin-password-7d9f2a1c4e8b6f3a' \
             gopaq-migrate npm run seed:production
+      - name: Seed isolated Dominican geography
+        run: |
           docker compose --env-file .env.production run --rm \
+            --no-deps \
             -e GOPAQ_GEO_BOOTSTRAP_CONFIRM=I_UNDERSTAND \
             gopaq-migrate npm run seed:dominican-republic
       - name: Start API and worker
