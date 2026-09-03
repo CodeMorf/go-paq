@@ -9,7 +9,9 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'countries'
       AND column_name = 'active' AND data_type = 'boolean'
   ) THEN
+    ALTER TABLE countries ALTER COLUMN active DROP DEFAULT;
     ALTER TABLE countries ALTER COLUMN active TYPE INTEGER USING CASE WHEN active THEN 1 ELSE 0 END;
+    ALTER TABLE countries ALTER COLUMN active SET DEFAULT 1;
   END IF;
 
   IF EXISTS (
@@ -17,7 +19,9 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'provinces'
       AND column_name = 'active' AND data_type = 'boolean'
   ) THEN
+    ALTER TABLE provinces ALTER COLUMN active DROP DEFAULT;
     ALTER TABLE provinces ALTER COLUMN active TYPE INTEGER USING CASE WHEN active THEN 1 ELSE 0 END;
+    ALTER TABLE provinces ALTER COLUMN active SET DEFAULT 1;
   END IF;
 
   IF EXISTS (
@@ -25,6 +29,8 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'service_zones'
       AND column_name = 'active' AND data_type = 'boolean'
   ) THEN
+    ALTER TABLE service_zones ALTER COLUMN active DROP DEFAULT;
     ALTER TABLE service_zones ALTER COLUMN active TYPE INTEGER USING CASE WHEN active THEN 1 ELSE 0 END;
+    ALTER TABLE service_zones ALTER COLUMN active SET DEFAULT 1;
   END IF;
 END $$;
