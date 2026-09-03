@@ -91,7 +91,20 @@ app.get('/api/ready', async (_req, res) => {
     try { migrationsReady = !!(await queryOneAsync('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1')); } catch { migrationsReady = false; }
   }
   const ready = database.ok && redis.ok && migrationsReady;
-  return res.status(ready ? 200 : 503).json({ success: ready, status: ready ? 'ready' : 'not_ready', database, redis, migrations: migrationsReady });
+  // Readiness is public infrastructure telemetry. Keep the useful health
+  // facts, but never expose raw driver/connection errors in production.
+  const safeDatabase = {
+    ok: database.ok,
+    engine: database.engine,
+    ...(database.postgisVersion ? { postgisVersion: database.postgisVersion } : {}),
+    ...((process.env.NODE_ENV !== 'production' && database.error) ? { error: database.error } : {})
+  };
+  const safeRedis = {
+    ok: redis.ok,
+    configured: redis.configured,
+    ...((process.env.NODE_ENV !== 'production' && redis.error) ? { error: redis.error } : {})
+  };
+  return res.status(ready ? 200 : 503).json({ success: ready, status: ready ? 'ready' : 'not_ready', database: safeDatabase, redis: safeRedis, migrations: migrationsReady });
 });
 
 const apiV1 = express.Router();

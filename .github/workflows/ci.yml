@@ -22,6 +22,10 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: Install Chromium for browser checks
+        run: npx playwright install --with-deps chromium
+      - name: Public and mobile E2E
+        run: npm run test:e2e
       - name: Compose syntax and security review
         run: |
           cp .env.example .env.production
@@ -31,3 +35,59 @@ jobs:
             exit 1
           fi
       - run: npm audit --audit-level=high
+
+  docker-migration-smoke:
+    needs: check-test-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Create isolated CI environment
+        run: |
+          cp .env.example .env.production
+          sed -i \
+            -e 's/^NODE_ENV=.*/NODE_ENV=production/' \
+            -e 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-postgres-password-7d9f2a1c4e8b6f3a/' \
+            -e 's/^REDIS_PASSWORD=.*/REDIS_PASSWORD=ci-redis-password-4a8e1c7f2d9b6m3q/' \
+            -e 's/^JWT_SECRET=.*/JWT_SECRET=ci-jwt-secret-7d9f2a1c4e8b6f3a9e5c1b7d2f8a6e4c/' \
+            -e 's/^SESSION_SECRET=.*/SESSION_SECRET=ci-session-secret-4a8e1c7f2d9b6m3q1v5x8z2k7p4s6n9/' \
+            -e 's/^WEBHOOK_ENCRYPTION_KEY=.*/WEBHOOK_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/' \
+            -e 's/^DEMO_ACCESS_ENABLED=.*/DEMO_ACCESS_ENABLED=false/' \
+            -e 's/^SEED_DEV_DATA=.*/SEED_DEV_DATA=false/' \
+            .env.production
+      - name: Build production image
+        run: docker compose --env-file .env.production build
+      - name: Start PostgreSQL and Redis
+        run: docker compose --env-file .env.production up -d postgres redis
+      - name: Apply migrations and explicit production seeds
+        run: |
+          docker compose --env-file .env.production run --rm gopaq-migrate
+          docker compose --env-file .env.production run --rm \
+            -e GOPAQ_BOOTSTRAP_CONFIRM=I_UNDERSTAND \
+            -e GOPAQ_BOOTSTRAP_ADMIN_EMAIL=ci-admin@gopaq.test \
+            -e GOPAQ_BOOTSTRAP_ADMIN_NAME='CI Admin' \
+            -e GOPAQ_BOOTSTRAP_ADMIN_PASSWORD='ci-admin-password-7d9f2a1c4e8b6f3a' \
+            gopaq-migrate npm run seed:production
+          docker compose --env-file .env.production run --rm \
+            -e GOPAQ_GEO_BOOTSTRAP_CONFIRM=I_UNDERSTAND \
+            gopaq-migrate npm run seed:dominican-republic
+      - name: Start API and worker
+        run: docker compose --env-file .env.production up -d gopaq-api gopaq-worker
+      - name: Readiness and production smoke
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4000/api/ready >/dev/null; then break; fi
+            if [ "$attempt" = 60 ]; then exit 1; fi
+            sleep 2
+          done
+          SMOKE_BASE_URL=http://127.0.0.1:4000 npm run smoke
+      - name: Show service state
+        if: always()
+        run: docker compose --env-file .env.production ps
+      - name: Clean CI stack
+        if: always()
+        run: docker compose --env-file .env.production down -v --remove-orphans

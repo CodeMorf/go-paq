@@ -18,6 +18,8 @@
     "seed:dominican-republic": "tsx server/db/seedDominicanRepublic.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "smoke": "node scripts/smoke-production.mjs",
+    "test:e2e": "playwright test",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
@@ -49,6 +51,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.19",

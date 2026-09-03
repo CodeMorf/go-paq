@@ -17,5 +17,8 @@ Thumbs.db
 *.sqlite*
 *.db
 server/storage-data/
+tmp-e2e/
+test-results/
+playwright-report/
 
 

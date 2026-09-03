@@ -18,6 +18,7 @@
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
 - [x] `npm ci`/dependencias deterministas, TypeScript, lint, 66 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] Playwright quedó integrado en CI con 6 pruebas de superficies públicas y viewport móvil contra un API aislado de prueba; el smoke reutilizable valida el contrato público y readiness sin registrar secretos.
 - [x] Configuración Global: 14 secciones con valores por tenant, API PATCH protegida, control de versión, auditoría, outbox e historial de revisiones.
 - [x] Identidad visual: logo PNG transparente y favicon se guardan mediante API en almacenamiento persistente; colores, favicon y logo se aplican después de confirmación del backend.
 - [x] Maestros operativos: alta real de sucursales y conductores con validación de tenant, sucursal, duplicados, auditoría y outbox.
@@ -75,7 +76,7 @@
 
 - [ ] Copia de backups fuera del VPS (S3/R2/otro destino). No se configuró porque no hay credenciales de almacenamiento externo entregadas.
 - [ ] Credenciales y pruebas de proveedores externos: Karrio/carriers, Witylogix, WhatsApp/SMS/email, pagos, IA, Photon/Valhalla y object storage. La UI muestra `NO CONFIGURADO`/`provider_unavailable` mientras falten.
-- [ ] Suite Playwright E2E completa y pruebas de viewport móvil en un pipeline CI dedicado; las pruebas API y smoke ejecutadas no sustituyen esa cobertura.
+- [ ] Suite Playwright E2E completa de los flujos autenticados y pruebas de viewport móvil de cada portal; la suite pública/móvil inicial ya está en CI, pero no sustituye esa cobertura funcional completa.
 - [ ] Métricas p50/p95/p99, carga sostenida, profundidad de cola y TTFB de una ventana representativa de tráfico real.
 - [ ] Reinicio completo del VPS y comprobación del kernel pendiente de actualización. No se reinició el host para no interrumpir los servicios co-alojados durante esta sesión.
 - [ ] Verificación de backups remotos y prueba de restore fuera del volumen principal.

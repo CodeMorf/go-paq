@@ -3,7 +3,7 @@ import url from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { app } from './core/app';
-import { initDatabaseAsync, queryOneAsync, executeAsync } from './db/database';
+import { closeDatabase, initDatabaseAsync, queryOneAsync, executeAsync } from './db/database';
 import { TokenPayload } from './auth/jwt';
 import { validateAccessToken } from './auth/middleware';
 import { normalizeRole } from './auth/roles';
@@ -108,6 +108,27 @@ async function start() {
   const heartbeat = setInterval(() => { wss.clients.forEach((client) => { const ws = client as AuthenticatedSocket; if (ws.isAlive === false) return ws.terminate(); ws.isAlive = false; ws.ping(); }); }, 30000);
   wss.on('close', () => clearInterval(heartbeat));
   server.on('close', () => { if (realtimeSubscriber) void realtimeSubscriber.quit(); });
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[GoPaq API] ${signal} received; draining HTTP and realtime connections.`);
+    clearInterval(heartbeat);
+    wss.clients.forEach((client) => client.close(1001, 'Servidor reiniciándose'));
+    wss.close();
+    if (realtimeSubscriber) {
+      await realtimeSubscriber.quit().catch(() => realtimeSubscriber?.disconnect());
+      realtimeSubscriber = null;
+    }
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+      setTimeout(resolve, 10000).unref();
+    }).catch(() => undefined);
+    await closeDatabase();
+    process.exit(0);
+  };
+  process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
+  process.once('SIGINT', () => { void shutdown('SIGINT'); });
   server.listen(PORT, () => { console.log(`GoPaq API listening on port ${PORT}`); });
 }
 

@@ -24,11 +24,12 @@ if (isPostgres) {
     connectionTimeoutMillis: 5000
   });
 } else {
-  const dbDir = path.resolve(__dirname);
+  const configuredSqlitePath = process.env.SQLITE_PATH ? path.resolve(process.env.SQLITE_PATH) : null;
+  const dbDir = configuredSqlitePath ? path.dirname(configuredSqlitePath) : path.resolve(__dirname);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
-  const dbPath = path.resolve(dbDir, 'gopaq.sqlite');
+  const dbPath = configuredSqlitePath || path.resolve(dbDir, 'gopaq.sqlite');
   sqliteDb = new Database(dbPath);
   sqliteDb.pragma('journal_mode = WAL');
   sqliteDb.pragma('foreign_keys = ON');

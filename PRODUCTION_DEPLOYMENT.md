@@ -16,6 +16,7 @@ La versión actualmente verificada en producción es `d0cdebb`. El vhost de GoPa
 PostgreSQL es la fuente persistente de verdad. Redis se usa para colas, locks, rate limiting y realtime; no contiene el estado definitivo de envíos, POD, COD o pagos.
 
 En producción el rate limiting de autenticación y API pública usa Redis mediante ventanas fijas atómicas; si Redis no responde, autenticación no se degrada silenciosamente y el endpoint de readiness queda no listo.
+El endpoint de readiness solo expone estado (`ok`, motor, PostGIS y configuración de Redis); los errores crudos de conexión se conservan en logs del servicio y no se devuelven al navegador en producción. El API también drena HTTP, WebSocket, Redis y PostgreSQL durante SIGTERM/SIGINT antes de salir.
 
 ## Directorios y secretos
 
@@ -64,6 +65,14 @@ El bootstrap es idempotente y no reemplaza la contraseña existente. `seed:demo`
 - OpenAPI: `https://gopaq.lat/api/v1/docs/openapi.json`
 - Logins: `/super-admin/login`, `/portal/login`, `/sucursal/login`, `/driver/login`.
 - Configuración Google Maps: `/super-admin/configuracion` (solo `SUPER_ADMIN` y `OWNER` pueden guardar o retirar la credencial).
+
+El smoke público automatizado se ejecuta sin mutaciones con:
+
+```bash
+SMOKE_BASE_URL=https://gopaq.lat npm run smoke
+```
+
+Para validar también roles, se deben inyectar temporalmente `SMOKE_SUPER_ADMIN_EMAIL`, `SMOKE_SUPER_ADMIN_PASSWORD`, `SMOKE_CLIENT_EMAIL`, `SMOKE_CLIENT_PASSWORD`, `SMOKE_BRANCH_EMAIL`, `SMOKE_BRANCH_PASSWORD`, `SMOKE_DRIVER_EMAIL` y `SMOKE_DRIVER_PASSWORD`; nunca se escriben en el repositorio ni en la salida del script.
 
 El proxy debe redirigir HTTP a HTTPS, soportar `Upgrade` para `/ws` y no publicar `5432`, `6379`, workers ni servicios auxiliares.
 
