@@ -1,6 +1,6 @@
 # Checklist de producción GoPaq
 
-Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. La verificación del release `d88d1e7` se ejecutó desde `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
+Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. La verificación del release `d0cdebb` se ejecutó desde `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
 
 ## Código, seguridad y CI local
 
@@ -31,7 +31,7 @@
 ## VPS y despliegue verificados
 
 - [x] Rama desplegada: `Morf/production-hardening`.
-- [x] Release desplegado: `d88d1e7` (`chore(deploy): pin production postgis image`), sobre `Morf/production-hardening`, con las correcciones de consistencia de runtime, idempotencia de caja/despacho, pricing especializado y seguridad incorporadas.
+- [x] Release desplegado: `d0cdebb` (`fix(security): await redis readiness before rate limiting`), sobre `Morf/production-hardening`, con las correcciones de consistencia de runtime, idempotencia de caja/despacho, pricing especializado, clientes en matriz tarifaria y seguridad incorporadas.
 - [x] Ubuntu 26.04 LTS; 4 vCPU; 7.8 GiB RAM; aproximadamente 109 GiB libres en el volumen raíz al auditar.
 - [x] Docker Engine y Compose activos; servicios con `restart: unless-stopped`.
 - [x] PostgreSQL 18.6 verificado desde la base en ejecución.
@@ -67,6 +67,7 @@
 - [x] Reinicio de API/worker y Redis: readiness recuperado y datos persistentes conservados en PostgreSQL.
 - [x] Control post-reinicio: Redis quedó `healthy`, API `healthy`, worker `running`; los conteos de organizaciones, usuarios, sucursales, tarifas y migraciones permanecieron iguales.
 - [x] Rate limiting público verificado con headers `RateLimit` y claves reales bajo `gopaq:ratelimit:*` en Redis; los logs recientes de API y worker no registraron errores críticos.
+- [x] Carrera de arranque reproducida después de reiniciar API: 24 solicitudes concurrentes respondieron sin error del store, Redis registró las claves y el contenedor terminó `healthy`.
 - [x] Aceptación operativa en `org-demo`: quote → shipment → tracking → recepción → ruta/despacho → manifiesto Driver → POD → tracking entregado; mudanza y carga pesada también completaron cotización, orden, despacho, POD y tracking. El tenant fue reseteado y sembrado después de la prueba.
 - [x] Backup y restore posteriores al release: dump PostgreSQL creado con modo `0600` y restaurado en base temporal con 2 organizaciones; la base temporal fue eliminada automáticamente.
 
