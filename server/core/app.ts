@@ -41,7 +41,10 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http:
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*') || process.env.NODE_ENV !== 'production') callback(null, true);
-    else callback(new Error('Bloqueado por política CORS'));
+    // An untrusted origin must not turn into a 500. CORS should simply omit
+    // the allow-origin header so the browser blocks the caller without
+    // converting a normal API response into an application error.
+    else callback(null, false);
   },
   credentials: true
 }));
