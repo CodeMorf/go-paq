@@ -1,6 +1,6 @@
 # Checklist de producción GoPaq
 
-Última verificación documentada: 2026-09-02. Estado global: **desplegado y operativo en validación controlada**. La verificación del release `86913c4` se ejecutó desde `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
+Última verificación documentada: 2026-09-03. Estado global: **desplegado y operativo en validación controlada**. La verificación del release `378bb49` se ejecutó desde `https://gopaq.lat/`; los límites externos y las pruebas que requieren una ventana operativa permanecen explícitos.
 
 ## Código, seguridad y CI local
 
@@ -15,10 +15,12 @@
 - [x] Entrega/POD + tracking + COD + outbox en transacción atómica.
 - [x] Migraciones explícitas con historial y advisory lock; PostGIS se valida durante readiness.
 - [x] Migración `014_normalize_geography_active`: normaliza instalaciones antiguas con `active BOOLEAN` a `INTEGER 0/1`, incluyendo defaults, dentro de la transacción de migraciones.
+- [x] Migraciones `015_operational_query_indexes` y `016_cod_shipment_index`: índices tenant-aware para tracking, clientes, sucursales, rutas y conciliación COD; el runner las registra y ejecuta explícitamente.
+- [x] Hardening de runtime: JWT de producción rechaza secretos ausentes, predeterminados o menores de 32 caracteres; CORS usa siempre la lista permitida; recuperación de contraseña tiene límite independiente de 5 solicitudes por 15 minutos.
 - [x] Outbox + BullMQ + reintentos con backoff y trabajos fallidos.
 - [x] Driver React/PWA con GPS del navegador, POD, firma, foto y cola offline; una operación solo se marca sincronizada después de respuesta del servidor.
 - [x] Se eliminaron del bundle las pantallas operativas antiguas que simulaban GPS, etiquetas, IA, OAuth, rutas o mutaciones locales.
-- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 66 pruebas API/seguridad, build Vite y `git diff --check` verificados.
+- [x] `npm ci`/dependencias deterministas, TypeScript, lint, 72 pruebas API/seguridad, build Vite y `git diff --check` verificados.
 - [x] Playwright quedó integrado en CI con 6 pruebas de superficies públicas y viewport móvil contra un API aislado de prueba; el smoke reutilizable valida el contrato público y readiness sin registrar secretos.
 - [x] Configuración Global: 14 secciones con valores por tenant, API PATCH protegida, control de versión, auditoría, outbox e historial de revisiones.
 - [x] Identidad visual: logo PNG transparente y favicon se guardan mediante API en almacenamiento persistente; colores, favicon y logo se aplican después de confirmación del backend.
@@ -33,7 +35,7 @@
 ## VPS y despliegue verificados
 
 - [x] Rama desplegada: `Morf/production-hardening`.
-- [x] Release desplegado: `86913c4` (`fix(db): handle legacy geography defaults`), sobre `Morf/production-hardening`, con la normalización geográfica, CORS seguro, consistencia de runtime, idempotencia de caja/despacho, pricing especializado, clientes en matriz tarifaria, cierre ordenado y readiness sanitizada incorporadas.
+- [x] Release desplegado: `378bb49` (`perf(db): index tenant COD shipment lookups`), sobre `Morf/production-hardening`, con hardening JWT/CORS/rate limit, aliases de liveness/readiness, logs correlacionados y migraciones operativas 015/016.
 - [x] Ubuntu 26.04 LTS; 4 vCPU; 7.8 GiB RAM; aproximadamente 109 GiB libres en el volumen raíz al auditar.
 - [x] Docker Engine y Compose activos; servicios con `restart: unless-stopped`.
 - [x] PostgreSQL 18.6 verificado desde la base en ejecución.
@@ -42,7 +44,7 @@
 - [x] API publicada únicamente en `127.0.0.1:4000`; PostgreSQL y Redis no tienen puertos publicados al host.
 - [x] Nginx/aaPanel existente integrado sin reemplazar ni modificar los sitios co-alojados.
 - [x] El vhost exclusivo de `gopaq.lat` quedó respaldado antes del cambio y recargado con `client_max_body_size 4m`, compatible con fotos/POD comprimidas de hasta 2 MB; `nginx -t` pasó.
-- [x] HTTP redirige a HTTPS; Cloudflare dejó de devolver 526; `/api/health` y `/api/ready` responden correctamente.
+- [x] HTTP redirige a HTTPS; Cloudflare dejó de devolver 526; `/api/health`, `/api/livez`, `/api/ready` y `/api/readyz` responden correctamente.
 - [x] WebSocket `/ws` queda detrás del proxy con autenticación y validación de origen.
 - [x] Bootstrap de administrador productivo ejecutado de forma idempotente sin guardar la contraseña en Git.
 - [x] Demo seed/reset ejecutados explícitamente; no se ejecutan seeds demo al iniciar la aplicación.
@@ -74,7 +76,7 @@
 - [x] Carrera de arranque reproducida después de reiniciar API: 24 solicitudes concurrentes respondieron sin error del store, Redis registró las claves y el contenedor terminó `healthy`.
 - [x] Aceptación operativa en `org-demo`: quote → shipment → tracking → recepción → ruta/despacho → manifiesto Driver → POD → tracking entregado; mudanza y carga pesada también completaron cotización, orden, despacho, POD y tracking. El tenant fue reseteado y sembrado después de la prueba.
 - [x] Backup y restore posteriores al release: dump PostgreSQL creado con modo `0600` y restaurado en base temporal con 2 organizaciones; la base temporal fue eliminada automáticamente.
-- [x] CI `33703205510` verde para `86913c4`: checks, 66 pruebas API, build, E2E desktop/móvil, auditoría, migraciones, bootstrap, seed geográfico y smoke Docker.
+- [x] CI `33718132573` verde para `378bb49`: checks, 72 pruebas API, build, E2E desktop/móvil, auditoría, migraciones 001→016, bootstrap, seed geográfico y smoke Docker.
 
 ## Pendientes reales antes de ampliar tráfico
 
