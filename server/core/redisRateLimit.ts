@@ -6,6 +6,7 @@ export class RedisRateLimitStore implements Store {
   private readonly keyPrefix: string;
   private readonly redis: Redis;
   private windowMs = 60_000;
+  private connectPromise: Promise<void> | null = null;
 
   constructor(prefix: string) {
     const redisUrl = String(process.env.REDIS_URL || '').trim();
@@ -18,8 +19,29 @@ export class RedisRateLimitStore implements Store {
     this.windowMs = options.windowMs;
   }
 
+  private async ensureConnected() {
+    if (this.redis.status === 'ready') return;
+    if (!this.connectPromise) {
+      this.connectPromise = new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          this.redis.off('ready', onReady);
+          this.redis.off('error', onError);
+        };
+        const onReady = () => { cleanup(); resolve(); };
+        const onError = (error: Error) => { cleanup(); reject(error); };
+        this.redis.once('ready', onReady);
+        this.redis.once('error', onError);
+        if (this.redis.status === 'wait') {
+          void this.redis.connect().catch(onError);
+        }
+      }).finally(() => { this.connectPromise = null; });
+    }
+    await this.connectPromise;
+    if (String(this.redis.status) !== 'ready') throw new Error('Redis no quedó listo para rate limiting.');
+  }
+
   async increment(key: string): Promise<ClientRateLimitInfo> {
-    if (this.redis.status === 'wait') await this.redis.connect();
+    await this.ensureConnected();
     const redisKey = `${this.keyPrefix}:${key}`;
     const result = await this.redis.eval(`
       local hits = redis.call('INCR', KEYS[1])
@@ -33,12 +55,12 @@ export class RedisRateLimitStore implements Store {
   }
 
   async decrement(key: string) {
-    if (this.redis.status === 'wait') await this.redis.connect();
+    await this.ensureConnected();
     await this.redis.decr(`${this.keyPrefix}:${key}`);
   }
 
   async resetKey(key: string) {
-    if (this.redis.status === 'wait') await this.redis.connect();
+    await this.ensureConnected();
     await this.redis.del(`${this.keyPrefix}:${key}`);
   }
 
